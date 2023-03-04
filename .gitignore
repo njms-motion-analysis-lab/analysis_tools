@@ -2,6 +2,7 @@
 *.csv
 *.db
 controls_filteredandtrimmed/
+controls_alignedCoordinateSystem
 .DS_Store
 .pyre/
 .pyre_configuration
@@ -9,3 +10,4 @@ controls_filteredandtrimmed/
 .watchmanconfig
 NPYViewer/
 __pycache__/
+control_reader.py
