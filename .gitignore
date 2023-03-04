@@ -1,0 +1,11 @@
+*.npy
+*.csv
+*.db
+controls_filteredandtrimmed/
+.DS_Store
+.pyre/
+.pyre_configuration
+.vscode/
+.watchmanconfig
+NPYViewer/
+__pycache__/
