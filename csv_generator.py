@@ -1,6 +1,7 @@
 
 import pandas as pd
 import csv
+import os
 import re
 
 class CSVGenerator:
@@ -8,7 +9,6 @@ class CSVGenerator:
     def generate_csv(cls, dict1, dict2, filename):
         # Get object names from the first dictionary
         object_names = list(dict1.keys())
-        exp_names = list(dict2.keys())
 
         # Create header row with mean and std_dev columns for each object
         header_row = ["pt name"]

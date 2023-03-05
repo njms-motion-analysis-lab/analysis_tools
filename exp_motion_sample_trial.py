@@ -12,7 +12,7 @@ class ExpMotionSampleTrial:
         self.positional = measurements[constants.POSITIONAL]       
         self.sub_motions = list(self.split_series())
 
-
+    # Splits the series based on zero value crossing.
     def split_series(self) -> Any:
         series = self.gradients[self.motions]
         split_indices = []
@@ -27,6 +27,7 @@ class ExpMotionSampleTrial:
 
         return series[start:]
     
+    # Gets the other axes for a provided coordinate.
     def letter_substitution(self) -> Any:
         string = self.motions
         result = {'original': string}
@@ -44,23 +45,14 @@ class ExpMotionSampleTrial:
     
         return result.values()
 
-    def get_grad_axes(self, sub_motion) -> Any:
-        print(f"sub_motion {type(sub_motion)}")
+    def get_axes(self, sub_motion, axis_type) -> Any:
         other_headers = self.letter_substitution()
         range_start = sub_motion.index[0]
         range_end = sub_motion.index[-1]
+        if axis_type == "grad":
+            return self.gradients[other_headers].loc[range_start:range_end]
+        elif axis_type == "pos":
+            return self.positional[other_headers].loc[range_start:range_end]
 
-        return self.gradients[other_headers].loc[range_start:range_end]
-
-    def get_pos_axes(self, sub_motion) -> Any:
-        other_headers = self.letter_substitution()
-        range_start = sub_motion.index[0]
-        range_end = sub_motion.index[-1]
-
-        return self.positional[other_headers].loc[range_start:range_end]
-
-    def save_grad_axes(self, sub_motion) -> None:
-        np.save(self.FILE_PATH, self.get_grad_axes(sub_motion).values)
-
-    def save_pos_axes(self, sub_motion) -> None:
-        np.save(self.FILE_PATH, self.get_pos_axes(sub_motion).values)
+    def save_axes(self, sub_motion, axis_type) -> None:
+        np.save(self.FILE_PATH, self.get_axes(sub_motion, axis_type).values)

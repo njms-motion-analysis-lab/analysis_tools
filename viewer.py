@@ -12,17 +12,24 @@ from exp_motion_sample import ExpMotionSample
 from patient import Patient
 
 
+# Run the program with arguments like [python3 viewer.py 'wrist' 'r' 'a' 'x'].
+# So right wrist, sensor a, x axis.
 part = constants.PARTS[sys.argv[1]]
 side = constants.SIDES[sys.argv[2]]
 sensor = constants.SENSORS[sys.argv[3]]
 dimension = sys.argv[4]
 
+# Converts abbreviations to constants.
 obj = eval(f'constants.{part}.Position.{side}.{sensor}')
 motions = obj.DIMENSIONS[dimension.capitalize()]
 
+# Directory containing motion files.
 root_dir = "controls_alignedCoordinateSystem"
 exp_motion_sample_sets = {}
 
+# Generate models (experiments, trials, etc.) for later analysis.
+# Future versions will associate models w/sql db tables so this part 
+# of the command need only be run once.
 for subdir, _, files in os.walk(root_dir):
     for file in files:
         file_path = os.path.join(subdir, file)
@@ -33,6 +40,7 @@ for subdir, _, files in os.walk(root_dir):
 exp_motions = {}
 patients = {}
 
+# Generate patient models and associate with trials/experiments.
 for key, value in exp_motion_sample_sets.items():
     sub_dir = key.split('_')
     root, patient, exp_motion, varient = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
@@ -57,8 +65,7 @@ for key, value in exp_motion_sample_sets.items():
         p.add_exp_motions(value)
         patients[patient] = p
 
-exp_stats = {k: [v.mean, v.stdev] for k, v in exp_motions.items()}
-p_stats = {k: [v.mean, v.stdev] for k, v in patients.items()}
-
+# Generate a csv containing mean and stdev for each submotion for each patient with a 
+# given coordinate.
 csv_name = CSVGenerator.camel_to_snake(f"{part}{side}{sensor}_{motions[-1]}.csv")
 CSVGenerator.generate_csv(exp_motions, patients, csv_name)
