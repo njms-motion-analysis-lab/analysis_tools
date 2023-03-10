@@ -1,5 +1,6 @@
 *.npy
 *.csv
+!wrist_stats/
 *.db
 controls_filteredandtrimmed/
 controls_alignedCoordinateSystem
