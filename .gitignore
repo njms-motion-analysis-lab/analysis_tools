@@ -1,6 +1,9 @@
 *.npy
 *.csv
-!wrist_stats/
+!wrist_stats/wrist_left_sensor_a.csv
+!wrist_stats/wrist_left_sensor_b.csv
+!wrist_stats/wrist_right_sensor_a.csv
+!wrist_stats/wrist_right_sensor_b.csv
 *.db
 controls_filteredandtrimmed/
 controls_alignedCoordinateSystem
