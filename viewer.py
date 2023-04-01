@@ -10,7 +10,7 @@ from csv_generator import CSVGenerator
 from exp_motion import ExpMotion
 from exp_motion_sample import ExpMotionSample
 from patient import Patient
-
+import pdb
 
 # Run the program with arguments like [python3 viewer.py 'wrist' 'r' 'a' 'x'].
 # So right wrist, sensor a, x axis.
@@ -36,7 +36,7 @@ for subdir, _, files in os.walk(root_dir):
         if file.endswith('.npy'):
             v = ExpMotionSample(file_path, motions)
             exp_motion_sample_sets[v.name] = v
-
+pdb.set_trace
 exp_motions = {}
 patients = {}
 
