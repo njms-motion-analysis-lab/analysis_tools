@@ -1,11 +1,13 @@
 import os
 import pdb
+from models.sensor import Sensor
 import numpy as np
 from models.motion import Motion
 from models.patient import Patient
+from models.base_model import BaseModel
 
 class Generator:
-    def __init__(self, filename: str):
+    def __init__(self, filename: str, conn=None, cursor=None):
         # Load the data from the specified `filename`, convert it to a dictionary, and store it as an instance attribute.
         # The `name` attribute is set to the base name of the file, without the extension.
         # The `patient` and `motion` attributes are initialized to empty strings, and are set in the `set_attributes` method.
@@ -20,8 +22,11 @@ class Generator:
         self.name = os.path.splitext(os.path.basename(filename))[0]
         self.patient = ""
         self.motion = ""
+        self.conn = None
+        self.cursor = None
         self.set_attributes()
         self.generate_models()
+        self.generate_sensors()
         
     
     def set_attributes(self):
@@ -49,3 +54,64 @@ class Generator:
         c_patient = Patient.find_or_create(name=self.patient)
         c_motion = Motion.find_or_create(description=self.motion)
         c_patient.add_motion(c_motion)
+
+    def generate_sensors(self):
+        sensors = [
+            "lwra_x",
+            "lwrb_x",
+            "lwra_y",
+            "lwrb_y",
+            "lwra_z",
+            "lwrb_z",
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            "lfrm_x",
+            "lfrm_y",
+            "lfrm_z",
+            "rfrm_x",
+            "rfrm_y",
+            "rfrm_z",
+            "lelb_x",
+            "lelbm_x",
+            "lelb_y",
+            "lelbm_y",
+            "lelb_z",
+            "lelbm_z",
+            "relb_x",
+            "relbm_x",
+            "relb_y",
+            "relbm_y",
+            "relb_z",
+            "relbm_z",
+            "lupa_x",
+            "lupa_y",
+            "lupa_z",
+            "rupa_x",
+            "rupa_y",
+            "rupa_z",
+            "lsho_x",
+            "lsho_y",
+            "lsho_z",
+            "rsho_x",
+            "rsho_y",
+            "rsho_z",
+        ]
+        for s_string in sensors:
+            self.create_sensor_from_string(s_string)
+
+    def create_sensor_from_string(self, sensor_string):
+        side_map = {"l": "left", "r": "right"}
+        side = side_map.get(sensor_string[0], None)
+        
+        part = sensor_string[1:3]
+        iteration = sensor_string[3]
+        axis = sensor_string[-1]
+        patient = Patient.find_or_create(name="cheryl")
+        print(patient.name)
+        sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, iteration=iteration, part=part)
+        print(sensor.id)
+

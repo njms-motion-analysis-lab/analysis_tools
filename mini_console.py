@@ -1,10 +1,9 @@
 import sqlite3
-from models.motion import Motion
-from models.patient import Patient
-import pdb
-conn = sqlite3.connect('motion_analysis.db')
-cursor = conn.cursor()
 
+from table import Table
+import pdb
+
+Table.create_tables()
 pdb.set_trace()
 
 print("Bye!")

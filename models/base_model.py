@@ -1,40 +1,50 @@
 import sqlite3
-conn = sqlite3.connect('motion_analysis.db')
-cursor = conn.cursor()
+
 
 class BaseModel:
     table_name = ""
 
+    @classmethod
+    def set_connection(cls, test_mode=False, conn=None, cursor=None):
+        if test_mode is True:
+            cls._conn = sqlite3.connect('motion_analysis_test.db')
+            cls._cursor = cls._conn.cursor()
+        if (conn is not None) and (cursor is not None):
+            cls._conn = conn
+            cls._cursor = cursor
+
+
     def create(self, **kwargs):
-        keys = ", ".join(kwargs.keys())
-        values = ", ".join("?" for _ in kwargs)
+        keys = ', '.join(kwargs.keys())
+        values = ', '.join(['?'] * len(kwargs))
+        print(keys)
+        print(values)
         try:
-            cursor.execute(f"INSERT INTO {self.table_name} ({keys}) VALUES ({values})", tuple(kwargs.values()))
-            conn.commit()
-            self.id = cursor.lastrowid  # Assign the ID after successful insert
-        except sqlite3.IntegrityError as e:
-            print(f"Error creating record: {e}")
+            self._cursor.execute(f"INSERT INTO {self.table_name} ({keys}) VALUES ({values})", tuple(kwargs.values()))
+            self.id = self._cursor.lastrowid
+            self._conn.commit()
+            return self.id
+        except sqlite3.IntegrityError:
             return False
-        return True
 
     def update(self, **kwargs):
         updates = ", ".join(f"{key}=?" for key in kwargs)
         try:
-            cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=?", tuple(kwargs.values()) + (self.id,))
-            conn.commit()
+            self._cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=?", tuple(kwargs.values()) + (self.id,))
+            self._conn.commit()
         except sqlite3.IntegrityError as e:
             print(f"Error updating record: {e}")
             return False
         return True
 
     def delete(self):
-        cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
-        conn.commit()
+        self._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
+        self._conn.commit()
 
     @classmethod
     def get(cls, id):
-        cursor.execute(f"SELECT * FROM {cls.table_name} WHERE id=?", (id,))
-        row = cursor.fetchone()
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE id=?", (id,))
+        row = cls._cursor.fetchone()
         if row:
             return cls(*row)
         return None
@@ -56,19 +66,33 @@ class BaseModel:
 
         # Find the record with the given attribute(s)
         conditions = " AND ".join(f"{key}=?" for key in keys)
-        cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {conditions}", values)
-        row = cursor.fetchone()
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {conditions}", values)
+        row = cls._cursor.fetchone()
 
         if row:
             return cls(*row)
         else:
             # Create the record if not found
-            cls_instance = cls(None, *values)
+            cls_instance = cls(*values)
             cls_instance.create(**kwargs)
-            cls_instance.id = cursor.lastrowid
+            cls_instance.id = cls._cursor.lastrowid
             return cls_instance
     
     @classmethod
     def get_all(cls):
-        cursor.execute(f"SELECT * FROM {cls.table_name}")
-        return [cls(*row) for row in cursor.fetchall()]
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name}")
+        return [cls(*row) for row in cls._cursor.fetchall()]
+
+    @classmethod
+    def delete_all(cls):
+        cls._cursor.execute(f"DELETE FROM {cls.table_name}")
+
+    @classmethod
+    def delete_all_and_children(cls):
+        # Delete child class records first
+        for subclass in cls.__subclasses__():
+            subclass.delete_all_and_children()
+
+        # Delete records from the current class table
+        if cls.table_name:
+            cls._cursor.execute(f"DELETE FROM {cls.table_name}")
