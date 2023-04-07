@@ -1,3 +1,51 @@
-# analysis_tools
+<img width="579" alt="Pasted Graphic 2" src="https://user-images.githubusercontent.com/15318220/224393092-5babe62d-46e0-45cd-823e-75b58c1d3688.png">
 
-Coming soon!
+
+
+# What is this?
+This repository is a collection of tools designed to make it easier to visualize and interpret results from motion analysis experiments. Some of the functions included in this collection are:
+  * [Generating CSVs from NPY files](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/csv_generator.py#L9), 
+  * [Getting sub motions across x,y, and z axes](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/exp_motion_sample_trial.py#L43)
+  * [Eliminating extranous submotions](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/motion_filter.py#L32)
+  * Plotting sub-motions (requires this [NPY Viewer](https://github.com/csmailis/NPYViewer) project right now
+  * [Gathering statistics](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/viewer.py#L44) on motion and [normalizing](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/exp_motion_sample_trial.py#L23) data
+  * [Returning normalized, and filtered to CSV form](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/viewer.py#L71)
+
+# How do I set this up? 
+
+To set up this tool, you'll need to do the following:
+
+  1. Set up command line tools (here is a link with instructions) (different for Windows)
+      1. https://www.freecodecamp.org/news/install-xcode-command-line-tools/
+  2. Download text editor of your choice (I recommend VS Code)
+  4. Get homebrew package manager (PIP for Python works too)
+      1. managerhttps://brew.sh (nb: your password will not show up when prompted)
+  5. Install python python3 from home-brew with `brew install python3`
+
+  Now try running the program with a comment like ```python3 viewer.py 'wrist' 'l' 'a' 'z'``` You will almost certainly get an error message
+  but that's ok. It probably means some sort of package is not installed. The required packages will likely change a bit with time but an easy way to handle them is to read the error message and then present it to a tool like [ChatGPT](https://chat.openai.com) and follow its recommendations. It will offer a more elaborate and customized version of the instruction below.
+
+  6. Follow prompts from terminal if something isn’t installed
+      i.e. missing package numpy => `brew install numpy` or `pip install nummpy`
+
+  7. Eventually the code will run without an error but also without loading any data. At this point you'll want to download the [dataset](http://drive.google.com/drive/u/3/folders/1bBez…)
+  8. Move the dataset directory so that it is on the same level as the python files here, that way the program can [find the data](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/viewer.py#L27)
+
+
+# How do look at the data? 
+
+The main entry point for this project is the viewer.py file. This script reads the .npy files and generates models and associations. To explore the data, you can drop a Python debugger around the end of the viewer.py file by adding the line import pdb; pdb.set_trace().
+
+To get started, you can run the following command:
+
+```python3 viewer.py 'wrist' 'l' 'a' 'z'```
+
+This command tells the code to look at results related to the left wrist, sensor A, and in the Z-direction. You can try different wrist sensors as well. Currently, the available sensors are limited to the wrist, but other sensors will be added [here](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/constants.py) soon.
+
+
+
+  
+
+
+
+
