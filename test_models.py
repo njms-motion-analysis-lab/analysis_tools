@@ -92,7 +92,7 @@ class TestModels(unittest.TestCase):
                 )
             """)
 
-        BaseModel.set_connection(test_mode=True)
+        BaseModel.set_class_connection(test_mode=True)
         
     def tearDown(self) -> None:
         with sqlite3.connect('motion_analysis_test.db') as conn:

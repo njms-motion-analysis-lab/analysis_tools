@@ -35,3 +35,12 @@ class MotionFilter:
             if cls.is_valid(sub_motion=sub_motion, exp_sample=exp_sample):
                 valid_motions.append(sub_motion)
         return valid_motions
+
+
+    @classmethod
+    def get_valid_grad_motions(cls, grad):
+        valid_motions = []
+        for sub_motion in grad.sub_motions:
+            if cls.is_valid(sub_motion=sub_motion, grad=grad):
+                valid_motions.append(sub_motion)
+        return valid_motions

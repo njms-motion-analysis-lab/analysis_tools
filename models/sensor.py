@@ -4,8 +4,11 @@ from models.position_set import PositionSet
 
 class Sensor(BaseModel):
     table_name = "sensor"
+    _conn = BaseModel._conn
+    _cursor = BaseModel._cursor
 
     def __init__(self, id=None, name=None, axis=None, part=None, side=None, iteration=None, conn=None, cursor=None, kind="position"):
+        super().__init__()
         self.id = id
         self.name = name
         self.axis = axis
@@ -13,17 +16,7 @@ class Sensor(BaseModel):
         self.side = side
         self.iteration = iteration
         self.kind = kind
-        self._conn = conn
-        self._cursor = cursor
 
-    def create(self, **kwargs):
-        if self.name is not None:
-            row_id = super().create(name=self.name)
-        else:
-            row_id = super().create(**kwargs)
-
-        self.id = row_id
-        return True
 
     def get_position_sets(self, motion):
         self._cursor.execute("""
@@ -44,3 +37,8 @@ class Sensor(BaseModel):
         """, (self.id, motion.id))
 
         return [GradientSet(*row) for row in self._cursor.fetchall()]
+
+
+    @classmethod
+    def delete_all(cls):
+        cls.delete_all_and_children()

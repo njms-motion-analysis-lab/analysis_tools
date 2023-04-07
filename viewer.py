@@ -36,7 +36,6 @@ for subdir, _, files in os.walk(root_dir):
         if file.endswith('.npy'):
             v = ExpMotionSample(file_path, motions)
             exp_motion_sample_sets[v.name] = v
-pdb.set_trace
 exp_motions = {}
 patients = {}
 

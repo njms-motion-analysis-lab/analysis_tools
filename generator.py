@@ -1,10 +1,11 @@
 import os
-import pdb
 from models.sensor import Sensor
+from models.trial import Trial
 import numpy as np
 from models.motion import Motion
 from models.patient import Patient
 from models.base_model import BaseModel
+import pdb
 
 class Generator:
     def __init__(self, filename: str, conn=None, cursor=None):
@@ -26,7 +27,6 @@ class Generator:
         self.cursor = None
         self.set_attributes()
         self.generate_models()
-        self.generate_sensors()
         
     
     def set_attributes(self):
@@ -53,65 +53,20 @@ class Generator:
         # Add the `Motion` object to the list of motions associated with the `Patient` object.
         c_patient = Patient.find_or_create(name=self.patient)
         c_motion = Motion.find_or_create(description=self.motion)
-        c_patient.add_motion(c_motion)
-
-    def generate_sensors(self):
-        sensors = [
-            "lwra_x",
-            "lwrb_x",
-            "lwra_y",
-            "lwrb_y",
-            "lwra_z",
-            "lwrb_z",
-            "rwra_x",
-            "rwrb_x",
-            "rwra_y",
-            "rwrb_y",
-            "rwra_z",
-            "rwrb_z",
-            "lfrm_x",
-            "lfrm_y",
-            "lfrm_z",
-            "rfrm_x",
-            "rfrm_y",
-            "rfrm_z",
-            "lelb_x",
-            "lelbm_x",
-            "lelb_y",
-            "lelbm_y",
-            "lelb_z",
-            "lelbm_z",
-            "relb_x",
-            "relbm_x",
-            "relb_y",
-            "relbm_y",
-            "relb_z",
-            "relbm_z",
-            "lupa_x",
-            "lupa_y",
-            "lupa_z",
-            "rupa_x",
-            "rupa_y",
-            "rupa_z",
-            "lsho_x",
-            "lsho_y",
-            "lsho_z",
-            "rsho_x",
-            "rsho_y",
-            "rsho_z",
-        ]
-        for s_string in sensors:
-            self.create_sensor_from_string(s_string)
-
-    def create_sensor_from_string(self, sensor_string):
-        side_map = {"l": "left", "r": "right"}
-        side = side_map.get(sensor_string[0], None)
         
-        part = sensor_string[1:3]
-        iteration = sensor_string[3]
-        axis = sensor_string[-1]
-        patient = Patient.find_or_create(name="cheryl")
-        print(patient.name)
-        sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, iteration=iteration, part=part)
-        print(sensor.id)
+        c_patient.add_motion(c_motion)
+        pm = c_patient.get_patient_motion_by_motion(c_motion)
+        
+        counts = 0
+        for key, value in self.data.items():
+            print(f"key: {key}, pm: {pm}, pm.id: {pm.id}")
+            tr = Trial.find_or_create(name=key, patient_motion_id=pm.id, trial_num=counts)
+            tr.generate_sets(data=value)
+            counts += 1
+        
+        print("done")
+
+
+
+
 
