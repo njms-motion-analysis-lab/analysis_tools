@@ -29,13 +29,15 @@ class Trial(BaseModel):
         gradient_data = data['gradients']
         sensors = Sensor.all()
 
+        # Remove array slicing to include all sensors
         for key in position_data.keys()[1:2]:
             col = position_data[key]
             sensor = Sensor.find_by('name', key)
             if not sensor:
                 sensor = self.create_sensor_from_string(key)
             PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-
+    
+        # Remove array slicing to include all sensors
         for key in gradient_data.keys()[1:2]:
             col = gradient_data[key]
             sensor = Sensor.find_by('name', key)

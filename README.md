@@ -22,6 +22,8 @@ To set up this tool, you'll need to do the following:
       1. managerhttps://brew.sh (nb: your password will not show up when prompted)
   5. Install python python3 from home-brew with `brew install python3`
 
+
+(NB: Old way to look at data but still works for install)
   Now try running the program with a comment like ```python3 viewer.py 'wrist' 'l' 'a' 'z'``` You will almost certainly get an error message
   but that's ok. It probably means some sort of package is not installed. The required packages will likely change a bit with time but an easy way to handle them is to read the error message and then present it to a tool like [ChatGPT](https://chat.openai.com) and follow its recommendations. It will offer a more elaborate and customized version of the instruction below.
 
@@ -38,7 +40,41 @@ The main entry point for this project is the viewer.py file. This script reads t
 
 To get started, you can run the following command:
 
-```python3 viewer.py 'wrist' 'l' 'a' 'z'```
+# Helpful methods
+
+
+Helpful methods
+
+* `.all()` => `GradientSet.all()`
+* `.where() => `GradientSet.where(trial_id=884)`
+* `.create_subgradients()` (on GradientSet instance), this will create sub motions based on zero value crossings. => `GradientSet.where(trial_id=884)[0].create_subgradients()`
+
+SubGradient Example: 
+```
+(Pdb) pp sg[-1]
+<models.sub_gradient.SubGradient object at 0x43de422f0>
+(Pdb) pp sg[-1].attrs()
+Attributes:
+id: 37
+created_at: 2023-04-10 13:10:17.583353
+updated_at: 2023-04-10 13:10:17.583354
+name: lfhd_x
+valid: 0
+matrix: b'\x80\x04\x95\x04\x00\x00\x00\x00\x00\x00\x00\x8c\x00\x94.'
+gradient_set_id: 884
+gradient_set_ord: 36
+start_time: 1020
+stop_time: 1025
+mean: -0.02329880347760747
+median: -0.02569447478447273
+stdev: 0.02169755398101877
+```
+
+On SubGradient:
+
+* `.gradient_set()` (gets parent object)
+* `.grad_matrix()` (corresponding matrix from parent motion)
+* `.pos_matrix()` (corresponding position matrix)
 
 This command tells the code to look at results related to the left wrist, sensor A, and in the Z-direction. You can try different wrist sensors as well. Currently, the available sensors are limited to the wrist, but other sensors will be added [here](https://github.com/njms-motion-analysis-lab/analysis_tools/blob/master/constants.py) soon.
 

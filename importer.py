@@ -91,14 +91,6 @@ for subdir, _, files in os.walk(root_dir):
             v = Generator(file_path)
             exp[v.name] = v
 
-
-
-        # ls = Sensor.all()[0]
-        # ps = PositionSet.all()[0]
-        # gs = GradientSet.all()[0]
-        # # mat = gs.get_matrix('matrix')
-        # gs.get_sub_tasks()
-
         
 import pdb
 pdb.set_trace()

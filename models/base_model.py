@@ -72,14 +72,6 @@ class BaseModel:
         self.__class__._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
         self.__class__._conn.commit()
 
-    @classmethod
-    def get_col(cls, column_name):
-        # Fetch the binary data for the specified column from the database
-        cls.__class__._cursor.execute(f"SELECT {column_name} FROM {cls.table_name} WHERE id=?", (self.id,))
-        row = self.__class__._cursor.fetchone()
-        return cls(*row)
-
-
     def get_matrix(self, column_name):
         # Fetch the binary data for the specified column from the database
         self.__class__._cursor.execute(f"SELECT {column_name} FROM {self.table_name} WHERE id=?", (self.id,))
