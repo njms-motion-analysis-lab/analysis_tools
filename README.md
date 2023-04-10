@@ -42,7 +42,7 @@ To get started, you can run the following command:
 ```
 python3 importer.py 
 ```
-This will bring you to a debugger that will allow you to peruse the current models. When you quit the db will be wiped, however. (this will go away when we're totally sure about everything)
+This will bring you to a debugger that will allow you to peruse the current models. That said, when you quit the debugger, the db will be wiped. This "feature" will go away when we're totally sure about everything :)
 
 # Some Helpful methods
 
