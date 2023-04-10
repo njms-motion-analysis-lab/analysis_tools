@@ -48,7 +48,7 @@ This will bring you to a debugger that will allow you to peruse the current mode
 
 
 * `.all()` => `GradientSet.all()`
-* `.where() => `GradientSet.where(trial_id=884)`
+* `.where()` => `GradientSet.where(trial_id=884)`
 * `.create_subgradients()` (on GradientSet instance), this will create sub motions based on zero value crossings. => `GradientSet.where(trial_id=884)[0].create_subgradients()`
 
 SubGradient Example: 
