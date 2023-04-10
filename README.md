@@ -39,6 +39,10 @@ To set up this tool, you'll need to do the following:
 The main entry point for this project is the viewer.py file. This script reads the .npy files and generates models and associations. To explore the data, you can drop a Python debugger around the end of the viewer.py file by adding the line import pdb; pdb.set_trace().
 
 To get started, you can run the following command:
+```
+python3 importer.py 
+```
+This will bring you to a debugger that will allow you to peruse the current models. When you quit the db will be wiped, however. (this will go away when we're totally sure about everything)
 
 # Some Helpful methods
 
