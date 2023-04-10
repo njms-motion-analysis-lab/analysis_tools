@@ -44,7 +44,7 @@ python3 importer.py
 ```
 This will bring you to a debugger that will allow you to peruse the current models. That said, when you quit the debugger, the db will be wiped. This "feature" will go away when we're totally sure about everything :)
 
-# Some Helpful Methods
+# Some helpful methods...
 
 
 * `.all()` => `GradientSet.all()`
