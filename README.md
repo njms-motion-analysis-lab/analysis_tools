@@ -40,10 +40,8 @@ The main entry point for this project is the viewer.py file. This script reads t
 
 To get started, you can run the following command:
 
-# Helpful methods
+# Some Helpful methods
 
-
-Helpful methods
 
 * `.all()` => `GradientSet.all()`
 * `.where() => `GradientSet.where(trial_id=884)`
@@ -51,6 +49,7 @@ Helpful methods
 
 SubGradient Example: 
 ```
+(Pdb) sg = GradientSet.where(trial_id=884)[0].create_subgradients()
 (Pdb) pp sg[-1]
 <models.sub_gradient.SubGradient object at 0x43de422f0>
 (Pdb) pp sg[-1].attrs()
