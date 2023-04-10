@@ -58,10 +58,15 @@ class BaseModel:
         try:
             self.__class__._cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=?", tuple(kwargs.values()) + (self.updated_at, self.id,))
             self.__class__._conn.commit()
+            
+            # Update the in-memory instance attributes
+            for key, value in kwargs.items():
+                setattr(self, key, value)
         except sqlite3.IntegrityError as e:
             print(f"Error updating record: {e}")
             return False
         return True
+
 
     def delete(self):
         self.__class__._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
@@ -101,7 +106,7 @@ class BaseModel:
         return "nope"
 
     @classmethod
-    def get_by(cls, column_name, value):
+    def find_by(cls, column_name, value):
         # Find the record with the given column name and value
         cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {column_name}=?", (value,))
         row = cls._cursor.fetchone()
@@ -124,14 +129,15 @@ class BaseModel:
         row = cls._cursor.fetchone()
 
         if row:
-            print("Row found:", row)
             return cls(*row)
         else:
             if 'matrix' in kwargs:
                 kwargs["matrix"] = memoryview(pickle.dumps(old_matrix))
                 # Serialize the matrix
                 # Create the record if not found
+                
             cls_instance = cls()
+            
             for key, value in kwargs.items():
                 setattr(cls_instance, key, value)
             cls_instance.id = cls_instance.create(**kwargs)

@@ -19,8 +19,6 @@ class ExpMotionSample:
     
     def set_samples(self):
         for sample in self.samples:
-            import pdb
-            pdb.set_trace()
             new_sample = ExpMotionSampleTrial(sample, self.data[sample], self.motions)
             valid_sample = MotionFilter.get_valid_motions(new_sample)
 

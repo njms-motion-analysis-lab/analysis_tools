@@ -1,38 +1,44 @@
+from models.position_set import PositionSet
 import pickle
 from typing import Any, List
 from models.base_model import BaseModel
-from models.motion import Motion
+from models.task import Task
 from models.patient import Patient
 from datetime import datetime
+from models.sub_gradient import SubGradient
 import pandas as pd
+import numpy as np
 
-from models.patient_motion import PatientMotion
+from models.patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 
 class GradientSet(BaseModel):
     table_name = "gradient_set"
 
-    def __init__(self, id=None, sensor_id=None, trial_id=None, matrix=None, conn=None, cursor=None, created_at=None,updated_at=None):
+    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
+        self.name = name
         self.sensor_id = sensor_id
         self.trial_id = trial_id
         self.matrix = matrix
 
     # Splits the series based on zero value crossing.
-    def get_sub_motions(self):
+    def get_sub_tasks(self):
+        print("yo")
         if not self.sensor_id:
             return None
         from importlib import import_module
         Sensor = import_module("models.sensor").Sensor
+
         data = self.get_matrix("matrix")
         import pdb
         pdb.set_trace()
         name = Sensor.get(self.sensor_id).name
         est = ExpMotionSampleTrial(name, name, grad=data)
 
-        return est.valid_sub_motions()
+        return est.valid_sub_tasks()
 
 
     def get_sensor_name(self):
@@ -45,26 +51,26 @@ class GradientSet(BaseModel):
         return row[0] if row else None
 
 
-    def get_valid_motions(self):
-        self.sub_motions = self.get_sub_motions()
+    def get_valid_tasks(self):
+        self.sub_tasks = self.get_sub_tasks()
         MotionFilter.get_valid_motions(self)
 
-    def get_motion(self):
+    def get_task(self):
         self._cursor.execute("""
-            SELECT motion.* FROM motion
-            JOIN patient_motion ON motion.id = patient_motion.motion_id
-            JOIN trial ON trial.patient_motion_id = patient_motion.id
+            SELECT task.* FROM task
+            JOIN patient_task ON task.id = patient_task.task_id
+            JOIN trial ON trial.patient_task_id = patient_task.id
             WHERE trial.id = ?
         """, (self.trial_id,))
 
         row = self._cursor.fetchone()
-        return Motion(*row) if row else None
+        return Task(*row) if row else None
 
     def get_patient(self):
         self._cursor.execute("""
             SELECT patient.* FROM patient
-            JOIN patient_motion ON patient.id = patient_motion.patient_id
-            JOIN trial ON trial.patient_motion_id = patient_motion.id
+            JOIN patient_task ON patient.id = patient_task.patient_id
+            JOIN trial ON trial.patient_task_id = patient_task.id
             WHERE trial.id = ?
         """, (self.trial_id,))
 
@@ -73,7 +79,7 @@ class GradientSet(BaseModel):
 
     # Splits the series based on zero value crossing.
     def split_series(self) -> Any:
-        series = self.gradients[self.motions]
+        series = self.gradients[self.tasks]
         split_indices = []
 
         for i in range(1, len(series)):
@@ -86,16 +92,65 @@ class GradientSet(BaseModel):
 
         return series[start:]
 
-    def get_patient_motion_id(self):
-        self._cursor.execute("SELECT patient_motion_id FROM gradient_set WHERE id=?", (self.id,))
+    def add_sensor(self, sensor):
+        if self.sensor_id == sensor.id:
+            print("This GradientSet is already associated with the provided sensor.")
+            return
+
+        self.sensor_id = sensor.id
+        self.update(sensor_id=self.sensor_id)
+        print(f"Sensor with ID {sensor.id} has been associated with this GradientSet.")
+
+    def get_patient_task_id(self):
+        self._cursor.execute("SELECT patient_task_id FROM gradient_set WHERE id=?", (self.id,))
         return self._cursor.fetchone()[0]
 
-    def get_patient_motion(self):
-        patient_motion_id = self.get_patient_motion_id()
-        return PatientMotion.get(patient_motion_id)
+    def get_patient_task(self):
+        patient_task_id = self.get_patient_task_id()
+        return PatientTask.get(patient_task_id)
+
+
+    def create_subgradients(self):
+        matrix = self.mat()
+        subgradients = []
+        start_time = 0
+        p_matrix = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)[0].mat()
+
+        for i in range(1, len(matrix)):
+            if (matrix.iloc[i] > 0 and matrix.iloc[i - 1] < 0) or (matrix.iloc[i] < 0 and matrix.iloc[i - 1] > 0):
+                stop_time = i - 1
+                current_slice = matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
+                p_slice = p_matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
+                valid = self.is_valid(current_slice, p_slice)
+                subgradient = SubGradient.find_or_create(
+                    name=self.name,
+                    valid=valid,
+                    matrix="", # Consider filling this in, but not now bc it'll be pretty slow.
+                    gradient_set_id=self.id,
+                    gradient_set_ord=len(subgradients),
+                    start_time=matrix.index[start_time],
+                    stop_time=matrix.index[stop_time],
+                    mean=current_slice.mean(),
+                    median=current_slice.median(),
+                    stdev=current_slice.std(),
+                )
+                subgradients.append(subgradient)
+                start_time = i
+
+        return subgradients
+
+    def is_valid(self, current_slice, p_slice):
+        duration = current_slice.index.stop - current_slice.index.start
+        if duration < MotionFilter.DURATION:
+            return False
+        elif abs(current_slice.mean()) < MotionFilter.VELOCITY:
+            return False
+        elif abs(float(p_slice.max() - p_slice.min())) < MotionFilter.DISPLACEMENT:
+            return False
+        return True
+    
 
     def mat(self):
-        print(self.matrix)
         # Deserialize the 'matrix' value from the binary format using pickle
         return pd.Series(pickle.loads(self.matrix))
 

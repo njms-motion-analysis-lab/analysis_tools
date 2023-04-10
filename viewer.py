@@ -63,7 +63,8 @@ for key, value in exp_motion_sample_sets.items():
         p = Patient(patient)
         p.add_exp_motions(value)
         patients[patient] = p
-
+import pdb
+pdb.set_trace()
 # Generate a csv containing mean and stdev for each submotion for each patient with a 
 # given coordinate.
 csv_name = CSVGenerator.camel_to_snake(f"{part}{side}{sensor}_{motions[-1]}.csv")

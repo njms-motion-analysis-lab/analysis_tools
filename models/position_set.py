@@ -1,59 +1,72 @@
 import pickle
 from models.base_model import BaseModel
-from models.motion import Motion
+from models.task import Task
 from models.patient import Patient
 from datetime import datetime
+import pandas as pd
 
-from models.patient_motion import PatientMotion
+from models.patient_task import PatientTask
 
 class PositionSet(BaseModel):
     table_name = "position_set"
 
-    def __init__(self, id=None, sensor_id=None, trial_id=None, matrix=None, conn=None, cursor=None, created_at=None,updated_at=None):
+    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, conn=None, cursor=None, created_at=None,updated_at=None):
         super().__init__()
         self.id = id
+        self.name = name
         self.sensor_id = sensor_id
         self.trial_id = trial_id
         self.matrix = matrix
 
-    def get_motion(self):
+    def get_task(self):
         self._cursor.execute("""
-            SELECT motion.* FROM motion
-            JOIN patient_motion ON motion.id = patient_motion.motion_id
-            JOIN trial ON trial.patient_motion_id = patient_motion.id
+            SELECT task.* FROM task
+            JOIN patient_task ON task.id = patient_task.task_id
+            JOIN trial ON trial.patient_task_id = patient_task.id
             WHERE trial.id = ?
         """, (self.trial_id,))
 
 
-    def get_motion(self):
+    def get_task(self):
         self._cursor.execute("""
-            SELECT motion.* FROM motion
-            JOIN patient_motion ON motion.id = patient_motion.motion_id
-            JOIN trial ON trial.patient_motion_id = patient_motion.id
+            SELECT task.* FROM task
+            JOIN patient_task ON task.id = patient_task.task_id
+            JOIN trial ON trial.patient_task_id = patient_task.id
             WHERE trial.id = ?
         """, (self.trial_id,))
 
         row = self._cursor.fetchone()
-        return Motion(*row) if row else None
+        return Task(*row) if row else None
 
     def get_patient(self):
         self._cursor.execute("""
             SELECT patient.* FROM patient
-            JOIN patient_motion ON patient.id = patient_motion.patient_id
-            JOIN trial ON trial.patient_motion_id = patient_motion.id
+            JOIN patient_task ON patient.id = patient_task.patient_id
+            JOIN trial ON trial.patient_task_id = patient_task.id
             WHERE trial.id = ?
         """, (self.trial_id,))
 
         row = self._cursor.fetchone()
         return Patient(*row) if row else None
 
-    def get_patient_motion_id(self):
-        self._cursor.execute("SELECT patient_motion_id FROM position_set WHERE id=?", (self.id,))
+
+    def add_sensor(self, sensor):
+        if self.sensor_id == sensor.id:
+            print("This PositionSet is already associated with the provided sensor.")
+            return
+
+        self.sensor_id = sensor.id
+        self.update(sensor_id=self.sensor_id)
+        print(f"Sensor with ID {sensor.id} has been associated with this PositionSet.")
+
+
+    def get_patient_task_id(self):
+        self._cursor.execute("SELECT patient_task_id FROM position_set WHERE id=?", (self.id,))
         return self._cursor.fetchone()[0]
 
-    def get_patient_motion(self):
-        patient_motion_id = self.get_patient_motion_id()
-        return PatientMotion.get(patient_motion_id)
+    def get_patient_task(self):
+        patient_task_id = self.get_patient_task_id()
+        return PatientTask.get(patient_task_id)
 
     def mat(self):
         # Deserialize the 'matrix' value from the binary format using pickle

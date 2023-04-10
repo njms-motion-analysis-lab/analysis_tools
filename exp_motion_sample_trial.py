@@ -6,13 +6,11 @@ import matplotlib.pyplot as plt
 class ExpMotionSampleTrial:
     FILE_PATH = "/Users/stephenmacneille/Documents/labs/NPYViewer/sample_npy_files/filename.npy"
 
-    def __init__(self, name: str, motions: str, grad = None, pos= None, measurements = None) -> None:
+    def __init__(self, name: str, measurements: dict, motions: str) -> None:
         self.name = name
         self.motions = motions
-        import pdb
-        pdb.set_trace()
-        self.gradients = grad or measurements[constants.GRADIENTS]
-        self.positional = pos or measurements[constants.POSITIONAL]       
+        self.gradients = measurements[constants.GRADIENTS]
+        self.positional = measurements[constants.POSITIONAL]       
         self.sub_motions = list(self.split_series())
         self.valid_sub_motions = self.get_valid_sub_motions()
         self.normalized_sub_motions = list(self.normalize())
@@ -58,7 +56,7 @@ class ExpMotionSampleTrial:
 
     #def normalize(self) -> 
 
-    
+    # tsfresh
     # Gets the other axes for a provided coordinate.
     def letter_substitution(self) -> Any:
         string = self.motions

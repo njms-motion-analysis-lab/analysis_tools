@@ -64,9 +64,9 @@ class TestModels(unittest.TestCase):
                     axis TEXT,
                     part TEXT,
                     side TEXT,
-                    iteration TEXT,
+                    placement TEXT,
                     kind TEXT,
-                    UNIQUE(axis, part, side, iteration)
+                    UNIQUE(axis, part, side, placement)
                 )
             """)
 

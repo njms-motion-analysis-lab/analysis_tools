@@ -1,7 +1,7 @@
 import sqlite3
 from models.base_model import BaseModel
-from models.motion import Motion
-from models.patient_motion import PatientMotion
+from models.task import Task
+from models.patient_task import PatientTask
 from models.trial import Trial
 import pdb
 from datetime import datetime
@@ -19,57 +19,57 @@ class Patient(BaseModel):
         self.created_at = created_at
         self.updated_at = updated_at
 
-    def add_motion(self, motion):
+    def add_task(self, task):
         # Check if the relationship already exists
-        self._cursor.execute("SELECT * FROM patient_motion WHERE patient_id=? AND motion_id=?", (self.id, motion.id))
+        self._cursor.execute("SELECT * FROM patient_task WHERE patient_id=? AND task_id=?", (self.id, task.id))
         existing_relation = self._cursor.fetchone()
 
         if not existing_relation:
             curr = datetime.now()
-            # Add a motion to the list of motions associated with the patient.
-            self._cursor.execute("INSERT INTO patient_motion (patient_id, motion_id, created_at, updated_at) VALUES (?, ?, ?, ?)", (self.id, motion.id, curr, curr))
+            # Add a task to the list of tasks associated with the patient.
+            self._cursor.execute("INSERT INTO patient_task (patient_id, task_id, created_at, updated_at) VALUES (?, ?, ?, ?)", (self.id, task.id, curr, curr))
             self._conn.commit()
         else:
-            print("The relationship between this patient and motion already exists.")
+            print("The relationship between this patient and task already exists.")
 
-    def remove_motion(self, motion):
-        # Remove a motion from the list of motions associated with the patient.
+    def remove_task(self, task):
+        # Remove a task from the list of tasks associated with the patient.
         #
         # Input:
-        # - `motion`: the `Motion` object to remove from the patient's list of motions.
+        # - `task`: the `Task` object to remove from the patient's list of tasks.
         #
         # Output:
         # - None.
-        self._cursor.execute("DELETE FROM patient_motion WHERE patient_id=? AND motion_id=?", (self.id, motion.id))
+        self._cursor.execute("DELETE FROM patient_task WHERE patient_id=? AND task_id=?", (self.id, task.id))
         self._conn.commit()
 
-    def get_patient_motion_by_motion(self, motion):
+    def patient_task_by_task(self, task):
         """
-        Return the PatientMotion associated with the given Motion for this Patient instance.
+        Return the PatientTask associated with the given Task for this Patient instance.
 
-        :param motion: The Motion instance to find the associated PatientMotion.
-        :return: The associated PatientMotion instance if found, None otherwise.
+        :param task: The Task instance to find the associated PatientTask.
+        :return: The associated PatientTask instance if found, None otherwise.
         """
 
-        return PatientMotion.where(motion=motion, patient=self)[0]
+        return PatientTask.where(task=task, patient=self)[0]
 
     
 
 
-    def get_motions(self):
+    def tasks(self):
         self._cursor.execute("""
-            SELECT motion.* FROM motion
-            JOIN patient_motion ON motion.id = patient_motion.motion_id
-            WHERE patient_motion.patient_id = ?
+            SELECT task.* FROM task
+            JOIN patient_task ON task.id = patient_task.task_id
+            WHERE patient_task.patient_id = ?
         """, (self.id,))
 
-        return [Motion.get(row[0]) for row in self._cursor.fetchall()]
+        return [Task.get(row[0]) for row in self._cursor.fetchall()]
 
-    def get_trials(self):
+    def trials(self):
         self._cursor.execute("""
             SELECT trial.* FROM trial
-            JOIN patient_motion ON trial.patient_motion_id = patient_motion.id
-            WHERE patient_motion.patient_id = ?
+            JOIN patient_task ON trial.patient_task_id = patient_task.id
+            WHERE patient_task.patient_id = ?
         """, (self.id,))
 
         return [Trial(*row) for row in self._cursor.fetchall()]
@@ -77,7 +77,7 @@ class Patient(BaseModel):
     @classmethod
     def delete_all(cls):
         # Delete records from the join table
-        cls._cursor.execute(f"DELETE FROM patient_motions WHERE patient_id IN (SELECT id FROM {cls.table_name})")
+        cls._cursor.execute(f"DELETE FROM patient_tasks WHERE patient_id IN (SELECT id FROM {cls.table_name})")
 
         # Delete records from the current class table
         cls._cursor.execute(f"DELETE FROM {cls.table_name}")

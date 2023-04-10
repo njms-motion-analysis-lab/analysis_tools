@@ -1,31 +1,22 @@
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from models.base_model import BaseModel
-import sqlite3
-
-from models.patient_motion import PatientMotion
-
+from models.patient_task import PatientTask
 
 
 class Trial(BaseModel):
     table_name = "trial"
 
-    def __init__(self, id=None, patient_motion_id=None, timestamp=None, name=None, matrix=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, patient_task_id=None, timestamp=None, name=None, matrix=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
-        self.patient_motion_id = patient_motion_id
+        self.patient_task_id = patient_task_id
         self.timestamp = timestamp
 
-    # def create(self, **kwargs):
-    #     self.patient_motion_id = kwargs.get("patient_motion_id")
-    #     self.timestamp = kwargs.get("timestamp")
-    #     print(f"Creating Trial with kwargs: {kwargs}")  # Add this print statement
-    #     return super().create(**kwargs)
-
     def update(self, **kwargs):
-        self.patient_motion_id = kwargs.get("patient_motion_id", self.patient_motion_id)
+        self.patient_task_id = kwargs.get("patient_task_id", self.patient_task_id)
         self.timestamp = kwargs.get("timestamp", self.timestamp)
-        print(f"Updating Trial with kwargs: {kwargs}")  # Add this print statement
+        
         return super().update(**kwargs)
     
     def generate_sets(self, data):
@@ -38,58 +29,35 @@ class Trial(BaseModel):
         gradient_data = data['gradients']
         sensors = Sensor.all()
 
-        kc = 0
-        kcl = len(sensors)
-        kl = len(position_data.keys()[1:2])
         for key in position_data.keys()[1:2]:
             col = position_data[key]
-            cc = 0
-            sensor = Sensor.get_by('name', key)
+            sensor = Sensor.find_by('name', key)
             if not sensor:
                 sensor = self.create_sensor_from_string(key)
-            if sensor.id:
-                print(sensor.id)
-                ps = PositionSet.find_or_create(sensor_id=sensor.id, trial_id=self.id, matrix=col)
-                
-                
-                cc += 1
-            else:
-                print("noooooo")
-            kc += 1
+            PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+
+        for key in gradient_data.keys()[1:2]:
+            col = gradient_data[key]
+            sensor = Sensor.find_by('name', key)
+            if not sensor:
+                sensor = self.create_sensor_from_string(key)
+            GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
             
 
-        kcl = len(sensors)
-        kl = len(gradient_data.keys()[:1])
-        for key in gradient_data.keys()[1:2]:
-            col = position_data[key]
-            cc = 0
-            sensor = Sensor.get_by('name', key)
-            if not sensor:
-                sensor = self.create_sensor_from_string(key)
-            if sensor.id:
-                print(sensor.id)
-                gs = GradientSet.find_or_create(sensor_id=sensor.id, trial_id=self.id, matrix=col)
-                mt = ExpMotionSampleTrial(key, sensor.name, measurements=data)
-                import pdb
-                pdb.set_trace()
-                cc += 1
-
-        print("Done 3")
-
-    def get_patient(self):
+    def patient(self):
         from importlib import import_module
-        Patient = import_module("models.motion").Patient
-        patient_motion = PatientMotion.get(id=self.patient_motion_id)
-        if patient_motion:
-            return Patient.get(id=patient_motion.patient_id)
+        Patient = import_module("models.task").Patient
+        patient_task = PatientTask.get(id=self.patient_task_id)
+        if patient_task:
+            return Patient.get(id=patient_task.patient_id)
         return None
 
-    def get_motion(self):
+    def task(self):
         from importlib import import_module
-        Motion = import_module("models.motion").Motion
-        patient_motion = PatientMotion.get(id=self.patient_motion_id)
-        if patient_motion:
-            return Motion.get(id=patient_motion.motion_id)
+        Task = import_module("models.task").Task
+        patient_task = PatientTask.get(id=self.patient_task_id)
+        if patient_task:
+            return Task.get(id=patient_task.task_id)
         return None
 
 
@@ -100,7 +68,11 @@ class Trial(BaseModel):
         side = side_map.get(sensor_string[0], None)
         
         part = sensor_string[1:3]
-        iteration = sensor_string[3]
+        placement = sensor_string[3]
         axis = sensor_string[-1]
-        sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, iteration=iteration, part=part)
-        return sensor
+        sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, placement=placement, part=part)
+        new_sensor = Sensor.find_by("name", sensor_string)
+        if new_sensor.id:
+            return new_sensor
+        else:
+            raise NameError

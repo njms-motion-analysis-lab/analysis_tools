@@ -17,9 +17,9 @@ def create_sensor_from_string(sensor_string):
     side = side_map.get(sensor_string[0], None)
     
     part = sensor_string[1:3]
-    iteration = sensor_string[3]
+    placement = sensor_string[3]
     axis = sensor_string[-1]
-    sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, iteration=iteration, part=part)
+    sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, placement=placement, part=part)
 
 
 
@@ -72,16 +72,15 @@ def generate_sensors():
         create_sensor_from_string(s_string)
 
 
-from models.motion import Motion
+from models.task import Task
 from models.sensor import Sensor
 from models.patient import Patient
 from models.position_set import PositionSet
 
-from models.patient_motion import PatientMotion
+from models.patient_task import PatientTask
 
 from models.gradient_set import GradientSet
 from models.trial import Trial
-
 
 generate_sensors()
 print("done 1")
@@ -94,18 +93,15 @@ for subdir, _, files in os.walk(root_dir):
 
 
 
-        ls = Sensor.all()[0]
-        ps = PositionSet.all()[0]
-        gs = GradientSet.all()[0]
-        mat = gs.get_matrix('matrix')
-        gs.get_sub_motions()
-        import pdb
-        pdb.set_trace()
+        # ls = Sensor.all()[0]
+        # ps = PositionSet.all()[0]
+        # gs = GradientSet.all()[0]
+        # # mat = gs.get_matrix('matrix')
+        # gs.get_sub_tasks()
 
         
-
-print("done 2")
-
+import pdb
+pdb.set_trace()
 
 Table.drop_all_tables()
 print("Done!")

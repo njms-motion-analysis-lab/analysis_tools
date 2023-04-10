@@ -15,8 +15,10 @@ class Table:
                 updated_at TIMESTAMP NOT NULL
             )
         """)
+
+    # change to task
         cls.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS motion (
+            CREATE TABLE IF NOT EXISTS task (
                 id INTEGER PRIMARY KEY,
                 description TEXT UNIQUE NOT NULL,
                 created_at TIMESTAMP NOT NULL,
@@ -24,30 +26,31 @@ class Table:
             )
         """)
         cls.cursor.execute("""
-            CREATE TABLE IF NOT EXISTS patient_motion (
+            CREATE TABLE IF NOT EXISTS patient_task (
                 id INTEGER PRIMARY KEY,
                 patient_id INTEGER NOT NULL,
-                motion_id INTEGER NOT NULL,
+                task_id INTEGER NOT NULL,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
-                UNIQUE (patient_id, motion_id),
+                UNIQUE (patient_id, task_id),
                 FOREIGN KEY (patient_id) REFERENCES patient (id),
-                FOREIGN KEY (motion_id) REFERENCES motion (id)
+                FOREIGN KEY (task_id) REFERENCES task (id)
             )
         """)
         cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS trial (
                 id INTEGER PRIMARY KEY,
                 name TEXT NOT NULL,
-                patient_motion_id INTEGER NOT NULL,
+                patient_task_id INTEGER NOT NULL,
                 trial_num INTEGER NOT NULL,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
-                UNIQUE (patient_motion_id, trial_num),
-                FOREIGN KEY (patient_motion_id) REFERENCES patient_motion (id)
+                UNIQUE (patient_task_id, trial_num),
+                FOREIGN KEY (patient_task_id) REFERENCES patient_task (id)
             )
         """)
 
+# placement instead of placement
         cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS sensor (
                 id INTEGER PRIMARY KEY,
@@ -55,11 +58,11 @@ class Table:
                 axis TEXT,
                 part TEXT,
                 side TEXT,
-                iteration TEXT,
+                placement TEXT,
                 kind TEXT,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
-                UNIQUE(axis, part, side, iteration)
+                UNIQUE(axis, part, side, placement)
             )
         """)
 
@@ -93,12 +96,34 @@ class Table:
             )
         """)
 
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sub_gradient (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                valid BOOLEAN,
+                matrix TEXT,
+                gradient_set_id INTEGER NOT NULL,
+                gradient_set_ord INTEGER,
+                start_time INTEGER,
+                stop_time INTEGER,
+                mean REAL,
+                median REAL,
+                stdev REAL,
+                created_at DATETIME,
+                updated_at DATETIME,
+                UNIQUE (gradient_set_id, gradient_set_ord),
+                FOREIGN KEY (gradient_set_id) REFERENCES gradient_set (id)
+            );
+        """)
+
+
+
         
         BaseModel.set_class_connection(conn=cls.conn, cursor=cls.cursor)
     
     @classmethod
     def drop_all_tables(cls):
-        tables = ['trial', 'patient_motion', 'sensor', 'motion', 'patient', 'position_set','gradient_set']
+        tables = ['trial', 'patient_task', 'sensor', 'task', 'patient', 'position_set','gradient_set', 'motion', 'patient_motion', "sub_gradient"]
         for table in tables:
             try:
                 BaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
@@ -111,11 +136,12 @@ class Table:
     @classmethod
     def clear_tables(cls):
         cls.cursor.execute("DELETE FROM patient")
-        cls.cursor.execute("DELETE FROM motion")
-        cls.cursor.execute("DELETE FROM patient_motion")
+        cls.cursor.execute("DELETE FROM task")
+        cls.cursor.execute("DELETE FROM patient_task")
         cls.cursor.execute("DELETE FROM trial")
         cls.cursor.execute("DELETE FROM sensor")
         cls.cursor.execute("DELETE FROM position_set")
+        cls.cursor.execute("DELETE FROM sub_gradient")
         cls.conn.commit()
 
     
