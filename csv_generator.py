@@ -47,6 +47,65 @@ class CSVGenerator:
             writer.writerows(data_rows)
 
     @classmethod
+    def boxplots_aggregatesubmotiondata(cls, data, patients):
+        # Get object names from the first dictionary
+        #object_names = list(data.keys())
+        #print(object_names)
+
+        # exp_motions["Abduction_dominant"].exp_motion_sample_sets[0].exp_samples[0].aggregate_stats
+
+        # Get object names from the first dictionary
+        object_names = list(data.keys())
+
+        # Create header row with mean and std_dev columns for each object
+        header_row = ["pt name"]
+        for obj_name in object_names:
+            header_row.append(obj_name +  "_mean")
+            header_row.append(obj_name +  "_stdev")
+
+        means = pd.DataFrame()
+
+
+        for pt_name, pt in patients.items():
+            print("PATIENT:"+pt_name)
+            data_row = [pt_name]
+            for header_val in header_row[1:]:
+                header_val = header_val.split("_")
+
+                motion_type = header_val[:-1]
+                measurement_type = header_val[-1:]
+                
+                if len(motion_type) != 1:
+                    motion_type = "_".join(motion_type)
+                else:
+                    motion_type = "".join(motion_type)
+                
+                if motion_type in pt.exp_motions_hash:
+                    #print(motion_type)
+                    patienttask = pt.exp_motions_hash
+                    #print(patienttask)
+                    for key, trialtype in patienttask.items():
+                        trials = trialtype.exp_samples
+                        #print(trials)
+                        for sample in trials:
+                            #print(sample.name)
+                            stats = sample.aggregate_stats
+                            means = pd.concat([means, pd.DataFrame([stats["mean"]], index=[pt_name+sample.name])])
+                            #print(stats)
+                            #print(stats["mean"])
+                            #print(pd.DataFrame([stats["mean"]], index=[sample.name]))
+
+                    #print(sample)
+                else:
+                    data_row.append("")
+            #data_rows.append(data_row)
+
+        print(means)
+        means.to_csv("aggregated_means_of_stats.csv", index=True)
+
+                
+
+    @classmethod
     def camel_to_snake(cls, camelcase_string):
         snakecase_string = re.sub('(.)([A-Z][a-z]+)', r'\1_\2', camelcase_string)
         return re.sub('([a-z0-9])([A-Z])', r'\1_\2', snakecase_string).lower()

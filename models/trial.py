@@ -44,7 +44,11 @@ class Trial(BaseModel):
             if not sensor:
                 sensor = self.create_sensor_from_string(key)
             GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-            
+            grad_set = GradientSet.where(trial_id=self.id)[0]
+            grad_set.create_subgradients()
+            grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
+            #print("IM HERE RN:",GradientSet.where(trial_id=self.id)[0].get_aggregate_stats())
+
 
     def patient(self):
         from importlib import import_module

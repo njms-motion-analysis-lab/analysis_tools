@@ -8,6 +8,8 @@ from datetime import datetime
 from models.sub_gradient import SubGradient
 import pandas as pd
 import numpy as np
+import pdb
+
 
 from models.patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
@@ -16,13 +18,14 @@ from motion_filter import MotionFilter
 class GradientSet(BaseModel):
     table_name = "gradient_set"
 
-    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, aggregated_stats=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
         self.sensor_id = sensor_id
         self.trial_id = trial_id
         self.matrix = matrix
+        self.aggregated_stats = aggregated_stats
 
     # Splits the series based on zero value crossing.
     def get_sub_tasks(self):
@@ -34,7 +37,7 @@ class GradientSet(BaseModel):
 
         data = self.get_matrix("matrix")
         import pdb
-        pdb.set_trace()
+        #pdb.set_trace()
         name = Sensor.get(self.sensor_id).name
         est = ExpMotionSampleTrial(name, name, grad=data)
 
@@ -111,6 +114,7 @@ class GradientSet(BaseModel):
 
 
     def create_subgradients(self):
+        print("CREATING SUBS")
         matrix = self.mat()
         subgradients = []
         start_time = 0
@@ -125,7 +129,7 @@ class GradientSet(BaseModel):
                 subgradient = SubGradient.find_or_create(
                     name=self.name,
                     valid=valid,
-                    matrix="", # Consider filling this in, but not now bc it'll be pretty slow.
+                    matrix=current_slice, # Consider filling this in, but not now bc it'll be pretty slow.
                     gradient_set_id=self.id,
                     gradient_set_ord=len(subgradients),
                     start_time=matrix.index[start_time],
@@ -133,10 +137,16 @@ class GradientSet(BaseModel):
                     mean=current_slice.mean(),
                     median=current_slice.median(),
                     stdev=current_slice.std(),
+                    normalized = SubGradient.normalize(current_slice),
                 )
+                subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
+                subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
+
+                #print(subgradient.get_sub_stats())
+                #subgradient.get_normalized()
                 subgradients.append(subgradient)
                 start_time = i
-
+        print("created subgrads")
         return subgradients
 
     def is_valid(self, current_slice, p_slice):
@@ -157,4 +167,54 @@ class GradientSet(BaseModel):
     def deserialize_matrix(self):
         # Deserialize the 'matrix' value from the binary format using pickle
         return pickle
+    
+    def sub_gradients(self):
+        from importlib import import_module
+        SubGradient = import_module("models.sub_gradient").SubGradient
+
+        return SubGradient.where(gradient_set_id=self.id)
+
+    @classmethod
+    def create_all_available_sub_gradients(cls):
+        all_gs = GradientSet.all()
+        created_sg = []
+        print("number of gradient sets receiving sub_gradients:", len(all_gs))
+        i = 0
+        for gs in all_gs:
+            print("creating sub_gradients for:", gs.name, gs.sensor_id, gs.trial_id)
+            sg = gs.create_subgradients()
+            i += 1
+            created_sg += sg
+            print("created sub_gradients for gs:", i)
+        print("done")
+
+        return created_sg
+
+    def calc_aggregate_stats(self):
+        print("AGGREGATOZIGIGIGNG")
+        #get each submovement's stats
+        sub_stats_all = pd.DataFrame()
+        subgrads = self.sub_gradients()
+        for subgrad in subgrads:
+            if subgrad.valid:
+                sub_stats = subgrad.get_sub_stats()
+                #print(sub_stats)
+                sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
+        #print(sub_stats_all)
+
+        # for each stat type in the submovement stats, calculate aggregate stat for the whole trial
+        stats = pd.DataFrame()
+        for colname, colvalues in sub_stats_all.iteritems():
+            print(colname)
+            aggregate = {"mean": np.mean(colvalues), "median": np.median(colvalues), 
+                            "sd":np.std(colvalues), "IQR": np.subtract(*np.percentile(colvalues, [75, 25])),
+                            "10th": np.percentile(colvalues, 10), "90th": np.percentile(colvalues, 90)}
+            #print(aggregate_stats)
+            stats = pd.concat([stats, pd.DataFrame([aggregate], index=[colname])])
+        #print(stats)
+        #self.aggregate = memoryview(pickle.dumps(motionstats))
+        return memoryview(pickle.dumps(stats))
+
+    def get_aggregate_stats(self):
+        return pickle.loads(self.aggregated_stats)
         
