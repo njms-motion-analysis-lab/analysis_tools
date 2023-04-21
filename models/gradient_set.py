@@ -6,6 +6,7 @@ from models.task import Task
 from models.patient import Patient
 from datetime import datetime
 from models.sub_gradient import SubGradient
+from tsfresh import extract_features
 import pandas as pd
 import numpy as np
 import pdb
@@ -164,6 +165,19 @@ class GradientSet(BaseModel):
         # Deserialize the 'matrix' value from the binary format using pickle
         return pd.Series(pickle.loads(self.matrix))
 
+    def mat_df(self):
+        # Deserialize the 'matrix' value from the binary format using pickle
+        series = pd.Series(pickle.loads(self.matrix))
+        
+        # Convert the pandas Series to a DataFrame
+        dataframe = series.to_frame(name='value')
+        
+        # Reset the index and add a new column for the time points
+        dataframe.reset_index(inplace=True)
+        dataframe.rename(columns={'index': 'time'}, inplace=True)
+
+        return dataframe
+
     def deserialize_matrix(self):
         # Deserialize the 'matrix' value from the binary format using pickle
         return pickle
@@ -218,3 +232,8 @@ class GradientSet(BaseModel):
     def get_aggregate_stats(self):
         return pickle.loads(self.aggregated_stats)
         
+    def get_tsfresh_data(self):
+        matrix_df = self.mat_df()
+        matrix_df['id'] = 0
+        features = extract_features(matrix_df, column_id='id', column_sort='time')
+        print(features.describe())
