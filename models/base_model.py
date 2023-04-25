@@ -22,7 +22,7 @@ class BaseModel:
         if (conn is not None) and (cursor is not None):
             cls._conn = conn
             cls._cursor = cursor
-        print("set_class_connection _cursor:", cls._cursor)
+        # print("set_class_connection _cursor:", cls._cursor)
 
     def set_connection(self, test_mode=False, conn=None, cursor=None):
         if test_mode is True:
@@ -31,7 +31,7 @@ class BaseModel:
         if (conn is not None) and (cursor is not None):
             self.__class__._conn = conn
             self.__class__._cursor = cursor
-        print("set_connection _cursor:", self.__class__._cursor)
+        # print("set_connection _cursor:", self.__class__._cursor)
 
     def create(self, **kwargs):
         keys = ', '.join(['id', 'created_at', 'updated_at'] + list(kwargs.keys()))

@@ -1,8 +1,6 @@
 import sqlite3
 from models.base_model import BaseModel
-from models.task import Task
 from models.patient_task import PatientTask
-from models.trial import Trial
 import pdb
 from datetime import datetime
 class Patient(BaseModel):
@@ -20,6 +18,8 @@ class Patient(BaseModel):
         self.updated_at = updated_at
 
     def add_task(self, task):
+        from importlib import import_module
+        Task = import_module("models.task").Task
         # Check if the relationship already exists
         self._cursor.execute("SELECT * FROM patient_task WHERE patient_id=? AND task_id=?", (self.id, task.id))
         existing_relation = self._cursor.fetchone()
@@ -66,6 +66,8 @@ class Patient(BaseModel):
         return [Task.get(row[0]) for row in self._cursor.fetchall()]
 
     def trials(self):
+        from importlib import import_module
+        Trial = import_module("models.task").Trial
         self._cursor.execute("""
             SELECT trial.* FROM trial
             JOIN patient_task ON trial.patient_task_id = patient_task.id

@@ -12,30 +12,27 @@ import sqlite3
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-class SubGradient(BaseModel):
-    table_name = "sub_gradient"
+class DynamicSubGradient(BaseModel):
+    table_name = "dynamic_sub_gradient"
 
-    def __init__(self, id=None, name=None, valid=None, matrix=None, gradient_set_id=None, gradient_set_ord=None, start_time=None, stop_time=None, mean=None, median=None, stdev=None, normalized=None, submovement_stats=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, valid=None, matrix=None, dynamic_gradient_set_id=None, dynamic_gradient_set_ord=None, start_time=None, stop_time=None, normalized=None, submovement_stats=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
         self.valid = valid
         self.matrix = matrix # velocities
-        self.gradient_set_id = gradient_set_id
-        self.gradient_set_ord = gradient_set_ord
+        self.dynamic_gradient_set_id = dynamic_gradient_set_id
+        self.dynamic_gradient_set_ord = dynamic_gradient_set_ord
         self.start_time = start_time
         self.stop_time = stop_time
-        self.mean = mean
-        self.median = median
-        self.stdev = stdev
         self.normalized = normalized
         self.submovement_stats = submovement_stats
     
-    def gradient_set(self):
-        from models.gradient_set import GradientSet
-        return GradientSet.get(id=self.gradient_set_id)
+    def dynamic_gradient_set(self):
+        from models.dynamic_gradient_set import DynamicGradientSet
+        return DynamicGradientSet.get(id=self.dynamic_gradient_set_id)
     
-    def gradient_set_df(self):
+    def dynamic_gradient_set_df(self):
         # Deserialize the 'matrix' value from the binary format using pickle
         series = self.get_normalized()
         
@@ -49,13 +46,13 @@ class SubGradient(BaseModel):
         return dataframe
 
     def grad_matrix(self):
-        parent_matrix = self.gradient_set().mat()
+        parent_matrix = self.dynamic_gradient_set().mat()
         return parent_matrix.loc[self.start_time:self.stop_time]
 
     def pos_matrix(self):
         from models.position_set import PositionSet
-        parent_gradient_set = self.gradient_set()
-        position_set = PositionSet.where(name=parent_gradient_set.name, trial_id=parent_gradient_set.trial_id, sensor_id=parent_gradient_set.sensor_id)[0]
+        parent_dynamic_gradient_set = self.dynamic_gradient_set()
+        position_set = PositionSet.where(name=parent_dynamic_gradient_set.name, trial_id=parent_dynamic_gradient_set.trial_id, sensor_id=parent_dynamic_gradient_set.sensor_id)[0]
         parent_position_matrix = position_set.mat()
         return parent_position_matrix.loc[self.start_time:self.stop_time]
 
@@ -74,28 +71,25 @@ class SubGradient(BaseModel):
         return pickle.loads(self.normalized)
 
     def calc_sub_stats(self):
-        motion = self.get_normalized()[0]
-        #print("MATRIX\n",pickle.loads(self.matrix))
-        motionstats = {"mean": np.mean(motion), "median": np.median(motion), 
-                        "sd":np.std(motion), "IQR": np.subtract(*np.percentile(motion, [75, 25])),
-                        "RMS": np.sqrt(np.mean(motion**2)), "skewness": skew(motion),
-                        "logmean_nonnormvelocity": np.log(np.mean(np.abs((self.matrix))))
-                        }
+        if isinstance(self.matrix, bytes):
+            self.matrix = memoryview(self.matrix)
             
-            # ################# NEED TO DO ############# also get log absolute displacement
-            #print(self.positional)
+        matrix_array = pickle.loads(self.matrix)
+        motion = self.get_normalized()[0]
 
-        ### ADD IN TSFRESH STATS HERE #####
+        motionstats = {"mean": np.mean(motion), "median": np.median(motion),
+                    "sd": np.std(motion), "IQR": np.subtract(*np.percentile(motion, [75, 25])),
+                    "RMS": np.sqrt(np.mean(motion**2)), "skewness": skew(motion),
+                    "logmean_nonnormvelocity": np.log(np.mean(np.abs((matrix_array))))
+                    }
 
-        #print("we calculated the submovement stats\n", motionstats)
-        #self.submovement_stats = memoryview(pickle.dumps(motionstats))
         return memoryview(pickle.dumps(motionstats))
 
     def get_sub_stats(self):
         return pickle.loads(self.submovement_stats)
 
     def get_tsfresh_data(self):
-        matrix_df = self.gradient_set_df()
+        matrix_df = self.dynamic_gradient_set_df()
         matrix_df['id'] = 0
         features = extract_features(matrix_df, column_id='id', column_sort='time')
         return features.info()

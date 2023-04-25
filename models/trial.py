@@ -2,7 +2,6 @@ from exp_motion_sample_trial import ExpMotionSampleTrial
 from models.base_model import BaseModel
 from models.patient_task import PatientTask
 
-
 class Trial(BaseModel):
     table_name = "trial"
 
@@ -27,7 +26,6 @@ class Trial(BaseModel):
         
         position_data = data['positional']
         gradient_data = data['gradients']
-        sensors = Sensor.all()
 
         # Remove array slicing to include all sensors
         for key in position_data.keys()[1:2]:
@@ -48,6 +46,45 @@ class Trial(BaseModel):
             grad_set.create_subgradients()
             grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
             #print("IM HERE RN:",GradientSet.where(trial_id=self.id)[0].get_aggregate_stats())
+    
+    # TODO: [Stephen] combine the dynamic and, uh, static models/methods/logic.
+    def generate_dynamic_gradient_sets(self, data):
+        from importlib import import_module
+        DynamicGradientSet = import_module("models.dynamic_gradient_set").DynamicGradientSet
+        DynamicPositionSet = import_module("models.dynamic_position_set").DynamicPositionSet
+
+        dynamic_position_data = data['positional']
+        dynamic_gradient_data = data['gradients']
+
+        position_data = data['positional']
+        Sensor = import_module("models.sensor").Sensor
+
+            # Remove array slicing to include all sensors
+        for key in position_data.keys()[1:2]:
+            col = dynamic_position_data[key]
+            sensor = Sensor.find_by('name', key)
+            if not sensor:
+                sensor = self.create_sensor_from_string(key)
+            DynamicPositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+
+        for key in dynamic_gradient_data.keys()[1:2]:
+            col = dynamic_gradient_data[key]
+            sensor = Sensor.find_by('name', key)
+            if not sensor:
+                sensor = self.create_sensor_from_string(key)
+
+            dgs = DynamicGradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+
+            if dgs.id is None:
+                pass
+            try:
+                dgs.where(trial_id=self.id)[0]
+                dgs.create_dynamic_subgradients()
+                dgs.update(aggregated_stats=dgs.calc_aggregate_stats())
+            except IndexError:
+                pass
+                
+
 
 
     def patient(self):

@@ -6,7 +6,7 @@ from table import Table
 import pdb
 
 exp = {}
-root_dir = "controls_alignedCoordinateSystem\\Abduction"
+root_dir = "controls_alignedCoordinateSystem"
 
 # Call the function to create the tables before you start using the Generator class
 Table.drop_all_tables()
@@ -87,11 +87,11 @@ print("done 1")
 for subdir, _, files in os.walk(root_dir):
     for file in files:
         file_path = os.path.join(subdir, file)
-        if file.endswith('.npy') and not "Dynamic" in file: #for now only do statically rotated data, looks like we need to have some more cases for dynamically rotated data
+        print(file_path)
+        if file.endswith('.npy'):
             print(file+"\n")
             v = Generator(file_path)
             exp[v.name] = v
-
         
 import pdb
 pdb.set_trace()

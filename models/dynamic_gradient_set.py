@@ -1,11 +1,10 @@
-from models.position_set import PositionSet
+from models.dynamic_position_set import DynamicPositionSet
 import pickle
 from typing import Any, List
 from models.base_model import BaseModel
-from models.task import Task
 from models.patient import Patient
 from datetime import datetime
-from models.sub_gradient import SubGradient
+from models.dynamic_sub_gradient import DynamicSubGradient
 from tsfresh import extract_features
 import pandas as pd
 import numpy as np
@@ -16,8 +15,8 @@ from models.patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 
-class GradientSet(BaseModel):
-    table_name = "gradient_set"
+class DynamicGradientSet(BaseModel):
+    table_name = "dynamic_gradient_set"
 
     def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, aggregated_stats=None, created_at=None, updated_at=None):
         super().__init__()
@@ -60,6 +59,8 @@ class GradientSet(BaseModel):
         MotionFilter.get_valid_motions(self)
 
     def get_task(self):
+        from importlib import import_module
+        Task = import_module("models.task").Task
         self._cursor.execute("""
             SELECT task.* FROM task
             JOIN patient_task ON task.id = patient_task.task_id
@@ -98,15 +99,15 @@ class GradientSet(BaseModel):
 
     def add_sensor(self, sensor):
         if self.sensor_id == sensor.id:
-            print("This GradientSet is already associated with the provided sensor.")
+            print("This DynamicGradientSet is already associated with the provided sensor.")
             return
 
         self.sensor_id = sensor.id
         self.update(sensor_id=self.sensor_id)
-        print(f"Sensor with ID {sensor.id} has been associated with this GradientSet.")
+        print(f"Sensor with ID {sensor.id} has been associated with this DynamicGradientSet.")
 
     def get_patient_task_id(self):
-        self._cursor.execute("SELECT patient_task_id FROM gradient_set WHERE id=?", (self.id,))
+        self._cursor.execute("SELECT patient_task_id FROM dynamic_gradient_set WHERE id=?", (self.id,))
         return self._cursor.fetchone()[0]
 
     def get_patient_task(self):
@@ -114,12 +115,14 @@ class GradientSet(BaseModel):
         return PatientTask.get(patient_task_id)
 
 
-    def create_subgradients(self):
-        print("CREATING SUBS")
+    def create_dynamic_subgradients(self):
+        from importlib import import_module
+        print("CREATING DYNAMIC SUBS")
         matrix = self.mat()
-        subgradients = []
+        dynamic_sub_gradients = []
         start_time = 0
-        p_matrix = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)[0].mat()
+        p_matrix = DynamicPositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)[0].mat()
+        # grad = GradientSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)[0].mat()
 
         for i in range(1, len(matrix)):
             if (matrix.iloc[i] > 0 and matrix.iloc[i - 1] < 0) or (matrix.iloc[i] < 0 and matrix.iloc[i - 1] > 0):
@@ -127,28 +130,24 @@ class GradientSet(BaseModel):
                 current_slice = matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
                 p_slice = p_matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
                 valid = self.is_valid(current_slice, p_slice)
-                subgradient = SubGradient.find_or_create(
+                dynamic_sub_gradient = DynamicSubGradient.find_or_create(
                     name=self.name,
-                    valid=valid,
+                    valid=valid, # need to figure out what counts as valid here.
                     matrix=current_slice, # Consider filling this in, but not now bc it'll be pretty slow.
-                    gradient_set_id=self.id,
-                    gradient_set_ord=len(subgradients),
+                    dynamic_gradient_set_id=self.id,
+                    dynamic_gradient_set_ord=len(dynamic_sub_gradients),
                     start_time=matrix.index[start_time],
                     stop_time=matrix.index[stop_time],
-                    mean=current_slice.mean(),
-                    median=current_slice.median(),
-                    stdev=current_slice.std(),
-                    normalized = SubGradient.normalize(current_slice),
+                    normalized = DynamicSubGradient.normalize(current_slice),
                 )
-                subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
-                subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
+                dynamic_sub_gradient.submovement_stats = DynamicSubGradient.calc_sub_stats(dynamic_sub_gradient)
+                dynamic_sub_gradient.update(submovement_stats=DynamicSubGradient.calc_sub_stats(dynamic_sub_gradient))
 
-                #print(subgradient.get_sub_stats())
-                #subgradient.get_normalized()
-                subgradients.append(subgradient)
+                dynamic_sub_gradient.get_normalized()
+                dynamic_sub_gradients.append(dynamic_sub_gradient)
                 start_time = i
-        # print("created subgrads")
-        return subgradients
+        print("created subgrads")
+        return dynamic_sub_gradients
 
     def is_valid(self, current_slice, p_slice):
         duration = current_slice.index.stop - current_slice.index.start
@@ -182,24 +181,24 @@ class GradientSet(BaseModel):
         # Deserialize the 'matrix' value from the binary format using pickle
         return pickle
     
-    def sub_gradients(self):
+    def dynamic_sub_gradients(self):
         from importlib import import_module
-        SubGradient = import_module("models.sub_gradient").SubGradient
+        DynamicSubGradient = import_module("models.dynamic_sub_gradient").DynamicSubGradient
 
-        return SubGradient.where(gradient_set_id=self.id)
+        return DynamicSubGradient.where(dynamic_gradient_set_id=self.id)
 
     @classmethod
     def create_all_available_sub_gradients(cls):
-        all_gs = GradientSet.all()
+        all_gs = DynamicGradientSet.all()
         created_sg = []
-        # print("number of gradient sets receiving sub_gradients:", len(all_gs))
+        # print("number of gradient sets receiving dynamic_sub_gradients:", len(all_gs))
         i = 0
         for gs in all_gs:
-            # print("creating sub_gradients for:", gs.name, gs.sensor_id, gs.trial_id)
-            sg = gs.create_subgradients()
+            # print("creating dynamic_sub_gradients for:", gs.name, gs.sensor_id, gs.trial_id)
+            sg = gs.create_dynamic_subgradients()
             i += 1
             created_sg += sg
-            # print("created sub_gradients for gs:", i)
+            # print("created dynamic_sub_gradients for gs:", i)
         print("done")
 
         return created_sg
@@ -208,7 +207,7 @@ class GradientSet(BaseModel):
         # print("AGGREGATOZIGIGIGNG")
         #get each submovement's stats
         sub_stats_all = pd.DataFrame()
-        subgrads = self.sub_gradients()
+        subgrads = self.dynamic_sub_gradients()
         for subgrad in subgrads:
             if subgrad.valid:
                 sub_stats = subgrad.get_sub_stats()
