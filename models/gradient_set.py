@@ -140,11 +140,10 @@ class GradientSet(BaseModel):
                     stdev=current_slice.std(),
                     normalized = SubGradient.normalize(current_slice),
                 )
-                subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
-                subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
-
+                #subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
+                #subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
+                subgradient.update(submovement_stats=SubGradient.get_tsfresh_stats(subgradient))
                 #print(subgradient.get_sub_stats())
-                #subgradient.get_normalized()
                 subgradients.append(subgradient)
                 start_time = i
         # print("created subgrads")
@@ -212,9 +211,10 @@ class GradientSet(BaseModel):
         for subgrad in subgrads:
             if subgrad.valid:
                 sub_stats = subgrad.get_sub_stats()
-                #print(sub_stats)
-                sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
-        #print(sub_stats_all)
+                print(sub_stats)
+                sub_stats_all = sub_stats_all.append(sub_stats)
+                #sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
+        print(sub_stats_all)
 
         # for each stat type in the submovement stats, calculate aggregate stat for the whole trial
         stats = pd.DataFrame()

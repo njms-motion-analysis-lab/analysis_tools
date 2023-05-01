@@ -34,19 +34,6 @@ class SubGradient(BaseModel):
     def gradient_set(self):
         from models.gradient_set import GradientSet
         return GradientSet.get(id=self.gradient_set_id)
-    
-    def gradient_set_df(self):
-        # Deserialize the 'matrix' value from the binary format using pickle
-        series = self.get_normalized()
-        
-        # Convert the pandas Series to a DataFrame
-        dataframe = series.to_frame(name='value')
-        
-        # Reset the index and add a new column for the time points
-        dataframe.reset_index(inplace=True)
-        dataframe.rename(columns={'index': 'time'}, inplace=True)
-
-        return dataframe
 
     def grad_matrix(self):
         parent_matrix = self.gradient_set().mat()
@@ -65,7 +52,8 @@ class SubGradient(BaseModel):
         start, end = normed_amplitude.index[0], normed_amplitude.index[-1]
         x_vals = np.arange(start,end,(end-start)/100).tolist()
         normed_temporally = np.interp(x_vals, normed_amplitude.index.tolist(), normed_amplitude)
-        normed_temporally = pd.DataFrame(normed_temporally, index=x_vals)
+        normed_temporally = pd.DataFrame({"grad_data":normed_temporally}, index=x_vals)
+        normed_temporally["samplepoint"] = x_vals
         #print(normed_temporally)
         
         return memoryview(pickle.dumps(normed_temporally))
@@ -74,7 +62,7 @@ class SubGradient(BaseModel):
         return pickle.loads(self.normalized)
 
     def calc_sub_stats(self):
-        motion = self.get_normalized()[0]
+        motion = self.get_normalized()['grad_data']
         #print("MATRIX\n",pickle.loads(self.matrix))
         motionstats = {"mean": np.mean(motion), "median": np.median(motion), 
                         "sd":np.std(motion), "IQR": np.subtract(*np.percentile(motion, [75, 25])),
@@ -94,8 +82,16 @@ class SubGradient(BaseModel):
     def get_sub_stats(self):
         return pickle.loads(self.submovement_stats)
 
-    def get_tsfresh_data(self):
-        matrix_df = self.gradient_set_df()
-        matrix_df['id'] = 0
-        features = extract_features(matrix_df, column_id='id', column_sort='time')
-        return features.info()
+    def get_tsfresh_stats(self):
+        #print("GETTING TSFRESHAKFJL")
+        submovement = self.get_normalized()
+        submovement["id"] = self.id
+        #print(submovement)
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint')
+        #print(features)
+        return memoryview(pickle.dumps(features))
+    
+   # def get_tsfresh_stats_position(self):
+
+        ## also get non-normalized tsfresh stats
+        ## also get positional tsfresh stats
