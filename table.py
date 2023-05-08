@@ -112,6 +112,8 @@ class Table:
                 stdev REAL,
                 normalized TEXT,
                 submovement_stats TEXT,
+                submovement_stats_nonnorm TEXT,
+                submovement_stats_position TEXT,
                 created_at DATETIME,
                 updated_at DATETIME,
                 UNIQUE (gradient_set_id, gradient_set_ord),

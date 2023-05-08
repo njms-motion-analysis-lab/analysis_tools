@@ -15,7 +15,7 @@ warnings.simplefilter(action='ignore', category=FutureWarning)
 class SubGradient(BaseModel):
     table_name = "sub_gradient"
 
-    def __init__(self, id=None, name=None, valid=None, matrix=None, gradient_set_id=None, gradient_set_ord=None, start_time=None, stop_time=None, mean=None, median=None, stdev=None, normalized=None, submovement_stats=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, valid=None, matrix=None, gradient_set_id=None, gradient_set_ord=None, start_time=None, stop_time=None, mean=None, median=None, stdev=None, normalized=None, submovement_stats=None, submovement_stats_nonnorm=None, submovement_stats_position=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
@@ -30,6 +30,9 @@ class SubGradient(BaseModel):
         self.stdev = stdev
         self.normalized = normalized
         self.submovement_stats = submovement_stats
+        self.submovement_stats_nonnorm = submovement_stats_nonnorm
+        self.submovement_stats_position = submovement_stats_position
+
     
     def gradient_set(self):
         from models.gradient_set import GradientSet
@@ -90,8 +93,20 @@ class SubGradient(BaseModel):
         features = extract_features(submovement, column_id='id', column_sort='samplepoint')
         #print(features)
         return memoryview(pickle.dumps(features))
-    
-   # def get_tsfresh_stats_position(self):
 
-        ## also get non-normalized tsfresh stats
-        ## also get positional tsfresh stats
+    def get_tsfresh_stats_non_normalized(self):
+        submovement = pd.DataFrame(self.get_matrix("matrix"))
+        submovement["id"] = self.id
+        submovement["samplepoint"] = submovement.index.tolist()
+        #print(submovement)
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint')
+        #print(features)
+        return memoryview(pickle.dumps(features))
+    
+    def get_tsfresh_stats_position(self):
+        positiondata = pd.DataFrame(self.pos_matrix())
+        positiondata["id"] = self.id
+        positiondata["samplepoint"] = positiondata.index.tolist()
+        #print(positiondata)
+        features = extract_features(positiondata, column_id='id', column_sort='samplepoint')
+        return memoryview(pickle.dumps(features))

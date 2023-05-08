@@ -140,10 +140,9 @@ class GradientSet(BaseModel):
                     stdev=current_slice.std(),
                     normalized = SubGradient.normalize(current_slice),
                 )
-                #subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
-                #subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
                 subgradient.update(submovement_stats=SubGradient.get_tsfresh_stats(subgradient))
-                #print(subgradient.get_sub_stats())
+                subgradient.update(submovement_stats_nonnorm=SubGradient.get_tsfresh_stats_non_normalized(subgradient))
+                subgradient.update(submovement_stats_position=SubGradient.get_tsfresh_stats_position(subgradient))
                 subgradients.append(subgradient)
                 start_time = i
         # print("created subgrads")
@@ -232,8 +231,8 @@ class GradientSet(BaseModel):
     def get_aggregate_stats(self):
         return pickle.loads(self.aggregated_stats)
         
-    def get_tsfresh_data(self):
-        matrix_df = self.mat_df()
-        matrix_df['id'] = 0
-        features = extract_features(matrix_df, column_id='id', column_sort='time')
-        # print(features.describe())
+    # def get_tsfresh_data(self):
+    #     matrix_df = self.mat_df()
+    #     matrix_df['id'] = 0
+    #     features = extract_features(matrix_df, column_id='id', column_sort='time')
+    #     # print(features.describe())
