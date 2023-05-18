@@ -30,15 +30,12 @@ class GradientSet(BaseModel):
 
     # Splits the series based on zero value crossing.
     def get_sub_tasks(self):
-        print("yo")
         if not self.sensor_id:
             return None
         from importlib import import_module
         Sensor = import_module("models.sensor").Sensor
 
         data = self.get_matrix("matrix")
-        import pdb
-        #pdb.set_trace()
         name = Sensor.get(self.sensor_id).name
         est = ExpMotionSampleTrial(name, name, grad=data)
 
