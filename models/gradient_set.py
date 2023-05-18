@@ -137,16 +137,9 @@ class GradientSet(BaseModel):
                     stdev=current_slice.std(),
                     normalized = SubGradient.normalize(current_slice),
                 )
-<<<<<<< HEAD
                 subgradient.update(submovement_stats=SubGradient.get_tsfresh_stats(subgradient))
                 subgradient.update(submovement_stats_nonnorm=SubGradient.get_tsfresh_stats_non_normalized(subgradient))
                 subgradient.update(submovement_stats_position=SubGradient.get_tsfresh_stats_position(subgradient))
-=======
-                #subgradient.submovement_stats = SubGradient.calc_sub_stats(subgradient)
-                #subgradient.update(submovement_stats=SubGradient.calc_sub_stats(subgradient))
-                subgradient.update(submovement_stats=SubGradient.get_tsfresh_stats(subgradient))
-                #print(subgradient.get_sub_stats())
->>>>>>> 0045655 (wip)
                 subgradients.append(subgradient)
                 start_time = i
         # print("created subgrads")
