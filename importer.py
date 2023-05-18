@@ -28,21 +28,6 @@ if __name__ == '__main__':
 
     def generate_sensors():
         sensors = [
-            "lwra_x",
-            "lwrb_x",
-            "lwra_y",
-            "lwrb_y",
-            "lwra_z",
-            "lwrb_z",
-            "rwra_x",
-            "rwrb_x",
-            "rwra_y",
-            "rwrb_y",
-            "rwra_z",
-            "rwrb_z",
-            "lfrm_x",
-            "lfrm_y",
-            "lfrm_z",
             "rfrm_x",
             "rfrm_y",
             "rfrm_z",
@@ -70,6 +55,21 @@ if __name__ == '__main__':
             "rsho_x",
             "rsho_y",
             "rsho_z",
+            "lwra_x",
+            "lwrb_x",
+            "lwra_y",
+            "lwrb_y",
+            "lwra_z",
+            "lwrb_z",
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            "lfrm_x",
+            "lfrm_y",
+            "lfrm_z",
         ]
         for s_string in sensors:
             create_sensor_from_string(s_string)
@@ -85,21 +85,17 @@ if __name__ == '__main__':
     from models.gradient_set import GradientSet
     from models.trial import Trial
 
-generate_sensors()
-print("done 1")
-
-for subdir, _, files in os.walk(root_dir):
-    for file in files:
-        file_path = os.path.join(subdir, file)
-        print(file_path)
-        if file.endswith('.npy'):
-            print(file+"\n")
-            v = Generator(file_path)
-            exp[v.name] = v
-                
-
-        
-
+    generate_sensors()
+    print("done 1")
+    
+    for subdir, _, files in os.walk(root_dir):
+        for file in files:
+            file_path = os.path.join(subdir, file)
+            print(file_path)
+            if file.endswith('.npy'):
+                print(file+"\n")
+                v = Generator(file_path)
+                exp[v.name] = v
 
 import pdb
 pdb.set_trace()
