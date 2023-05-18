@@ -93,7 +93,6 @@ class SubGradient(BaseModel):
         features = extract_features(submovement, column_id='id', column_sort='samplepoint')
         #print(features)
         return memoryview(pickle.dumps(features))
-<<<<<<< HEAD
 
     def get_tsfresh_stats_non_normalized(self):
         submovement = pd.DataFrame(self.get_matrix("matrix"))
@@ -111,10 +110,3 @@ class SubGradient(BaseModel):
         #print(positiondata)
         features = extract_features(positiondata, column_id='id', column_sort='samplepoint')
         return memoryview(pickle.dumps(features))
-=======
-    
-   # def get_tsfresh_stats_position(self):
-
-        ## also get non-normalized tsfresh stats
-        ## also get positional tsfresh stats
->>>>>>> 0045655 (wip)
