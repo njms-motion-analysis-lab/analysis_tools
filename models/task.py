@@ -1,9 +1,14 @@
+from types import NoneType
 from typing import List
 import sqlite3
 from models.base_model import BaseModel
+from models.patient_task import PatientTask
 from models.trial import Trial
 import pandas as pd
 import matplotlib.pyplot as plt
+
+from multi_plotter import MultiPlotter
+from plotter import Plotter
 
 
 # Connect to the SQLite database named 'motion_analysis.db' and create a cursor object for executing SQL commands.
@@ -39,7 +44,7 @@ class Task(BaseModel):
         self._cursor.execute("INSERT INTO patient_task (patient_id, task_id) VALUES (?, ?)", (patient.id, self.id))
         self._conn.commit()
 
-    def get_trials(self):
+    def trials(self):
         from importlib import import_module
         Trial = import_module("models.trial").Trial
         self._cursor.execute("""
@@ -126,6 +131,82 @@ class Task(BaseModel):
 
         # Show the plot
         plt.show()
+
+    def combined_gradient_set_stats_by_task(self, sensor, loc='grad_data__sum_values'):
+        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        plotters = []
+        for gradient_set in gradient_sets:
+            if gradient_set.aggregated_stats is not None:
+                aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                print(aggregated_stats)
+                plotter = Plotter(aggregated_stats)
+                plotters.append(plotter)
+        print('task')
+        multi_plotter = MultiPlotter(plotters)
+        combined_stats_series = multi_plotter.combined_stats()
+        ns = []
+        ns.append(Plotter(combined_stats_series))
+        return MultiPlotter(ns).display_combined_box_plot(title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index: {loc}")
+
+
+    def combined_gradient_set_stats_by_patient(self, sensor, loc='grad_data__sum_values'):
+        from importlib import import_module
+        PatientTask = import_module("models.patient_task").PatientTask
+        patient_task_rows = self.get_patient_tasks()
+        patient_tasks = [PatientTask(*row) for row in patient_task_rows]
+
+        combined_stats_list = []
+        labels = []
+
+        for pt in patient_tasks:
+            combined_stats = Plotter(pt.combined_gradient_set_stats(sensor, loc=loc))
+            if combined_stats is not None:
+                combined_stats_list.append(combined_stats)
+                patient = pt.get_patient()
+                labels.append(f"{patient.name}")
+
+        if combined_stats_list:
+            multi_plotter = MultiPlotter(combined_stats_list)
+            multi_plotter.display_combined_box_plot(labels=labels, title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index {loc}")
+        else:
+            print("No data available for the given sensor and task.")
+
+
+    def combined_gradient_set_stats_by_patient_trial(self, sensor, loc='grad_data__sum_values'):
+        print("hi")
+        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        plotters = []
+        print("yo")
+        i = 0
+        for gs in gradient_sets:
+            if gs.aggregated_stats is not None:
+                mean_values = gs.get_aggregate_stats().loc[loc]
+                if mean_values is not NoneType:
+                    print(mean_values)
+                    print(i)
+                    i += 1
+                    plotter = Plotter(mean_values)
+                    print('next')
+                    plotters.append(plotter)
+                    print('next 2')
+        print('done')
+        multi_plotter = MultiPlotter(plotters)
+        
+        # Customize the labels with the patient name + the trial number
+        # labels = [f"{gs.get_patient().name} Trial ID {gs.trial_id}" for gs in gradient_sets]
+        labels = [
+            f"{gs.get_patient().name}"
+            for gs in gradient_sets
+            if gs.aggregated_stats is not None
+        ]
+        multi_plotter.display_combined_box_plot(labels, title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index {loc}")
+    
+
+
+    def get_patient_tasks(self):
+        self._cursor.execute(f"SELECT * FROM patient_task WHERE task_id=?", (self.id,))
+        rows = self._cursor.fetchall()
+        return rows
 
     def get_pos_set_matrices(self):
         pos_sets = self.get_pos_sets()

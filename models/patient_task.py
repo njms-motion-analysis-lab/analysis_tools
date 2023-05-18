@@ -1,5 +1,9 @@
 from models.base_model import BaseModel
 import sqlite3
+from models.patient import Patient
+from multi_plotter import MultiPlotter
+import pandas as pd
+from plotter import Plotter
 
 
 class PatientTask(BaseModel):
@@ -36,6 +40,46 @@ class PatientTask(BaseModel):
 
         trial.patient_task_id = self.id
         trial.update(patient_task_id=self.id)
+
+    def get_gradient_sets_for_sensor(self, sensor):
+        from importlib import import_module
+        GradientSet = import_module("models.gradient_set").GradientSet
+        self._cursor.execute("""
+            SELECT gradient_set.*
+            FROM gradient_set
+            JOIN trial ON gradient_set.trial_id = trial.id
+            WHERE trial.patient_task_id = ? AND gradient_set.sensor_id = ?
+        """, (self.id, sensor.id))
+
+        gradient_set_rows = self._cursor.fetchall()
+        gradient_sets = [GradientSet(*row) for row in gradient_set_rows]
+
+        return gradient_sets
+
+    def combined_gradient_set_stats(self, sensor, loc='combined_gradient_set_stats'):
+        from importlib import import_module
+        Task = import_module("models.task").Task
+        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        plotters = []
+        for gradient_set in gradient_sets:
+            if gradient_set.aggregated_stats is not None:
+                aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                print(aggregated_stats)
+                plotter = Plotter(aggregated_stats)
+                plotters.append(plotter)
+        print('hi')
+        multi_plotter = MultiPlotter(plotters)
+        combined_stats_series = multi_plotter.combined_stats()
+        
+        return combined_stats_series
+
+    def get_patient(self):
+        self._cursor.execute(f"SELECT * FROM patient WHERE id=?", (self.patient_id,))
+        row = self._cursor.fetchone()
+        if row:
+            return Patient(*row)
+        else:
+            raise ValueError(f"Patient not found for PatientTask id {self.id}")
 
     @classmethod
     def get(cls, patient, task):

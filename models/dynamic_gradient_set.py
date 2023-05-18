@@ -137,6 +137,7 @@ class DynamicGradientSet(BaseModel):
                     dynamic_gradient_set_id=self.id,
                     dynamic_gradient_set_ord=len(dynamic_sub_gradients),
                     start_time=matrix.index[start_time],
+                    
                     stop_time=matrix.index[stop_time],
                     normalized = DynamicSubGradient.normalize(current_slice),
                 )

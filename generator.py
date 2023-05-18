@@ -54,6 +54,7 @@ class Generator:
         # Find or create a `Patient` object with the `name` attribute equal to the `patient` attribute of the instance.
         # Find or create a `Task` object with the `description` attribute equal to the `task` attribute of the instance.
         # Add the `Task` object to the list of tasks associated with the `Patient` object.
+        # Generates columns corresponding to x,y, and z values.
         c_patient = Patient.find_or_create(name=self.patient)
         c_task = Task.find_or_create(description=self.task)
         

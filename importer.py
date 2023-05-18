@@ -1,3 +1,4 @@
+from multiprocessing import freeze_support
 import os
 import sqlite3
 from generator import Generator
@@ -5,7 +6,8 @@ from models.sensor import Sensor
 from table import Table
 import pdb
 
-if __name__ =="__main__":
+if __name__ == '__main__':
+    freeze_support()
     exp = {}
     root_dir = "controls_alignedCoordinateSystem"
 
@@ -83,19 +85,24 @@ if __name__ =="__main__":
     from models.gradient_set import GradientSet
     from models.trial import Trial
 
-    generate_sensors()
-    print("done 1")
-    for subdir, _, files in os.walk(root_dir+"\\Block"):
-        for file in files:
-            file_path = os.path.join(subdir, file)
-            print(file_path)
-            if file.endswith('.npy'):
-                print(file+"\n")
-                v = Generator(file_path)
-                exp[v.name] = v
-            
-    import pdb
-    pdb.set_trace()
+generate_sensors()
+print("done 1")
 
-    Table.drop_all_tables()
-    print("Done!")
+for subdir, _, files in os.walk(root_dir):
+    for file in files:
+        file_path = os.path.join(subdir, file)
+        print(file_path)
+        if file.endswith('.npy'):
+            print(file+"\n")
+            v = Generator(file_path)
+            exp[v.name] = v
+                
+
+        
+
+
+import pdb
+pdb.set_trace()
+
+Table.drop_all_tables()
+print("Done!")

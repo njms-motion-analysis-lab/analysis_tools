@@ -1,6 +1,5 @@
 import sqlite3
 from models.base_model import BaseModel
-from models.patient_task import PatientTask
 import pdb
 from datetime import datetime
 class Patient(BaseModel):
@@ -44,6 +43,8 @@ class Patient(BaseModel):
         self._conn.commit()
 
     def patient_task_by_task(self, task):
+        from importlib import import_module
+        PatientTask = import_module("models.task").PatientTask
         """
         Return the PatientTask associated with the given Task for this Patient instance.
 
@@ -54,9 +55,9 @@ class Patient(BaseModel):
         return PatientTask.where(task=task, patient=self)[0]
 
     
-
-
     def tasks(self):
+        from importlib import import_module
+        Task = import_module("models.task").Task
         self._cursor.execute("""
             SELECT task.* FROM task
             JOIN patient_task ON task.id = patient_task.task_id

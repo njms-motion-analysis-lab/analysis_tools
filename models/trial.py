@@ -5,7 +5,7 @@ from models.patient_task import PatientTask
 class Trial(BaseModel):
     table_name = "trial"
 
-    def __init__(self, id=None, patient_task_id=None, timestamp=None, name=None, matrix=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, patient_task_id=None, timestamp=None, matrix=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
