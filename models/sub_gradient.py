@@ -1,4 +1,5 @@
 # sub_gradient.py
+from database import Database
 from models.base_model import BaseModel
 import numpy as np
 import pandas as pd
@@ -11,6 +12,30 @@ import sqlite3
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
+
+
+# Based on the call
+FEATURE_EXTRACT_SETTINGS = {
+    'variance_larger_than_standard_deviation': None,
+    'has_duplicate_max': None,
+    'has_duplicate_min': None,
+    'has_duplicate': None,
+    'sum_values': None,
+    'abs_energy': None,
+    'mean_abs_change': None,
+    'mean_change': None,
+    'mean_second_derivative_central': None,
+    'median': None,
+    'mean': None,
+    'length': None,
+    'standard_deviation': None,
+    'variation_coefficient': None,
+    'variance': None,
+    'skewness': None,
+    'kurtosis': None,
+    'root_mean_square': None,
+}
+
 
 class SubGradient(BaseModel):
     table_name = "sub_gradient"
@@ -53,7 +78,14 @@ class SubGradient(BaseModel):
         #normalize amplitude of submovement
         normed_amplitude = abs(self/np.max(np.abs(self)))
         start, end = normed_amplitude.index[0], normed_amplitude.index[-1]
-        x_vals = np.arange(start,end,(end-start)/100).tolist()
+        import pdb
+        # Assuming you have values for start and end
+
+        if end != start:
+            x_vals = np.arange(start, end, (end - start) / 100).tolist()
+        else:
+            # Handle the case when end equals start
+            x_vals = [start] * 100
         normed_temporally = np.interp(x_vals, normed_amplitude.index.tolist(), normed_amplitude)
         normed_temporally = pd.DataFrame({"grad_data":normed_temporally}, index=x_vals)
         normed_temporally["samplepoint"] = x_vals
@@ -63,6 +95,9 @@ class SubGradient(BaseModel):
 
     def get_normalized(self):
         return pickle.loads(self.normalized)
+
+    def get_matrix(self):
+        return pickle.loads(self.matrix)
 
     def calc_sub_stats(self):
         motion = self.get_normalized()['grad_data']
@@ -86,27 +121,29 @@ class SubGradient(BaseModel):
         return pickle.loads(self.submovement_stats)
 
     def get_tsfresh_stats(self):
-        #print("GETTING TSFRESHAKFJL")
         submovement = self.get_normalized()
         submovement["id"] = self.id
-        #print(submovement)
-        features = extract_features(submovement, column_id='id', column_sort='samplepoint')
-        #print(features)
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
         return memoryview(pickle.dumps(features))
 
     def get_tsfresh_stats_non_normalized(self):
-        submovement = pd.DataFrame(self.get_matrix("matrix"))
+        submovement = pd.DataFrame(self.get_matrix())
         submovement["id"] = self.id
         submovement["samplepoint"] = submovement.index.tolist()
-        #print(submovement)
-        features = extract_features(submovement, column_id='id', column_sort='samplepoint')
-        #print(features)
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
         return memoryview(pickle.dumps(features))
     
-    def get_tsfresh_stats_position(self):
-        positiondata = pd.DataFrame(self.pos_matrix())
+    def get_tsfresh_stats_position(self, manual_position_data=None, default_fc_parameters=FEATURE_EXTRACT_SETTINGS):
+        if manual_position_data is not None:
+            positiondata = pd.DataFrame(manual_position_data)    
+        else:
+            positiondata = pd.DataFrame(self.pos_matrix())
+
         positiondata["id"] = self.id
+
         positiondata["samplepoint"] = positiondata.index.tolist()
-        #print(positiondata)
-        features = extract_features(positiondata, column_id='id', column_sort='samplepoint')
+
+
+        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1)
+
         return memoryview(pickle.dumps(features))

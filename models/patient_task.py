@@ -56,7 +56,7 @@ class PatientTask(BaseModel):
 
         return gradient_sets
 
-    def combined_gradient_set_stats(self, sensor, loc='combined_gradient_set_stats'):
+    def combined_gradient_set_stats(self, sensor, loc='grad_data__sum_values'):
         from importlib import import_module
         Task = import_module("models.task").Task
         gradient_sets = self.get_gradient_sets_for_sensor(sensor)
@@ -64,10 +64,8 @@ class PatientTask(BaseModel):
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
                 aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
-                print(aggregated_stats)
                 plotter = Plotter(aggregated_stats)
                 plotters.append(plotter)
-        print('hi')
         multi_plotter = MultiPlotter(plotters)
         combined_stats_series = multi_plotter.combined_stats()
         

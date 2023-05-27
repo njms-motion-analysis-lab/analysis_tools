@@ -28,23 +28,29 @@ class Trial(BaseModel):
         gradient_data = data['gradients']
 
         # Remove array slicing to include all sensors
-        for key in position_data.keys()[1:2]:
+        for key in position_data.keys():
             col = position_data[key]
             sensor = Sensor.find_by('name', key)
             if not sensor:
-                sensor = self.create_sensor_from_string(key)
+                print("next...")
+                continue
             PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
     
         # Remove array slicing to include all sensors
-        for key in gradient_data.keys()[1:2]:
+        for key in gradient_data.keys():
             col = gradient_data[key]
             sensor = Sensor.find_by('name', key)
             if not sensor:
-                sensor = self.create_sensor_from_string(key)
-            GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-            grad_set = GradientSet.where(trial_id=self.id)[0]
-            grad_set.create_subgradients()
-            grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
+                print("next...")
+                continue
+            else:
+                if len(PositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)) == 0:
+                    PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                print(f"Generating data for sensor {sensor.name}!!!")
+                grad_set = GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                grad_set.create_subgradients()
+                grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
+                print(f"Done with {sensor.name}!!!")
             #print("IM HERE RN:",GradientSet.where(trial_id=self.id)[0].get_aggregate_stats())
     
     # TODO: [Stephen] combine the dynamic and, uh, static models/methods/logic.

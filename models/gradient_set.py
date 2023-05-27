@@ -113,35 +113,58 @@ class GradientSet(BaseModel):
 
     def create_subgradients(self):
         print("CREATING SUBS")
+        print(f"sensor")
         matrix = self.mat()
         subgradients = []
         start_time = 0
+        position_set = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)
+        print(position_set)
+
+        position_set = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)
+        print(position_set)
+
         p_matrix = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)[0].mat()
 
+
         for i in range(1, len(matrix)):
-            if (matrix.iloc[i] > 0 and matrix.iloc[i - 1] < 0) or (matrix.iloc[i] < 0 and matrix.iloc[i - 1] > 0):
+            if (matrix.iloc[i] >= 0 and matrix.iloc[i - 1] < 0) or (matrix.iloc[i] <= 0 and matrix.iloc[i - 1] > 0):
                 stop_time = i - 1
-                current_slice = matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
-                p_slice = p_matrix.loc[matrix.index[start_time]:matrix.index[stop_time] + 1]
+                current_slice = matrix.loc[matrix.index[start_time]:matrix.index[stop_time]]
+                p_slice = p_matrix.loc[matrix.index[start_time]:matrix.index[stop_time]]
                 valid = self.is_valid(current_slice, p_slice)
-                subgradient = SubGradient.find_or_create(
-                    name=self.name,
-                    valid=valid,
-                    matrix=current_slice, # Consider filling this in, but not now bc it'll be pretty slow.
-                    gradient_set_id=self.id,
-                    gradient_set_ord=len(subgradients),
-                    start_time=matrix.index[start_time],
-                    stop_time=matrix.index[stop_time],
-                    mean=current_slice.mean(),
-                    median=current_slice.median(),
-                    stdev=current_slice.std(),
-                    normalized = SubGradient.normalize(current_slice),
-                )
-                subgradient.update(submovement_stats=SubGradient.get_tsfresh_stats(subgradient))
-                subgradient.update(submovement_stats_nonnorm=SubGradient.get_tsfresh_stats_non_normalized(subgradient))
-                subgradient.update(submovement_stats_position=SubGradient.get_tsfresh_stats_position(subgradient))
-                subgradients.append(subgradient)
-                start_time = i
+                gs_len = len(subgradients)
+
+                if len(SubGradient.where(gradient_set_id=self.id, gradient_set_ord=len(subgradients), name=self.name)) != 0:
+                    print("sg already exists...")
+                else:
+                    subgradient = SubGradient.find_or_create(
+                        name=self.name,
+                        valid=valid,
+                        matrix=current_slice,
+                        gradient_set_id=self.id,
+                        gradient_set_ord=len(subgradients),
+                        start_time=matrix.index[start_time],
+                        stop_time=matrix.index[stop_time],
+                        mean=current_slice.mean(),
+                        median=current_slice.median(),
+                        stdev=current_slice.std(),
+                        normalized = SubGradient.normalize(current_slice),
+                    )
+                    
+                        
+
+                    ts_stats = SubGradient.get_tsfresh_stats(subgradient)
+                    non_normalized_ts_stats = SubGradient.get_tsfresh_stats_non_normalized(subgradient)
+                    pos_ts_stats = SubGradient.get_tsfresh_stats_position(subgradient, manual_position_data=p_slice)
+                    subgradient.update(
+                        submovement_stats=ts_stats,
+                        submovement_stats_nonnorm=non_normalized_ts_stats,
+                        submovement_stats_position=pos_ts_stats
+                    )
+
+                    print("yolo 5")
+                    subgradients.append(subgradient)
+                    start_time = i
         # print("created subgrads")
         return subgradients
 
@@ -187,14 +210,16 @@ class GradientSet(BaseModel):
     def create_all_available_sub_gradients(cls):
         all_gs = GradientSet.all()
         created_sg = []
-        # print("number of gradient sets receiving sub_gradients:", len(all_gs))
         i = 0
         for gs in all_gs:
-            # print("creating sub_gradients for:", gs.name, gs.sensor_id, gs.trial_id)
-            sg = gs.create_subgradients()
-            i += 1
-            created_sg += sg
-            # print("created sub_gradients for gs:", i)
+            # Skip this gradient set if it already has subgradients
+            if len(sg.subgsub_gradients()) != 0:
+                print(f"sub_gradients already exist for gs {gs.id}")
+                continue
+            else:
+                sg = gs.create_subgradients()
+                i += 1
+                created_sg += sg
         print("done")
 
         return created_sg

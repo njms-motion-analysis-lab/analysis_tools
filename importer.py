@@ -5,6 +5,7 @@ from generator import Generator
 from models.sensor import Sensor
 from table import Table
 import pdb
+from progress import Progress
 
 if __name__ == '__main__':
     freeze_support()
@@ -12,9 +13,8 @@ if __name__ == '__main__':
     root_dir = "controls_alignedCoordinateSystem"
 
     # Call the function to create the tables before you start using the Generator class
-    Table.drop_all_tables()
-    Table.create_tables()
-
+    # Table.drop_all_tables()
+    # Table.create_tables()
     def create_sensor_from_string(sensor_string):
         side_map = {"l": "left", "r": "right"}
         side = side_map.get(sensor_string[0], None)
@@ -25,9 +25,22 @@ if __name__ == '__main__':
         sensor = Sensor.find_or_create(name=sensor_string, side=side, axis=axis, placement=placement, part=part)
 
 
-
     def generate_sensors():
         sensors = [
+            "lwra_x",
+            "lwrb_x",
+            "lwra_y",
+            "lwrb_y",
+            "lwra_z",
+            "lwrb_z",
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+        ]
+        all_sensors = [
             "rfrm_x",
             "rfrm_y",
             "rfrm_z",
@@ -74,17 +87,6 @@ if __name__ == '__main__':
         for s_string in sensors:
             create_sensor_from_string(s_string)
 
-
-    from models.task import Task
-    from models.sensor import Sensor
-    from models.patient import Patient
-    from models.position_set import PositionSet
-
-    from models.patient_task import PatientTask
-
-    from models.gradient_set import GradientSet
-    from models.trial import Trial
-
     generate_sensors()
     print("done 1")
     
@@ -92,13 +94,9 @@ if __name__ == '__main__':
         for file in files:
             file_path = os.path.join(subdir, file)
             print(file_path)
-            if file.endswith('.npy'):
+            if file.lower().endswith('.npy') and ('toothbrush' in file.lower() or 'abduction' or 'cal' in file.lower()):
                 print(file+"\n")
                 v = Generator(file_path)
                 exp[v.name] = v
 
-import pdb
-pdb.set_trace()
-
-Table.drop_all_tables()
 print("Done!")

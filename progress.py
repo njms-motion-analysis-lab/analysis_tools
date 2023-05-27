@@ -2,6 +2,8 @@ from asyncio import Task
 from models.gradient_set import GradientSet
 from models.patient import Patient
 from models.patient_task import PatientTask
+from models.sensor import Sensor
+from models.task import Task
 from models.trial import Trial
 import os
 
@@ -57,6 +59,3 @@ class Progress:
 
 
 Progress.by_patient()
-
-import pdb
-pdb.set_trace()                

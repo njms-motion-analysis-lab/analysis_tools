@@ -36,8 +36,7 @@ class DynamicGradientSet(BaseModel):
         Sensor = import_module("models.sensor").Sensor
 
         data = self.get_matrix("matrix")
-        import pdb
-        #pdb.set_trace()
+
         name = Sensor.get(self.sensor_id).name
         est = ExpMotionSampleTrial(name, name, grad=data)
 

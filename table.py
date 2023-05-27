@@ -45,12 +45,11 @@ class Table:
                 trial_num INTEGER NOT NULL,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
-                UNIQUE (patient_task_id, trial_num),
+                UNIQUE (patient_task_id, trial_num, name),
                 FOREIGN KEY (patient_task_id) REFERENCES patient_task (id)
             )
         """)
 
-# placement instead of placement
         cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS sensor (
                 id INTEGER PRIMARY KEY,
@@ -82,7 +81,38 @@ class Table:
         """)
 
         cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dynamic_position_set (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                sensor_id INTEGER NOT NULL,
+                trial_id INTEGER NOT NULL,
+                matrix TEXT,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (sensor_id) REFERENCES sensor (id),
+                FOREIGN KEY (trial_id) REFERENCES trial (id),
+                UNIQUE(trial_id, sensor_id, name)
+            )
+        """)
+
+        cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS gradient_set (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                sensor_id INTEGER NOT NULL,
+                trial_id INTEGER NOT NULL,
+                matrix TEXT,
+                aggregated_stats TEXT,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (sensor_id) REFERENCES sensor (id),
+                FOREIGN KEY (trial_id) REFERENCES trial (id),
+                UNIQUE(trial_id, sensor_id, name)
+            )
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dynamic_gradient_set (
                 id INTEGER PRIMARY KEY,
                 name TEXT,
                 sensor_id INTEGER NOT NULL,
@@ -121,14 +151,32 @@ class Table:
             );
         """)
 
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS dynamic_sub_gradient (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT,
+                valid BOOLEAN,
+                matrix TEXT,
+                dynamic_gradient_set_id INTEGER NOT NULL,
+                dynamic_gradient_set_ord INTEGER,
+                start_time INTEGER,
+                stop_time INTEGER,
+                normalized TEXT,
+                submovement_stats TEXT,
+                created_at DATETIME,
+                updated_at DATETIME,
+                FOREIGN KEY (dynamic_gradient_set_id) REFERENCES dynamic_gradient_set (id)
+            );
+        """)
 
 
+        cls.conn.commit()
         
-        BaseModel.set_class_connection(conn=cls.conn, cursor=cls.cursor)
+        BaseModel.set_class_connection()
     
     @classmethod
     def drop_all_tables(cls):
-        tables = ['trial', 'patient_task', 'sensor', 'task', 'patient', 'position_set','gradient_set', 'motion', 'patient_motion', "sub_gradient"]
+        tables = ['trial', 'patient_task', 'sensor', 'task', 'patient', 'position_set','dynamic_position_set', 'gradient_set', 'dynamic_gradient_set', 'dynamic_sub_gradient', 'motion', 'patient_motion', "sub_gradient"]
         for table in tables:
             try:
                 BaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
@@ -146,7 +194,11 @@ class Table:
         cls.cursor.execute("DELETE FROM trial")
         cls.cursor.execute("DELETE FROM sensor")
         cls.cursor.execute("DELETE FROM position_set")
+        cls.cursor.execute("DELETE FROM dynamic_position_set")
         cls.cursor.execute("DELETE FROM sub_gradient")
+        cls.cursor.execute("DELETE FROM dynamic_sub_gradient")
+        cls.cursor.execute("DELETE FROM gradient_set")
+        cls.cursor.execute("DELETE FROM dynamic_gradient_set")
         cls.conn.commit()
 
     

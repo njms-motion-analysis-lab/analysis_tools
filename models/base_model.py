@@ -3,11 +3,13 @@ import pickle
 import sqlite3
 import pandas as pd
 
+from database import Database
+
 
 class BaseModel:
-    table_name = ""
-    _conn = sqlite3.connect('motion_analysis.db')
-    _cursor = _conn.cursor()
+    db = Database.get_instance()
+    _conn = db.connection
+    _cursor = db.cursor
 
     def __init__(self, id=None, created_at=None, updated_at=None, **kwargs):
         self.id = id
@@ -15,23 +17,15 @@ class BaseModel:
         self.updated_at = datetime.now()
     
     @classmethod
-    def set_class_connection(cls, test_mode=False, conn=None, cursor=None):
+    def set_class_connection(cls, test_mode=False):
         if test_mode is True:
-            cls._conn = sqlite3.connect('motion_analysis_test.db')
-            cls._cursor = cls._conn.cursor()
-        if (conn is not None) and (cursor is not None):
-            cls._conn = conn
-            cls._cursor = cursor
-        # print("set_class_connection _cursor:", cls._cursor)
+            cls.db.connection = sqlite3.connect('motion_analysis_test.db')
+            cls.db.cursor = cls.db.connection.cursor()
 
-    def set_connection(self, test_mode=False, conn=None, cursor=None):
+    def set_connection(self, test_mode=False):
         if test_mode is True:
-            self.__class__._conn = sqlite3.connect('motion_analysis_test.db')
-            self.__class__._cursor = self.__class__._conn.cursor()
-        if (conn is not None) and (cursor is not None):
-            self.__class__._conn = conn
-            self.__class__._cursor = cursor
-        # print("set_connection _cursor:", self.__class__._cursor)
+            self.__class__.db.connection = sqlite3.connect('motion_analysis_test.db')
+            self.__class__.db.cursor = self.__class__.db.connection.cursor()
 
     def create(self, **kwargs):
         keys = ', '.join(['id', 'created_at', 'updated_at'] + list(kwargs.keys()))
@@ -49,7 +43,15 @@ class BaseModel:
             except sqlite3.IntegrityError as e:
                 print(f"Error creating record: {e}")
 
+    @classmethod
+    def table_exists(cls):
+        cls._cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{cls.table_name}';")
+        return bool(cls._cursor.fetchone())
+
     def update(self, **kwargs):
+        if not self.__class__.table_exists():
+            raise Exception(f"Table {self.table_name} does not exist.")
+    
         updates = ", ".join(f"{key}=?" for key in kwargs)
         updates += ", updated_at=?"  # Automatically update the updated_at timestamp
 
@@ -121,8 +123,11 @@ class BaseModel:
         row = cls._cursor.fetchone()
 
         if row:
+            print(f"found {conditions}")
             return cls(*row)
         else:
+            print("creating..")
+
             if 'matrix' in kwargs:
                 kwargs["matrix"] = memoryview(pickle.dumps(old_matrix))
                 # Serialize the matrix
@@ -133,6 +138,10 @@ class BaseModel:
             for key, value in kwargs.items():
                 setattr(cls_instance, key, value)
             cls_instance.id = cls_instance.create(**kwargs)
+            
+            if cls_instance.id is None:
+                raise ValueError(f"Failed to create instance of {cls.__name__} with parameters: {kwargs}")
+            
             return cls_instance
     
     @classmethod
@@ -167,15 +176,18 @@ class BaseModel:
 
         # Create the conditions for the query
         conditions = []
+        values = []
         for key, value in kwargs.items():
             table = table_names[key] if table_names[key] else cls.table_name
             if table_names[key]:  # If it's a foreign key object
                 conditions.append(f"{table}.id=?")
             else:  # If it's a normal attribute
-                conditions.append(f"{cls.table_name}.{key}=?")
-
-        # Get the values for the query
-        values = [getattr(value, "id", value) for value in kwargs.values()]
+                if isinstance(value, list):
+                    conditions.append(f"{cls.table_name}.{key} IN ({','.join(['?']*len(value))})")
+                    values.extend(value)
+                else:
+                    conditions.append(f"{cls.table_name}.{key}=?")
+                    values.append(value)
 
         # Build the query
         joins = " ".join(

@@ -4,6 +4,8 @@ from plotter import Plotter
 import numpy as np
 import matplotlib.patches as mpatches
 from matplotlib.lines import Line2D
+import plotly.graph_objects as go
+
 
 class MultiPlotter:
     def __init__(self, plotters):
@@ -56,6 +58,105 @@ class MultiPlotter:
 
         # Show the plot
         plt.show()
+
+    def create_combined_box_plot(self, labels=None, title=None):
+        data = []
+
+        for i, plotter in enumerate(self.plotters):
+            data.append([
+                plotter.tenth,  # 10th percentile
+                plotter.median - 0.5 * plotter.IQR,  # 25th percentile
+                plotter.median,  # Median
+                plotter.median + 0.5 * plotter.IQR,  # 75th percentile
+                plotter.ninetieth,  # 90th percentile
+            ])
+        
+        # Define boxplot properties for customization
+        medianprops = dict(linestyle='-', linewidth=1, color='darkgoldenrod')
+        boxprops = dict(linestyle='-', linewidth=1.5, color='firebrick')
+        whiskerprops = dict(linestyle='-', linewidth=1, color='black')
+        capprops = dict(linestyle='-', linewidth=1, color='black')
+        flierprops = dict(marker='o', markersize=5, linestyle='none')
+
+        fig, ax = plt.subplots()
+        # Create the box plot
+        ax.boxplot(data, vert=True, patch_artist=True, boxprops=boxprops,
+                medianprops=medianprops, whiskerprops=whiskerprops,
+                capprops=capprops, flierprops=flierprops)
+        
+        # Set the labels and title
+        ax.set_xticklabels(labels if labels else [f"Plotter {i+1}" for i in range(len(self.plotters))])
+
+        plt.xticks(rotation=90)  # Add this line to rotate x-axis labels
+        if title:
+            plt.title(title)
+
+        # Create a list of patches for the legend
+        legend_patches = [
+            mpatches.Patch(color='darkgoldenrod', label='Median'),
+            mpatches.Patch(color='firebrick', label='Box: 25th to 75th Percentile (IQR)'),
+            Line2D([0], [0], color='black', label='Whiskers: 10th to 90th Percentile'),
+            Line2D([0], [0], color='black', linestyle='none', marker='o', markersize=5, label='Outliers')
+        ]
+
+        # Add the legend to the plot
+        ax.legend(handles=legend_patches)
+
+        # Return the figure instead of showing it
+        return fig
+
+    def create_combined_box_plot_py(self, labels=None, title=None):
+        data = []
+
+        for i, plotter in enumerate(self.plotters):
+            data.append(go.Box(
+                y=[
+                    plotter.tenth,  # 10th percentile
+                    plotter.median - 0.5 * plotter.IQR,  # 25th percentile
+                    plotter.median,  # Median
+                    plotter.median + 0.5 * plotter.IQR,  # 75th percentile
+                    plotter.ninetieth,  # 90th percentile
+                ],
+                name=labels[i] if labels else f"Plotter {i+1}",
+                boxpoints='all',  # display the original data points
+                jitter=0.3,  # spread them out so they're more visible
+                pointpos=-1.8  # position of the data points
+            ))
+        
+        layout = go.Layout(
+            title=title,
+            showlegend=False
+        )
+
+        fig = go.Figure(data=data, layout=layout)
+        return fig
+
+    def save_boxplot_as_html(plotter, labels, title, filename):
+        data = []
+
+        for i, plotter in enumerate(plotter.plotters):
+            data.append(go.Box(
+                y=[
+                    plotter.tenth,  # 10th percentile
+                    plotter.median - 0.5 * plotter.IQR,  # 25th percentile
+                    plotter.median,  # Median
+                    plotter.median + 0.5 * plotter.IQR,  # 75th percentile
+                    plotter.ninetieth,  # 90th percentile
+                ],
+                name=labels[i] if labels else f"Plotter {i+1}",
+                boxpoints='all',  # display the original data points
+                jitter=0.3,  # spread them out so they're more visible
+                pointpos=-1.8  # position of the data points
+            ))
+        
+        layout = go.Layout(
+            title=title,
+            showlegend=False
+        )
+
+        fig = go.Figure(data=data, layout=layout)
+
+        py.plot(fig, filename=filename)
 
     def combined_stats(self):
         all_means = []
