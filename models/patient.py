@@ -1,20 +1,21 @@
 import sqlite3
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 import pdb
 from datetime import datetime
-class Patient(BaseModel):
+class Patient(LegacyBaseModel):
     table_name = "patient"
-    _conn = BaseModel._conn
-    _cursor = BaseModel._cursor
-    # A subclass of the `BaseModel` class, representing a patient in the database.
+    _conn = LegacyBaseModel._conn
+    _cursor = LegacyBaseModel._cursor
+    # A subclass of the `LegacyBaseModel` class, representing a patient in the database.
     # The `table_name` class attribute specifies the name of the database table where patient data is stored.
     
-    def __init__(self, id=None, name=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, created_at=None, updated_at=None, dominant_side="R"):
         super().__init__()
         self.id = id
         self.name = name
         self.created_at = created_at
         self.updated_at = updated_at
+        self.dominant_side = dominant_side
 
     def add_task(self, task):
         from importlib import import_module
@@ -51,8 +52,7 @@ class Patient(BaseModel):
         :param task: The Task instance to find the associated PatientTask.
         :return: The associated PatientTask instance if found, None otherwise.
         """
-
-        return PatientTask.where(task=task, patient=self)[0]
+        return PatientTask.where(task_id=task.id, patient_id=self.id)[0]
 
     
     def tasks(self):

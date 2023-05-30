@@ -1,11 +1,12 @@
 from models.position_set import PositionSet
 import pickle
 from typing import Any, List
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.task import Task
 from models.patient import Patient
 from datetime import datetime
 from models.sub_gradient import SubGradient
+from models.position_set import PositionSet
 from tsfresh import extract_features
 import pandas as pd
 import numpy as np
@@ -16,7 +17,7 @@ from models.patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 
-class GradientSet(BaseModel):
+class GradientSet(LegacyBaseModel):
     table_name = "gradient_set"
 
     def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, aggregated_stats=None, created_at=None, updated_at=None):
@@ -78,6 +79,9 @@ class GradientSet(BaseModel):
         row = self._cursor.fetchone()
         return Patient(*row) if row else None
 
+    def get_position_set(self):
+        return PositionSet.where(trial_id=self.trial_id, sensor_id=self.sensor_id)[0]
+        
     # Splits the series based on zero value crossing.
     def split_series(self) -> Any:
         series = self.gradients[self.tasks]
@@ -110,16 +114,11 @@ class GradientSet(BaseModel):
         patient_task_id = self.get_patient_task_id()
         return PatientTask.get(patient_task_id)
 
-
     def create_subgradients(self):
         print("CREATING SUBS")
-        print(f"sensor")
         matrix = self.mat()
         subgradients = []
         start_time = 0
-        position_set = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)
-        print(position_set)
-
         position_set = PositionSet.where(name=self.name,trial_id=self.trial_id,sensor_id=self.sensor_id)
         print(position_set)
 
@@ -132,7 +131,6 @@ class GradientSet(BaseModel):
                 current_slice = matrix.loc[matrix.index[start_time]:matrix.index[stop_time]]
                 p_slice = p_matrix.loc[matrix.index[start_time]:matrix.index[stop_time]]
                 valid = self.is_valid(current_slice, p_slice)
-                gs_len = len(subgradients)
 
                 if len(SubGradient.where(gradient_set_id=self.id, gradient_set_ord=len(subgradients), name=self.name)) != 0:
                     print("sg already exists...")
@@ -149,9 +147,7 @@ class GradientSet(BaseModel):
                         median=current_slice.median(),
                         stdev=current_slice.std(),
                         normalized = SubGradient.normalize(current_slice),
-                    )
-                    
-                        
+                    )   
 
                     ts_stats = SubGradient.get_tsfresh_stats(subgradient)
                     non_normalized_ts_stats = SubGradient.get_tsfresh_stats_non_normalized(subgradient)
@@ -224,23 +220,24 @@ class GradientSet(BaseModel):
 
         return created_sg
 
-    def calc_aggregate_stats(self):
+    def calc_aggregate_stats(self, abs_val=False, non_normed=False):
         # print("AGGREGATOZIGIGIGNG")
         #get each submovement's stats
         sub_stats_all = pd.DataFrame()
         subgrads = self.sub_gradients()
         for subgrad in subgrads:
             if subgrad.valid:
-                sub_stats = subgrad.get_sub_stats()
-                print(sub_stats)
+                normalized = not non_normed
+                sub_stats = subgrad.get_sub_stats(normalized=normalized)
                 sub_stats_all = sub_stats_all.append(sub_stats)
                 #sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
-        print(sub_stats_all)
 
         # for each stat type in the submovement stats, calculate aggregate stat for the whole trial
         stats = pd.DataFrame()
         for colname, colvalues in sub_stats_all.iteritems():
             # print(colname)
+            if abs_val is True:
+                colvalues = np.abs(colvalues)
             aggregate = {"mean": np.mean(colvalues), "median": np.median(colvalues), 
                             "sd":np.std(colvalues), "IQR": np.subtract(*np.percentile(colvalues, [75, 25])),
                             "10th": np.percentile(colvalues, 10), "90th": np.percentile(colvalues, 90)}
@@ -252,6 +249,9 @@ class GradientSet(BaseModel):
 
     def get_aggregate_stats(self):
         return pickle.loads(self.aggregated_stats)
+
+    def get_aggregate_non_norm_stats(self, abs_val=False):
+        return pickle.loads(self.calc_aggregate_stats(abs_val=abs_val, non_normed=True))
         
     # def get_tsfresh_data(self):
     #     matrix_df = self.mat_df()

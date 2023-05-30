@@ -1,12 +1,12 @@
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 import sqlite3
 from models.patient import Patient
-from multi_plotter import MultiPlotter
+from viewers.multi_plotter import MultiPlotter
 import pandas as pd
-from plotter import Plotter
+from viewers.plotter import Plotter
 
 
-class PatientTask(BaseModel):
+class PatientTask(LegacyBaseModel):
     table_name = "patient_task"
 
     def __init__(self, id=None, patient_id=None, task_id=None, created_at=None, updated_at=None):
@@ -56,19 +56,44 @@ class PatientTask(BaseModel):
 
         return gradient_sets
 
-    def combined_gradient_set_stats(self, sensor, loc='grad_data__sum_values'):
+    def get_dynamic_gradient_sets_for_sensor(self, sensor):
+        from importlib import import_module
+        DynamicGradientSet = import_module("models.gradient_set").DynamicGradientSet
+        self._cursor.execute("""
+            SELECT dynamic_gradient_set.*
+            FROM dynamic_gradient_set
+            JOIN trial ON dynamic_gradient_set.trial_id = trial.id
+            WHERE trial.patient_task_id = ? AND dynamic_gradient_set.sensor_id = ?
+        """, (self.id, sensor.id))
+
+        dynamic_gradient_set_rows = self._cursor.fetchall()
+        dynamic_gradient_sets = [DynamicGradientSet(*row) for row in dynamic_gradient_set_rows]
+
+        return dynamic_gradient_sets
+
+    def combined_gradient_set_stats(self, sensor, abs_val=False, non_normed=False, dynamic=False, loc='grad_data__sum_values'):
         from importlib import import_module
         Task = import_module("models.task").Task
-        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+
+        if dynamic is True:
+            gradient_sets = self.get_dynamic_gradient_sets_for_sensor(sensor)    
+        else:
+            gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        if len(gradient_sets) == 0:
+            return
         plotters = []
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
-                aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                if (not non_normed) and (not abs_val):
+                    aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                else:
+                    loc = loc.replace('grad_data', gradient_set.name)
+                    aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val).loc[loc]
                 plotter = Plotter(aggregated_stats)
                 plotters.append(plotter)
         multi_plotter = MultiPlotter(plotters)
         combined_stats_series = multi_plotter.combined_stats()
-        
+
         return combined_stats_series
 
     def get_patient(self):

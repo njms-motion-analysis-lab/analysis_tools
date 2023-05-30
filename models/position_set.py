@@ -1,5 +1,5 @@
 import pickle
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.task import Task
 from models.patient import Patient
 from datetime import datetime
@@ -7,7 +7,7 @@ import pandas as pd
 
 from models.patient_task import PatientTask
 
-class PositionSet(BaseModel):
+class PositionSet(LegacyBaseModel):
     table_name = "position_set"
 
     def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, conn=None, cursor=None, created_at=None,updated_at=None):
@@ -17,15 +17,6 @@ class PositionSet(BaseModel):
         self.sensor_id = sensor_id
         self.trial_id = trial_id
         self.matrix = matrix
-
-    def get_task(self):
-        self._cursor.execute("""
-            SELECT task.* FROM task
-            JOIN patient_task ON task.id = patient_task.task_id
-            JOIN trial ON trial.patient_task_id = patient_task.id
-            WHERE trial.id = ?
-        """, (self.trial_id,))
-
 
     def get_task(self):
         self._cursor.execute("""

@@ -1,5 +1,6 @@
-# sub_gradient.py
-from models.base_model import BaseModel
+# dynamic_sub_gradient.py
+from legacy_database import Database
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 import numpy as np
 import pandas as pd
 import pickle
@@ -12,10 +13,33 @@ import sqlite3
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-class DynamicSubGradient(BaseModel):
+# Based on the call
+FEATURE_EXTRACT_SETTINGS = {
+    'variance_larger_than_standard_deviation': None,
+    'has_duplicate_max': None,
+    'has_duplicate_min': None,
+    'has_duplicate': None,
+    'sum_values': None,
+    'abs_energy': None,
+    'mean_abs_change': None,
+    'mean_change': None,
+    'mean_second_derivative_central': None,
+    'median': None,
+    'mean': None,
+    'length': None,
+    'standard_deviation': None,
+    'variation_coefficient': None,
+    'variance': None,
+    'skewness': None,
+    'kurtosis': None,
+    'root_mean_square': None,
+}
+
+
+class DynamicSubGradient(LegacyBaseModel):
     table_name = "dynamic_sub_gradient"
 
-    def __init__(self, id=None, name=None, valid=None, matrix=None, dynamic_gradient_set_id=None, dynamic_gradient_set_ord=None, start_time=None, stop_time=None, normalized=None, submovement_stats=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, valid=None, matrix=None, dynamic_gradient_set_id=None, dynamic_gradient_set_ord=None, start_time=None, stop_time=None, mean=None, median=None, stdev=None, normalized=None, submovement_stats=None, submovement_stats_nonnorm=None, submovement_stats_position=None, created_at=None, updated_at=None):
         super().__init__()
         self.id = id
         self.name = name
@@ -25,34 +49,26 @@ class DynamicSubGradient(BaseModel):
         self.dynamic_gradient_set_ord = dynamic_gradient_set_ord
         self.start_time = start_time
         self.stop_time = stop_time
+        self.mean = mean
+        self.median = median
+        self.stdev = stdev
         self.normalized = normalized
         self.submovement_stats = submovement_stats
+        self.submovement_stats_nonnorm = submovement_stats_nonnorm
+        self.submovement_stats_position = submovement_stats_position
     
     def dynamic_gradient_set(self):
         from models.dynamic_gradient_set import DynamicGradientSet
         return DynamicGradientSet.get(id=self.dynamic_gradient_set_id)
-    
-    def dynamic_gradient_set_df(self):
-        # Deserialize the 'matrix' value from the binary format using pickle
-        series = self.get_normalized()
-        
-        # Convert the pandas Series to a DataFrame
-        dataframe = series.to_frame(name='value')
-        
-        # Reset the index and add a new column for the time points
-        dataframe.reset_index(inplace=True)
-        dataframe.rename(columns={'index': 'time'}, inplace=True)
-
-        return dataframe
 
     def grad_matrix(self):
         parent_matrix = self.dynamic_gradient_set().mat()
         return parent_matrix.loc[self.start_time:self.stop_time]
 
     def pos_matrix(self):
-        from models.position_set import PositionSet
+        from models.position_set import DynamicPositionSet
         parent_dynamic_gradient_set = self.dynamic_gradient_set()
-        position_set = PositionSet.where(name=parent_dynamic_gradient_set.name, trial_id=parent_dynamic_gradient_set.trial_id, sensor_id=parent_dynamic_gradient_set.sensor_id)[0]
+        position_set = DynamicPositionSet.where(name=parent_dynamic_gradient_set.name, trial_id=parent_dynamic_gradient_set.trial_id, sensor_id=parent_dynamic_gradient_set.sensor_id)[0]
         parent_position_matrix = position_set.mat()
         return parent_position_matrix.loc[self.start_time:self.stop_time]
 
@@ -60,9 +76,15 @@ class DynamicSubGradient(BaseModel):
         #normalize amplitude of submovement
         normed_amplitude = abs(self/np.max(np.abs(self)))
         start, end = normed_amplitude.index[0], normed_amplitude.index[-1]
-        x_vals = np.arange(start,end,(end-start)/100).tolist()
+
+        if end != start:
+            x_vals = np.arange(start, end, (end - start) / 100).tolist()
+        else:
+            # Handle the case when end equals start
+            x_vals = [start] * 100
         normed_temporally = np.interp(x_vals, normed_amplitude.index.tolist(), normed_amplitude)
-        normed_temporally = pd.DataFrame(normed_temporally, index=x_vals)
+        normed_temporally = pd.DataFrame({"grad_data":normed_temporally}, index=x_vals)
+        normed_temporally["samplepoint"] = x_vals
         #print(normed_temporally)
         
         return memoryview(pickle.dumps(normed_temporally))
@@ -70,26 +92,71 @@ class DynamicSubGradient(BaseModel):
     def get_normalized(self):
         return pickle.loads(self.normalized)
 
+    def get_matrix(self):
+        return pickle.loads(self.matrix)
+
     def calc_sub_stats(self):
-        if isinstance(self.matrix, bytes):
-            self.matrix = memoryview(self.matrix)
+        motion = self.get_normalized()['grad_data']
+        #print("MATRIX\n",pickle.loads(self.matrix))
+        motionstats = {"mean": np.mean(motion), "median": np.median(motion), 
+                        "sd":np.std(motion), "IQR": np.subtract(*np.percentile(motion, [75, 25])),
+                        "RMS": np.sqrt(np.mean(motion**2)), "skewness": skew(motion),
+                        "logmean_nonnormvelocity": np.log(np.mean(np.abs((self.matrix))))
+                        }
             
-        matrix_array = pickle.loads(self.matrix)
-        motion = self.get_normalized()[0]
+            # ################# NEED TO DO ############# also get log absolute displacement
+            #print(self.positional)
 
-        motionstats = {"mean": np.mean(motion), "median": np.median(motion),
-                    "sd": np.std(motion), "IQR": np.subtract(*np.percentile(motion, [75, 25])),
-                    "RMS": np.sqrt(np.mean(motion**2)), "skewness": skew(motion),
-                    "logmean_nonnormvelocity": np.log(np.mean(np.abs((matrix_array))))
-                    }
+        ### ADD IN TSFRESH STATS HERE #####
 
+        #print("we calculated the submovement stats\n", motionstats)
+        #self.submovement_stats = memoryview(pickle.dumps(motionstats))
         return memoryview(pickle.dumps(motionstats))
 
-    def get_sub_stats(self):
-        return pickle.loads(self.submovement_stats)
+    def get_sub_stats(self, normalized=True):
+        if normalized is True:
+            stats_needed = self.submovement_stats
+        else:
+            stats_needed = self.submovement_stats_nonnorm
+        
 
-    def get_tsfresh_data(self):
-        matrix_df = self.dynamic_gradient_set_df()
-        matrix_df['id'] = 0
-        features = extract_features(matrix_df, column_id='id', column_sort='time')
-        return features.info()
+        if stats_needed is None:
+            if normalized is True:
+                stats_needed = DynamicSubGradient.get_tsfresh_stats(self)
+            else:
+                stats_needed = DynamicSubGradient.get_tsfresh_stats_non_normalized(self)
+        try:
+            sub_stats = pickle.loads(stats_needed)
+        except TypeError as e:
+            print(e)
+            return None
+
+        return sub_stats
+
+    def get_tsfresh_stats(self):
+        submovement = self.get_normalized()
+        submovement["id"] = self.id
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
+        return memoryview(pickle.dumps(features))
+
+    def get_tsfresh_stats_non_normalized(self):
+        submovement = pd.DataFrame(self.get_matrix())
+        submovement["id"] = self.id
+        submovement["samplepoint"] = submovement.index.tolist()
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
+        return memoryview(pickle.dumps(features))
+    
+    def get_tsfresh_stats_position(self, manual_position_data=None, default_fc_parameters=FEATURE_EXTRACT_SETTINGS):
+        if manual_position_data is not None:
+            positiondata = pd.DataFrame(manual_position_data)    
+        else:
+            positiondata = pd.DataFrame(self.pos_matrix())
+
+        positiondata["id"] = self.id
+
+        positiondata["samplepoint"] = positiondata.index.tolist()
+
+
+        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
+
+        return memoryview(pickle.dumps(features))

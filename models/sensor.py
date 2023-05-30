@@ -1,3 +1,4 @@
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.base_model import BaseModel
 from models.gradient_set import GradientSet
 from models.position_set import PositionSet

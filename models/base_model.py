@@ -1,6 +1,6 @@
 from datetime import datetime
 import pickle
-import sqlite3
+import psycopg2
 import pandas as pd
 
 from database import Database
@@ -15,72 +15,60 @@ class BaseModel:
         self.id = id
         self.created_at = datetime.now()
         self.updated_at = datetime.now()
-    
-    @classmethod
-    def set_class_connection(cls, test_mode=False):
-        if test_mode is True:
-            cls.db.connection = sqlite3.connect('motion_analysis_test.db')
-            cls.db.cursor = cls.db.connection.cursor()
-
-    def set_connection(self, test_mode=False):
-        if test_mode is True:
-            self.__class__.db.connection = sqlite3.connect('motion_analysis_test.db')
-            self.__class__.db.cursor = self.__class__.db.connection.cursor()
 
     def create(self, **kwargs):
-        keys = ', '.join(['id', 'created_at', 'updated_at'] + list(kwargs.keys()))
-        values = ', '.join(['?', '?', '?'] + ['?'] * len(kwargs))
+        keys = ', '.join(['created_at', 'updated_at'] + list(kwargs.keys()))
+        values = ', '.join(['%s', '%s'] + ['%s'] * len(kwargs))
         
         now = datetime.now()
         self.created_at = now
         self.updated_at = now
-        with self.__class__._conn:
-            try:
-                self.__class__._cursor.execute(f"INSERT INTO {self.table_name} ({keys}) VALUES ({values})", (self.id, self.created_at, self.updated_at) + tuple(kwargs.values()))
-                self.id = self.__class__._cursor.lastrowid
-                self.__class__._conn.commit()
-                return self.id
-            except sqlite3.IntegrityError as e:
-                print(f"Error creating record: {e}")
+        try:
+            self._cursor.execute(f"INSERT INTO {self.table_name} ({keys}) VALUES ({values}) RETURNING id", 
+                                 (self.created_at, self.updated_at) + tuple(kwargs.values()))
+            self.id = self._cursor.fetchone()[0]
+            self._conn.commit()
+            return self.id
+        except psycopg2.IntegrityError as e:
+            print(f"Error creating record: {e}")
+            self._conn.rollback()
 
     @classmethod
     def table_exists(cls):
-        cls._cursor.execute(f"SELECT name FROM sqlite_master WHERE type='table' AND name='{cls.table_name}';")
-        return bool(cls._cursor.fetchone())
+        cls._cursor.execute(f"SELECT to_regclass('public.{cls.table_name}');")
+        return bool(cls._cursor.fetchone()[0])
 
     def update(self, **kwargs):
         if not self.__class__.table_exists():
             raise Exception(f"Table {self.table_name} does not exist.")
     
-        updates = ", ".join(f"{key}=?" for key in kwargs)
-        updates += ", updated_at=?"  # Automatically update the updated_at timestamp
+        updates = ", ".join(f"{key}=%s" for key in kwargs)
+        updates += ", updated_at=%s"
 
         now = datetime.now()
         self.updated_at = now
         try:
-            self.__class__._cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=?", tuple(kwargs.values()) + (self.updated_at, self.id,))
-            self.__class__._conn.commit()
+            self._cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=%s", 
+                                 tuple(kwargs.values()) + (self.updated_at, self.id,))
+            self._conn.commit()
             
-            # Update the in-memory instance attributes
             for key, value in kwargs.items():
                 setattr(self, key, value)
-        except sqlite3.IntegrityError as e:
+        except psycopg2.IntegrityError as e:
             print(f"Error updating record: {e}")
+            self._conn.rollback()
             return False
         return True
 
-
     def delete(self):
-        self.__class__._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
-        self.__class__._conn.commit()
+        self._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=%s", (self.id,))
+        self._conn.commit()
 
     def get_matrix(self, column_name):
-        # Fetch the binary data for the specified column from the database
-        self.__class__._cursor.execute(f"SELECT {column_name} FROM {self.table_name} WHERE id=?", (self.id,))
+        self.__class__._cursor.execute(f"SELECT {column_name} FROM {self.table_name} WHERE id=%s", (self.id,))
         row = self.__class__._cursor.fetchone()
 
         if row:
-            # Deserialize the binary data and return it as a numpy array
             return pickle.loads(row[0])
         else:
             return None
@@ -93,7 +81,7 @@ class BaseModel:
 
     @classmethod
     def get(cls, id):
-        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE id=?", (id,))
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE id=%s", (id,))
         row = cls._cursor.fetchone()
         if row:
             return cls(*row)
@@ -101,8 +89,7 @@ class BaseModel:
 
     @classmethod
     def find_by(cls, column_name, value):
-        # Find the record with the given column name and value
-        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {column_name}=?", (value,))
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {column_name}=%s", (value,))
         row = cls._cursor.fetchone()
 
         if row:
@@ -117,11 +104,9 @@ class BaseModel:
             old_matrix = kwargs["matrix"]
             kwargs["matrix"] = memoryview(pickle.dumps(kwargs["matrix"]))
         values = tuple(kwargs.values())
-        # Find the record with the given attribute(s)
-        conditions = " AND ".join(f"{key}=?" for key in keys)
+        conditions = " AND ".join(f"{key}=%s" for key in keys)
         cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {conditions}", values)
         row = cls._cursor.fetchone()
-
         if row:
             print(f"found {conditions}")
             return cls(*row)
@@ -130,19 +115,17 @@ class BaseModel:
 
             if 'matrix' in kwargs:
                 kwargs["matrix"] = memoryview(pickle.dumps(old_matrix))
-                # Serialize the matrix
-                # Create the record if not found
                 
             cls_instance = cls()
             
             for key, value in kwargs.items():
                 setattr(cls_instance, key, value)
-            cls_instance.id = cls_instance.create(**kwargs)
-            
-            if cls_instance.id is None:
+            self_id = cls_instance.create(**kwargs)
+            new_instance = cls.get(self_id)
+            if new_instance.id is None:
                 raise ValueError(f"Failed to create instance of {cls.__name__} with parameters: {kwargs}")
             
-            return cls_instance
+            return new_instance
     
     @classmethod
     def all(cls):
@@ -151,7 +134,7 @@ class BaseModel:
 
     @classmethod
     def last(cls, n):
-        cls._cursor.execute(f"SELECT * FROM {cls.table_name} ORDER BY updated_at DESC LIMIT ?", (n,))
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} ORDER BY updated_at DESC LIMIT %s", (n,))
         rows = cls._cursor.fetchall()
         return [cls(*row) for row in rows]
 
@@ -161,11 +144,9 @@ class BaseModel:
 
     @classmethod
     def delete_all_and_children(cls):
-        # Delete child class records first
         for subclass in cls.__subclasses__():
             subclass.delete_all_and_children()
 
-        # Delete records from the current class table
         if cls.table_name:
             cls._cursor.execute(f"DELETE FROM {cls.table_name}")
 
@@ -180,13 +161,14 @@ class BaseModel:
         for key, value in kwargs.items():
             table = table_names[key] if table_names[key] else cls.table_name
             if table_names[key]:  # If it's a foreign key object
-                conditions.append(f"{table}.id=?")
+                conditions.append(f"{table}.id=%s")
             else:  # If it's a normal attribute
                 if isinstance(value, list):
-                    conditions.append(f"{cls.table_name}.{key} IN ({','.join(['?']*len(value))})")
+                    placeholders = ', '.join(['%s' for _ in value])
+                    conditions.append(f"{cls.table_name}.{key} IN ({placeholders})")
                     values.extend(value)
                 else:
-                    conditions.append(f"{cls.table_name}.{key}=?")
+                    conditions.append(f"{cls.table_name}.{key}=%s")
                     values.append(value)
 
         # Build the query

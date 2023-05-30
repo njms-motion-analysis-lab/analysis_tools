@@ -6,28 +6,33 @@ import os
 from types import NoneType
 from typing import List
 import sqlite3
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.patient_task import PatientTask
 from models.trial import Trial
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 from scipy import stats
+import plotly.express as px
+from scipy.stats import t
+import plotly.io as pio
 
-from multi_plotter import MultiPlotter
-from plotter import Plotter
+from viewers.multi_plotter import MultiPlotter
+from viewers.plotter import Plotter
 
 
 # Connect to the SQLite database named 'motion_analysis.db' and create a cursor object for executing SQL commands.
 
-class Task(BaseModel):
+class Task(LegacyBaseModel):
     table_name = "task"
 
-    def __init__(self, id=None, description=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, description=None, created_at=None, updated_at=None, is_dominant=False):
         super().__init__()
         self.id = id
         self.description = description
         self.created_at = created_at
         self.updated_at = updated_at
+        self.is_dominant = is_dominant
 
     def get_patients(self):
         from models.patient import Patient
@@ -77,6 +82,22 @@ class Task(BaseModel):
         gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
         return gradient_sets
 
+
+    def get_position_sets_for_sensor(self, sensor):
+        from importlib import import_module
+        PositionSet = import_module("models.position_set").PositionSet
+        query = f"""
+            SELECT position_set.*
+            FROM position_set
+            INNER JOIN trial ON trial.id = position_set.trial_id
+            INNER JOIN patient_task ON patient_task.id = trial.patient_task_id
+            WHERE patient_task.task_id = ? AND position_set.sensor_id = ?
+        """
+
+        self._cursor.execute(query, (self.id, sensor.id))
+        position_sets = [PositionSet(*row) for row in self._cursor.fetchall()]
+        return position_sets
+
     def get_pos_sets(self):
         from importlib import import_module
         PositionSet = import_module("models.position_set").PositionSet
@@ -107,20 +128,12 @@ class Task(BaseModel):
         gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
         return gradient_sets
 
-    # TODO: Make this work.
     def box_whisker_plot(self, dataframes: List[pd.DataFrame]):
-        # Collect data from each dataframe into a list
-        data = [df.iloc[:, 1] for df in dataframes]  # Updated to use the second column (index 1)
-
-        # Create a box and whisker plot
+        data = [df.iloc[:, 1] for df in dataframes]
         fig, ax = plt.subplots()
         ax.boxplot(data)
-
-        # Set axis labels
         ax.set_xlabel('Dataframes')
         ax.set_ylabel('Values')
-
-        # Show the plot
         plt.show()
 
     def combined_gradient_set_stats_by_task(self, sensor, loc='grad_data__sum_values'):
@@ -135,8 +148,6 @@ class Task(BaseModel):
                 
                 plotter = Plotter(aggregated_stats)
                 plotters.append(plotter)
-        print("yolo 3")
-        print('task')
         multi_plotter = MultiPlotter(plotters)
         combined_stats_series = multi_plotter.combined_stats()
         ns = []
@@ -168,32 +179,11 @@ class Task(BaseModel):
 
 
     def combined_gradient_set_stats_by_patient_trial(self, sensor, loc='grad_data__sum_values'):
-        print("hi")
         gradient_sets = self.get_gradient_sets_for_sensor(sensor)
-        plotters = []
-        print("yo")
-        i = 0
-        for gs in gradient_sets:
-            if gs.aggregated_stats is not None:
-                mean_values = gs.get_aggregate_stats().loc[loc]
-                if mean_values is not NoneType:
-                    print(mean_values)
-                    print(i)
-                    i += 1
-                    plotter = Plotter(mean_values)
-                    print('next')
-                    plotters.append(plotter)
-                    print('next 2')
-        print('done')
+        plotters = [Plotter(gs.get_aggregate_stats().loc[loc]) for gs in gradient_sets 
+                    if gs.aggregated_stats is not None and gs.get_aggregate_stats().loc[loc] is not None]
         multi_plotter = MultiPlotter(plotters)
-        
-        # Customize the labels with the patient name + the trial number
-        # labels = [f"{gs.get_patient().name} Trial ID {gs.trial_id}" for gs in gradient_sets]
-        labels = [
-            f"{gs.get_patient().name}"
-            for gs in gradient_sets
-            if gs.aggregated_stats is not None
-        ]
+        labels = [f"{gs.get_patient().name}" for gs in gradient_sets if gs.aggregated_stats is not None]
         multi_plotter.display_combined_box_plot(labels, title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index {loc}")
     
 
@@ -218,12 +208,14 @@ class Task(BaseModel):
         return MultiPlotter(ns).create_combined_box_plot_py(labels=labels,title=f"Task: {self.description}, TS index: {loc},")
 
     def plot_and_save_all(self):
-        statistics_list = [
-            'grad_data__variance_larger_than_standard_deviation',
+        ignore = [
             'grad_data__has_duplicate_max',
             'grad_data__has_duplicate_min',
             'grad_data__has_duplicate',
             'grad_data__sum_values',
+        ]
+        statistics_list = [
+            'grad_data__variance_larger_than_standard_deviation',
             'grad_data__abs_energy',
             'grad_data__mean_abs_change',
             'grad_data__mean_change',
@@ -253,7 +245,46 @@ class Task(BaseModel):
         
         from importlib import import_module
         Sensor = import_module("models.sensor").Sensor
-        names = ["lwra_x","lwrb_x","lwra_y","lwrb_y","lwra_z","lwrb_z","rwra_x","rwrb_x","rwra_y","rwrb_y","rwra_z","rwrb_z",]
+
+        sensors = [
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            "rfrm_x",
+            "rfrm_y",
+            "rfrm_z",
+            "relb_x",
+            "relbm_x",
+            "relb_y",
+            "relbm_y",
+            "relb_z",
+            "relbm_z",
+            "rupa_x",
+            "rupa_y",
+            "rupa_z",
+            "rsho_x",
+            "rsho_y",
+            "rsho_z",
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            'rfhd_x', 
+            'rfhd_y', 
+            'rfhd_z',  
+            'rbhd_x', 
+            'rbhd_y', 
+            'rbhd_z',
+            'rfin_x', 
+            'rfin_y', 
+            'rfin_z',
+        ]
+        
         sensors = Sensor.where(name=names)
 
         for stat in statistics_list:
@@ -267,77 +298,342 @@ class Task(BaseModel):
             py.plot(plot, filename=filename, auto_open=False)
         print("done!")
 
-    
-    def dom_nondom_stats(self, loc='grad_data__sum_values'):
+    def sensor_translation(self, sensor_name, min=False, axis=False):
+        translation_dict = {
+            'l': 'Left',
+            'r': 'Right',
+            'wra': 'Wrist Sensor A',
+            'wrb': 'Wrist Sensor B',
+            'frm': 'Forearm',
+            'bhd': 'Back of Hand',
+            'fin': 'Finger',
+            'sho': 'Shoulder',
+            'elb': 'Elbow',
+            'elbm': 'Elbow Motion',
+            'upa': 'Upper Arm',
+            'x': 'x axis',
+            'y': 'y axis',
+            'z': 'z axis',
+        }
+
+        # Split the sensor name into parts
+        side = sensor_name[0]
+        sensor = sensor_name[1:5] if sensor_name[1:5] in translation_dict else sensor_name[1:4]
+        axis = sensor_name[-1]
+
+        # Get the full names from the dictionary
+        side_full = translation_dict.get(side)
+        sensor_full = translation_dict.get(sensor)
+        axis_full = translation_dict.get(axis)
+
+        # Return the full sensor name
+        if not min:
+            return f"{side_full} {sensor_full}"
+
+        if axis:
+            return axis_full
+
+        return f"{side_full} {sensor_full} {axis_full}"
+
+
+    def generate_parallel_coordinates(self, self_means, counterpart_means, t_stat, p_score, sensor_name, description, loc, directory='parallel_plots_abs/'):
+        import plotly.graph_objects as go
+
+        if len(self_means) != len(counterpart_means):
+            print("NOooooo!")
+            return
+        opposite_sensor_name = self.get_opposite_sensor(sensor_name)
+        sensor_string = self.sensor_translation(sensor_name)
+        opposite_sensor_string = self.sensor_translation(opposite_sensor_name)
+        description_string = description.split("_")[0]
+        base_name = self.sensor_translation(sensor_name, min=True)
+        axis_name = self.sensor_translation(sensor_name, axis=True)
+        # Create the Plotly figure
+        fig = go.Figure()
+
+        # Add traces for each measurement
+        for self_mean, counterpart_mean in zip(self_means, counterpart_means):
+            fig.add_trace(
+                go.Scatter(
+                    x=[f"Dominant", f"Non Dominant"],
+                    y=[self_mean[1], counterpart_mean[1]],
+                    mode='lines+markers+text',
+                    name=self_mean[0], # Name of the trace will be the patient id
+                    showlegend=False,  # hide the legend
+                    hovertemplate='Patient ID: %{name}<br>Mean: %{y}'
+                )
+            )
+        
+        if description_string == "Block":
+            size = [.4,.64]
+        elif description_string == "Rings":
+            size = [.4,.64]
+        elif description_string == "Switchside":
+            size = [.4,.64]
+        else:
+            size = []
+        # Set labels and title
+        if len(size) != 0:
+            fig.update_layout(
+                title=
+                    f'Task: {str(description_string)}, Feature: {loc}<br>' +
+                    f'{str(axis_name)}<br>' +
+                    f'{str(base_name)}<br>' +
+                    f't-stat: {t_stat:.2f}, p-score {p_score}<br>',
+                width=950,
+                height=1500,
+                margin=dict(t=240),
+                font=dict(    # Increase the font size
+                    size=18,
+                )
+            )
+        else:
+            fig.update_layout(
+                title=
+                    f'Task: {str(description_string)}, Feature: {loc}<br>' +
+                    f'{str(axis_name)}<br>' +
+                    f'{str(base_name)}<br> ' +
+                    f't-stat: {t_stat:.2f}, p-score {p_score}<br>',
+                width=950,
+                height=1500,
+                margin=dict(t=240),
+                font=dict(    # Increase the font size
+                    size=18,
+                )
+            )
+
+
+
+        # Save the figure as HTML
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+        pio.write_image(fig, f'{directory}/{str(description)}_{str(sensor_name)}.png')
+
+    def get_opposite_sensor(self, sensor_name):
+        if sensor_name.startswith('l'):
+            return 'r' + sensor_name[1:]
+        elif sensor_name.startswith('r'):
+            return 'l' + sensor_name[1:]
+        else:
+            return None
+
+    def dom_nondom_stats(self, loc='grad_data__abs_energy', abs_val=False, non_normed=False, dynamic=False):
         Sensor = import_module("models.sensor").Sensor
-        names = ["lwra_x","lwrb_x","lwra_y","lwrb_y","lwra_z","lwrb_z","rwra_x","rwrb_x","rwra_y","rwrb_y","rwra_z","rwrb_z",]
-        sensors = Sensor.where(name=names)
+        Patient = import_module("models.patient").Patient
+
+        names = [
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            "rfrm_x",
+            "rfrm_y",
+            "rfrm_z",
+            "relb_x",
+            "relbm_x",
+            "relb_y",
+            "relbm_y",
+            "relb_z",
+            "relbm_z",
+            "rupa_x",
+            "rupa_y",
+            "rupa_z",
+            "rsho_x",
+            "rsho_y",
+            "rsho_z",
+            "rwra_x",
+            "rwrb_x",
+            "rwra_y",
+            "rwrb_y",
+            "rwra_z",
+            "rwrb_z",
+            'rfhd_x', 
+            'rfhd_y', 
+            'rfhd_z',  
+            'rbhd_x', 
+            'rbhd_y', 
+            'rbhd_z',
+            'rfin_x', 
+            'rfin_y', 
+            'rfin_z',
+        ]
+
+        all_sensors = Sensor.where(name=names)  # get all sensors with names in the `names` list
+        sensors = sorted(all_sensors, key=lambda sensor: names.index(sensor.name))
+
         self_pts = PatientTask.where(task_id=self.id)
         row = []
+        p_row = []
+
         for sensor in sensors:
+            if sensor.side != 'right':
+                continue
+
             self_means = []
             counterpart_means = []
+
             counterpart_tasks = self.get_counterpart_task()
             if not counterpart_tasks:
                 print(f"No counterpart task found for task {self.description} with id {self.id}")
                 continue
+
             counterpart_task = counterpart_tasks[0]
+            pts = len(self_pts)
+            bads = 0
             for self_pt in self_pts:
+                # This patient is a lefty skip them for now...
+                # TODO: Stephen, update this to work w/lefties.
+                if self_pt.patient_id == 5:
+                    continue
+
                 try:
                     counterpart_pts = PatientTask.where(task_id=counterpart_task.id, patient_id=self_pt.patient_id)
+                    counterpart_sensor = Sensor.where(name=self.get_opposite_sensor(sensor.name))[0]
+                    import pdb; pdb.set_trace()
                     if not counterpart_pts:
                         print(f"No counterpart patient task found for task with id {counterpart_task.id} and patient id {self_pt.patient_id}")
                         continue
+
                     counterpart_pt = counterpart_pts[0]
-                    self_means.append(self_pt.combined_gradient_set_stats(sensor, loc=loc)['mean'])
-                    counterpart_means.append(counterpart_pt.combined_gradient_set_stats(sensor, loc=loc)['mean'])
+                    curr_patient = Patient.where(id=self_pt.patient_id)[0].name
+                    if abs_val is True:
+                        self_means.append([curr_patient, abs(self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
+                        counterpart_means.append([curr_patient, abs(counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
+                    else:
+                        self_means.append([curr_patient, self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
+                        counterpart_means.append([curr_patient, counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
+                except TypeError as e:
+                    print("No gradient sets found!")
+                    return [[0.0], [0.0]]
                 except KeyError as e:
+                    bads += 1
                     print(f"KeyError {e} self pt {self_pt.id} counter {counterpart_pt.id}")
                     continue
 
-            t_stat, _ = stats.ttest_ind(self_means, counterpart_means)
-            print(f"t_stat: {t_stat} sensor = {sensor.name}, desc: {self.description}")    
+            self_means_values = [mean[1] for mean in self_means]
+            counterpart_means_values = [mean[1] for mean in counterpart_means]
+            print("Task:", self.description, ", Counterpart Task:", counterpart_task.description)
+            print("Sensor:", sensor.name, ", Counterpart Sensor:", counterpart_sensor.name)
+            print("Bad:", bads, pts)
+
+            try:
+                t_stat, p_score = stats.ttest_ind(self_means_values, counterpart_means_values)
+            except ValueError:
+                t_stat, p_score = stats.ttest_rel(self_means_values, counterpart_means_values)
+
+            print(f"t_stat: {t_stat} sensor = {sensor.name}, desc: {self.description}"),
+            print(f"p_score: {p_score} sensor = {sensor.name}, desc: {self.description}")
+            print("sensor_name:", sensor.name, "sensor_side", sensor.side)
+            print("generating parallel plots...")
+
+            addn = ""
+            if abs_val is True:
+                addn = addn + "abs_val"
+            if non_normed is True:
+                addn = addn+ "_non_normed"
+
+            directory_path = f'parallel_plots_{addn}/{loc}/'
+            directory_path = "generated_pngs_" + directory_path
+            self.generate_parallel_coordinates(
+                self_means, counterpart_means, t_stat, p_score,
+                sensor.name, self.description, loc,
+                directory=directory_path
+            )
+
             row.append(t_stat)
-        return row
+            p_row.append(p_score)
+
+        return [row, p_row]
+
+
 
     @classmethod
-    def generate_t_test_csv(cls, output_csv_path, loc='grad_data__sum_values'):
+    def generate_t_test_csv(cls, output_csv_path, output_csv_p_score_path, abs_val=False, non_normed=False, dynamic=False, loc='grad_data__abs_energy'):
         # Fetch all tasks
         all_tasks = [task for task in cls.all() if ('dominant' in task.description and 'nondominant' not in task.description)]
 
-
-
         # Prepare to write to CSV
         with open(output_csv_path, 'w', newline='') as csvfile:
-            writer = csv.writer(csvfile)
+            with open(output_csv_p_score_path, 'w', newline='') as p_csvfile:
+                writer = csv.writer(csvfile)
+                p_writer = csv.writer(p_csvfile)
 
-            # Write header row
-            sensor_names = ["lwra_x", "lwrb_x", "lwra_y", "lwrb_y", "lwra_z", "lwrb_z",
-                            "rwra_x", "rwrb_x", "rwra_y", "rwrb_y", "rwra_z", "rwrb_z"]
-            writer.writerow(['Task ID', 'Task Description'] + sensor_names)
+                # Write header row
+                sensor_names = [
+                    "rwra_x",
+                    "rwrb_x",
+                    "rwra_y",
+                    "rwrb_y",
+                    "rwra_z",
+                    "rwrb_z",
+                    "rfrm_x",
+                    "rfrm_y",
+                    "rfrm_z",
+                    "relb_x",
+                    "relbm_x",
+                    "relb_y",
+                    "relbm_y",
+                    "relb_z",
+                    "relbm_z",
+                    "rupa_x",
+                    "rupa_y",
+                    "rupa_z",
+                    "rsho_x",
+                    "rsho_y",
+                    "rsho_z",
+                    "rwra_x",
+                    "rwrb_x",
+                    "rwra_y",
+                    "rwrb_y",
+                    "rwra_z",
+                    "rwrb_z",
+                    'rfhd_x', 
+                    'rfhd_y', 
+                    'rfhd_z',  
+                    'rbhd_x', 
+                    'rbhd_y', 
+                    'rbhd_z',
+                    'rfin_x', 
+                    'rfin_y', 
+                    'rfin_z',
+                ]
+                writer.writerow(['Task ID t test', 'Task Description'] + sensor_names)
+                p_writer.writerow(['Task ID p scores', 'Task Description'] + sensor_names)
 
-            # Iterate over each task and generate t-test stats
-            for task in all_tasks:
-                t_test_stats = task.dom_nondom_stats(loc)
-                writer.writerow([task.id, task.description] + t_test_stats)
+                # Iterate over each task and generate t-test stats
+                for task in all_tasks:
+                    result = task.dom_nondom_stats(loc, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic)
+                    if result is not None:
+                        t_test_stats, p_score_stats = result
+                    else:
+                        t_test_stats, p_score_stats = [], []
+
+                    writer.writerow([task.id, task.description] + t_test_stats)
+                    p_writer.writerow([task.id, task.description] + p_score_stats)
 
         print(f'T-test results saved to {output_csv_path}.')
+        print(f'P score results saved to {output_csv_p_score_path}.')
 
     @classmethod
-    def gen_all_stats_csv(cls):
-        statistics_list = [
-            'grad_data__variance_larger_than_standard_deviation',
+    def gen_all_stats_csv(cls, abs_val=False, non_normed=False, dynamic=False):
+        ignore = [
             'grad_data__has_duplicate_max',
             'grad_data__has_duplicate_min',
             'grad_data__has_duplicate',
             'grad_data__sum_values',
+            'grad_data__variance_larger_than_standard_deviation',
+            
+        ]
+        statistics_list = [
+            'grad_data__mean',
+            'grad_data__length',
             'grad_data__abs_energy',
             'grad_data__mean_abs_change',
             'grad_data__mean_change',
             'grad_data__mean_second_derivative_central',
             'grad_data__median',
-            'grad_data__mean',
-            'grad_data__length',
             'grad_data__standard_deviation',
             'grad_data__variation_coefficient',
             'grad_data__variance',
@@ -347,15 +643,24 @@ class Task(BaseModel):
         ]
 
         # Define the directory where the files will be saved
-        directory = "stats_list"
+        if abs_val is True:
+            directory = "generated_csvs/stats_list_abs"
+        else:
+            directory = "generated_csvs/stats_list"
 
         # Ensure the directory exists
         os.makedirs(directory, exist_ok=True)
+        addn = ""
+        if abs_val is True:
+            addn = addn + "_abs_val"
+        if non_normed is True:
+            addn = addn+ "_non_normed"
 
         for stat in statistics_list:
             # Join the directory name with the file name
-            path = os.path.join(directory, stat + '.csv')
-            cls.generate_t_test_csv(path, loc=stat)
+            path = os.path.join(directory, stat + addn + '.csv')
+            p_path = os.path.join(directory, stat + addn + '_p_score' + '.csv')
+            cls.generate_t_test_csv(path, p_path, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=stat)
 
     def get_counterpart_task(self):
         """
@@ -378,6 +683,15 @@ class Task(BaseModel):
         else:
             print("This task's description does not contain 'dominant' or 'nondominant'")
             return None
+
+    @classmethod
+    def dominant(cls):
+        cls._cursor.execute("""
+            SELECT * FROM task
+            WHERE description LIKE '%dominant%'
+            AND description NOT LIKE '%nondominant%'
+        """)
+        return [cls(*row) for row in cls._cursor.fetchall()]
 
     def get_patient_tasks(self):
         self._cursor.execute(f"SELECT * FROM patient_task WHERE task_id=?", (self.id,))

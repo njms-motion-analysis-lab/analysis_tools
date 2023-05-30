@@ -1,16 +1,17 @@
 from exp_motion_sample_trial import ExpMotionSampleTrial
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.patient_task import PatientTask
 
-class Trial(BaseModel):
+class Trial(LegacyBaseModel):
     table_name = "trial"
 
-    def __init__(self, id=None, name=None, patient_task_id=None, timestamp=None, matrix=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, name=None, patient_task_id=None, timestamp=None, matrix=None, created_at=None, updated_at=None, is_dominant=True):
         super().__init__()
         self.id = id
         self.name = name
         self.patient_task_id = patient_task_id
         self.timestamp = timestamp
+        self.is_dominant = is_dominant
 
     def update(self, **kwargs):
         self.patient_task_id = kwargs.get("patient_task_id", self.patient_task_id)
@@ -40,6 +41,7 @@ class Trial(BaseModel):
         for key in gradient_data.keys():
             col = gradient_data[key]
             sensor = Sensor.find_by('name', key)
+            
             if not sensor:
                 print("next...")
                 continue
@@ -48,8 +50,12 @@ class Trial(BaseModel):
                     PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
                 print(f"Generating data for sensor {sensor.name}!!!")
                 grad_set = GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-                grad_set.create_subgradients()
-                grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
+                if len(grad_set.sub_gradients()) == 0:
+                    grad_set.create_subgradients()
+                    grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
+                else:
+                    print("next...")
+                    continue
                 print(f"Done with {sensor.name}!!!")
             #print("IM HERE RN:",GradientSet.where(trial_id=self.id)[0].get_aggregate_stats())
     
@@ -58,38 +64,41 @@ class Trial(BaseModel):
         from importlib import import_module
         DynamicGradientSet = import_module("models.dynamic_gradient_set").DynamicGradientSet
         DynamicPositionSet = import_module("models.dynamic_position_set").DynamicPositionSet
+        Sensor = import_module("models.sensor").Sensor
 
         dynamic_position_data = data['positional']
         dynamic_gradient_data = data['gradients']
+        
 
-        position_data = data['positional']
-        Sensor = import_module("models.sensor").Sensor
-
-            # Remove array slicing to include all sensors
-        for key in position_data.keys()[1:2]:
+        # Remove array slicing to include all sensors
+        for key in dynamic_position_data.keys():
             col = dynamic_position_data[key]
             sensor = Sensor.find_by('name', key)
             if not sensor:
-                sensor = self.create_sensor_from_string(key)
+                print("next...")
+                continue
             DynamicPositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
 
-        for key in dynamic_gradient_data.keys()[1:2]:
+        for key in dynamic_gradient_data.keys():
             col = dynamic_gradient_data[key]
             sensor = Sensor.find_by('name', key)
+
             if not sensor:
-                sensor = self.create_sensor_from_string(key)
-
-            dgs = DynamicGradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-
-            if dgs.id is None:
-                pass
-            try:
-                dgs.where(trial_id=self.id)[0]
-                dgs.create_dynamic_subgradients()
-                dgs.update(aggregated_stats=dgs.calc_aggregate_stats())
-            except IndexError:
-                pass
+                print("next...")
+                continue
+            else:
+                if len(DynamicPositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)) == 0:
+                    DynamicPositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                print(f"Generating dynamic data for sensor {sensor.name}!!!")
+                dgs = DynamicGradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                if len(dgs.dynamic_sub_gradients()) == 0:
+                    dgs.create_dynamic_subgradients()
+                    dgs.update(aggregated_stats=dgs.calc_aggregate_stats())
+                else:
+                    print("next...")
+                    continue
                 
+                print(f"Done with dynamic data for {sensor.name}!!!")
 
 
 

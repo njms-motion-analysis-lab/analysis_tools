@@ -1,6 +1,6 @@
 # sub_gradient.py
-from database import Database
-from models.base_model import BaseModel
+from legacy_database import Database
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 import numpy as np
 import pandas as pd
 import pickle
@@ -12,7 +12,6 @@ import sqlite3
 
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
 
 # Based on the call
 FEATURE_EXTRACT_SETTINGS = {
@@ -37,7 +36,7 @@ FEATURE_EXTRACT_SETTINGS = {
 }
 
 
-class SubGradient(BaseModel):
+class SubGradient(LegacyBaseModel):
     table_name = "sub_gradient"
 
     def __init__(self, id=None, name=None, valid=None, matrix=None, gradient_set_id=None, gradient_set_ord=None, start_time=None, stop_time=None, mean=None, median=None, stdev=None, normalized=None, submovement_stats=None, submovement_stats_nonnorm=None, submovement_stats_position=None, created_at=None, updated_at=None):
@@ -78,8 +77,6 @@ class SubGradient(BaseModel):
         #normalize amplitude of submovement
         normed_amplitude = abs(self/np.max(np.abs(self)))
         start, end = normed_amplitude.index[0], normed_amplitude.index[-1]
-        import pdb
-        # Assuming you have values for start and end
 
         if end != start:
             x_vals = np.arange(start, end, (end - start) / 100).tolist()
@@ -117,10 +114,20 @@ class SubGradient(BaseModel):
         #self.submovement_stats = memoryview(pickle.dumps(motionstats))
         return memoryview(pickle.dumps(motionstats))
 
-    def get_sub_stats(self):
-        return pickle.loads(self.submovement_stats)
+    def get_sub_stats(self, normalized=True):
+        if normalized is True:
+            stats_needed = self.submovement_stats
+        else:
+            stats_needed = self.submovement_stats_nonnorm
 
-    def get_tsfresh_stats(self):
+        if stats_needed is None:
+            if normalized is True:
+                stats_needed = SubGradient.get_tsfresh_stats(self)
+            else:
+                stats_needed = SubGradient.get_tsfresh_stats_non_normalized(self)
+        return pickle.loads(stats_needed)
+
+    def get_tsfresh_stats(self, normalized=True):
         submovement = self.get_normalized()
         submovement["id"] = self.id
         features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
@@ -144,6 +151,6 @@ class SubGradient(BaseModel):
         positiondata["samplepoint"] = positiondata.index.tolist()
 
 
-        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1)
+        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
 
         return memoryview(pickle.dumps(features))

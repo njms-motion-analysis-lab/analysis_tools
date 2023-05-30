@@ -1,5 +1,5 @@
 import pickle
-from models.base_model import BaseModel
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.task import Task
 from models.patient import Patient
 from datetime import datetime
@@ -7,7 +7,7 @@ import pandas as pd
 
 from models.patient_task import PatientTask
 
-class DynamicPositionSet(BaseModel):
+class DynamicPositionSet(LegacyBaseModel):
     table_name = "dynamic_position_set"
 
     def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, conn=None, cursor=None, created_at=None,updated_at=None):

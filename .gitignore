@@ -1,5 +1,6 @@
 *.npy
 *.csv
+*.png
 !wrist_stats/wrist_left_sensor_a.csv
 !wrist_stats/wrist_left_sensor_b.csv
 !wrist_stats/wrist_right_sensor_a.csv
