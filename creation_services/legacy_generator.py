@@ -1,4 +1,5 @@
 import os
+import threading
 from models.sensor import Sensor
 from models.trial import Trial
 import numpy as np
@@ -36,6 +37,7 @@ class LegacyGenerator:
         # If the experimental task description ends with an underscore, remove it.
         # Set the `patient` and `task` attributes of the instance to the extracted values.
         sub_dir = self.name.split('_')
+        print("hello")
         root, patient, exp_task, variant = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
         if root != 'alignedCoordsByStart':
             self.dynamic = True
@@ -59,21 +61,21 @@ class LegacyGenerator:
         c_task = Task.find_or_create(description=self.task)
         
         c_patient.add_task(c_task)
-        
         pm = c_patient.patient_task_by_task(c_task)
-        
-        counts = 0
-        for key, value in self.data.items():
-            tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
+        if len(pm) == 0:
+            print("empty pt, skipping")
+        else:
+            counts = 0
+            for key, value in self.data.items():
+                tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
 
-            if not self.dynamic:
-                tr.generate_sets(data=value)
-            else:
-                tr.generate_dynamic_gradient_sets(data=value)
-            counts += 1
-        
+                if not self.dynamic:
+                    tr.generate_sets(data=value)
+                else:
+                    print("skipping...")
+                    # tr.generate_dynamic_gradient_sets(data=value)
+                counts += 1
         print("done")
-
 
 
 

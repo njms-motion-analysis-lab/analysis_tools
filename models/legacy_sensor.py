@@ -1,12 +1,11 @@
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.base_model import BaseModel
-from models.gradient_set import GradientSet
-from models.position_set import PositionSet
+from models.legacy_gradient_set import GradientSet
+from models.legacy_position_set import PositionSet
 
-class Sensor(BaseModel):
+class Sensor(LegacyBaseModel):
     table_name = "sensor"
-    _conn = BaseModel._conn
-    _cursor = BaseModel._cursor
+    _conn = LegacyBaseModel._conn
+    _cursor = LegacyBaseModel._cursor
 
     def __init__(self, id=None, name=None, axis=None, part=None, side=None, placement=None, conn=None, cursor=None, kind="position"):
         super().__init__()
@@ -56,6 +55,13 @@ class Sensor(BaseModel):
         gradient_set.sensor_id = self.id
         gradient_set.update(sensor_id=self.id)
         print(f"GradientSet with ID {gradient_set.id} has been associated with this sensor.")
+
+    def get_set(self):
+        dim = ['x', 'y', 'z']
+        new_names = []
+        for el in dim:
+            new_names.append(self.name[0:-1] + el)
+        return self.where(name=new_names)
 
     @classmethod
     def delete_all(cls):

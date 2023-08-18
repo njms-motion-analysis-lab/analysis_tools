@@ -71,7 +71,7 @@ class Table:
                 name TEXT,
                 sensor_id INTEGER NOT NULL,
                 trial_id INTEGER NOT NULL,
-                matrix TEXT,
+                matrix BYTEA,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
                 FOREIGN KEY (sensor_id) REFERENCES sensor (id),
@@ -86,7 +86,7 @@ class Table:
                 name TEXT,
                 sensor_id INTEGER NOT NULL,
                 trial_id INTEGER NOT NULL,
-                matrix TEXT,
+                matrix BYTEA,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
                 FOREIGN KEY (sensor_id) REFERENCES sensor (id),
@@ -101,8 +101,8 @@ class Table:
                 name TEXT,
                 sensor_id INTEGER NOT NULL,
                 trial_id INTEGER NOT NULL,
-                matrix TEXT,
-                aggregated_stats TEXT,
+                matrix BYTEA,
+                aggregated_stats BYTEA,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
                 FOREIGN KEY (sensor_id) REFERENCES sensor (id),
@@ -117,8 +117,8 @@ class Table:
                 name TEXT,
                 sensor_id INTEGER NOT NULL,
                 trial_id INTEGER NOT NULL,
-                matrix TEXT,
-                aggregated_stats TEXT,
+                matrix BYTEA,
+                aggregated_stats BYTEA,
                 created_at TIMESTAMP NOT NULL,
                 updated_at TIMESTAMP NOT NULL,
                 FOREIGN KEY (sensor_id) REFERENCES sensor (id),
@@ -132,7 +132,7 @@ class Table:
                 id SERIAL PRIMARY KEY,
                 name TEXT,
                 valid BOOLEAN,
-                matrix TEXT,
+                matrix BYTEA,
                 gradient_set_id INTEGER NOT NULL,
                 gradient_set_ord INTEGER,
                 start_time INTEGER,
@@ -140,10 +140,10 @@ class Table:
                 mean REAL,
                 median REAL,
                 stdev REAL,
-                normalized TEXT,
-                submovement_stats TEXT,
-                submovement_stats_nonnorm TEXT,
-                submovement_stats_position TEXT,
+                normalized BYTEA,
+                submovement_stats BYTEA,
+                submovement_stats_nonnorm BYTEA,
+                submovement_stats_position BYTEA,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP,
                 UNIQUE (gradient_set_id, gradient_set_ord),
@@ -156,17 +156,62 @@ class Table:
                 id SERIAL PRIMARY KEY,
                 name TEXT,
                 valid BOOLEAN,
-                matrix TEXT,
+                matrix BYTEA,
                 dynamic_gradient_set_id INTEGER NOT NULL,
                 dynamic_gradient_set_ord INTEGER,
                 start_time INTEGER,
                 stop_time INTEGER,
-                normalized TEXT,
+                normalized BYTEA,
                 submovement_stats TEXT,
                 created_at TIMESTAMP,
                 updated_at TIMESTAMP,
                 FOREIGN KEY (dynamic_gradient_set_id) REFERENCES dynamic_gradient_set (id)
             );
+        """)
+
+        # Classifier table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS classifier (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+            )
+        """)
+
+        # Params and Hyperparams table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS params (
+                id INTEGER PRIMARY KEY,
+                classifier_id INTEGER NOT NULL,
+                params TEXT NOT NULL,
+                hyperparams TEXT NOT NULL,
+                FOREIGN KEY (classifier_id) REFERENCES classifier (id)
+            )
+        """)
+
+        # Scores table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scores (
+                id INTEGER PRIMARY KEY,
+                params_id INTEGER NOT NULL,
+                score REAL NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (params_id) REFERENCES params (id)
+            )
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session (
+                id INTEGER PRIMARY KEY,
+                params_id INTEGER NOT NULL,
+                params_id INTEGER NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (params_id) REFERENCES params (id)
+                FOREIGN KEY (scoress_id) REFERENCES scores (id)
+            )
         """)
         cls.conn.commit()
     
@@ -192,11 +237,11 @@ class Table:
     def update_tables(cls):
         # List of columns to be added, and their types
         new_columns = {
-            "mean": "REAL",
-            "median": "REAL",
-            "stdev": "REAL",
-            "submovement_stats_nonnorm": "TEXT",
-            "submovement_stats_position": "TEXT",
+            "mean": "BYTEA",
+            "median": "BYTEA",
+            "stdev": "BYTEA",
+            "submovement_stats_nonnorm": "BYTEA",
+            "submovement_stats_position": "BYTEA",
         }
 
         # Add new columns to dynamic_sub_gradient table if they do not exist
@@ -205,6 +250,7 @@ class Table:
         cls.add_column_if_not_exists('trial', "is_dominant", "BOOLEAN")
         cls.add_column_if_not_exists('task', "is_dominant", "BOOLEAN")
         cls.add_column_if_not_exists('patient', "dominant_side", "TEXT")
+        cls.add_column_if_not_exists('gradient_set', "features_extracted", "TIMESTAMP")
         print("Done!!")
         
 
@@ -215,24 +261,44 @@ class Table:
 
     @classmethod
     def drop_all_tables(cls):
+        try:
+            cls.cursor.execute("SELECT pg_terminate_backend(pg_stat_activity.pid) FROM pg_stat_activity WHERE pg_stat_activity.datname = current_database() AND pid <> pg_backend_pid();")
+            cls.conn.commit()
+            print("Open transactions terminated.")
+        except psycopg2.Error as e:
+            print(f"Error terminating open transactions: {e}")
+            cls.conn.rollback()
+
         tables = ['sub_gradient', 'dynamic_sub_gradient', 'gradient_set', 'dynamic_gradient_set', 'position_set',
-                'dynamic_position_set', 'patient_task', 'trial', 'sensor', 'task', 'patient', 'motion', 'patient_motion']
+                  'dynamic_position_set', 'patient_task', 'trial', 'sensor', 'task', 'patient', 'motion', 'patient_motion']
 
         for table in tables:
             try:
-                BaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
-                BaseModel._conn.commit()
+                cls.cursor.execute(f"DROP TABLE IF EXISTS {table} CASCADE")
+                cls.conn.commit()
+                print(f"Table {table} dropped.")
             except psycopg2.Error as e:
                 print(f"Error dropping table: {e}")
-                BaseModel._conn.rollback()
+                cls.conn.rollback()
 
+        print("All tables dropped.")
+
+    @classmethod
+    def remove_deadlock(cls):
+        cls.cursor.execute("SELECT pg_terminate_backend(pid) FROM pg_locks WHERE NOT granted;")
+        cls.conn.commit()
+        print("Deadlock removed.")
 
     @classmethod
     def clear_tables(cls):
+        # delete all records from patient_task that have patient_id in patient table
+        cls.cursor.execute("DELETE FROM trial")
+        cls.cursor.execute("DELETE FROM patient_task WHERE patient_id IN (SELECT id FROM patient)")
+        # now, you can delete records from patient table
         cls.cursor.execute("DELETE FROM patient")
         cls.cursor.execute("DELETE FROM task")
         cls.cursor.execute("DELETE FROM patient_task")
-        cls.cursor.execute("DELETE FROM trial")
+        
         cls.cursor.execute("DELETE FROM sensor")
         cls.cursor.execute("DELETE FROM position_set")
         cls.cursor.execute("DELETE FROM dynamic_position_set")

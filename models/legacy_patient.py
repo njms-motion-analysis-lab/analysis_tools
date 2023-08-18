@@ -19,7 +19,7 @@ class Patient(LegacyBaseModel):
 
     def add_task(self, task):
         from importlib import import_module
-        Task = import_module("models.task").Task
+        Task = import_module("models.legacy_task").Task
         # Check if the relationship already exists
         self._cursor.execute("SELECT * FROM patient_task WHERE patient_id=? AND task_id=?", (self.id, task.id))
         existing_relation = self._cursor.fetchone()
@@ -45,19 +45,22 @@ class Patient(LegacyBaseModel):
 
     def patient_task_by_task(self, task):
         from importlib import import_module
-        PatientTask = import_module("models.task").PatientTask
+        PatientTask = import_module("models.legacy_patient_task").PatientTask
         """
         Return the PatientTask associated with the given Task for this Patient instance.
 
         :param task: The Task instance to find the associated PatientTask.
         :return: The associated PatientTask instance if found, None otherwise.
         """
-        return PatientTask.where(task_id=task.id, patient_id=self.id)[0]
+        pt = PatientTask.where(task_id=task.id, patient_id=self.id)
+        if len(pt) == 0:
+            return None
+        return pt[0]
 
     
     def tasks(self):
         from importlib import import_module
-        Task = import_module("models.task").Task
+        Task = import_module("models.legacy_task").Task
         self._cursor.execute("""
             SELECT task.* FROM task
             JOIN patient_task ON task.id = patient_task.task_id
@@ -68,7 +71,7 @@ class Patient(LegacyBaseModel):
 
     def trials(self):
         from importlib import import_module
-        Trial = import_module("models.task").Trial
+        Trial = import_module("models.legacy_trial").Trial
         self._cursor.execute("""
             SELECT trial.* FROM trial
             JOIN patient_task ON trial.patient_task_id = patient_task.id

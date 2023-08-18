@@ -1,19 +1,19 @@
-from models.position_set import PositionSet
+from models.legacy_position_set import PositionSet
 import pickle
 from typing import Any, List
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.task import Task
-from models.patient import Patient
+from models.legacy_task import Task
+from models.legacy_patient import Patient
 from datetime import datetime
-from models.sub_gradient import SubGradient
-from models.position_set import PositionSet
+from models.legacy_sub_gradient import SubGradient
+from models.legacy_position_set import PositionSet
 from tsfresh import extract_features
 import pandas as pd
 import numpy as np
 import pdb
 
 
-from models.patient_task import PatientTask
+from models.legacy_patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 
@@ -34,7 +34,7 @@ class GradientSet(LegacyBaseModel):
         if not self.sensor_id:
             return None
         from importlib import import_module
-        Sensor = import_module("models.sensor").Sensor
+        Sensor = import_module("models.legacy_sensor").Sensor
 
         data = self.get_matrix("matrix")
         name = Sensor.get(self.sensor_id).name
@@ -157,8 +157,6 @@ class GradientSet(LegacyBaseModel):
                         submovement_stats_nonnorm=non_normalized_ts_stats,
                         submovement_stats_position=pos_ts_stats
                     )
-
-                    print("yolo 5")
                     subgradients.append(subgradient)
                     start_time = i
         # print("created subgrads")
@@ -198,7 +196,7 @@ class GradientSet(LegacyBaseModel):
     
     def sub_gradients(self):
         from importlib import import_module
-        SubGradient = import_module("models.sub_gradient").SubGradient
+        SubGradient = import_module("models.legacy_sub_gradient").SubGradient
 
         return SubGradient.where(gradient_set_id=self.id)
 
@@ -221,20 +219,18 @@ class GradientSet(LegacyBaseModel):
         return created_sg
 
     def calc_aggregate_stats(self, abs_val=False, non_normed=False):
-        # print("AGGREGATOZIGIGIGNG")
-        #get each submovement's stats
         sub_stats_all = pd.DataFrame()
         subgrads = self.sub_gradients()
         for subgrad in subgrads:
             if subgrad.valid:
                 normalized = not non_normed
                 sub_stats = subgrad.get_sub_stats(normalized=normalized)
-                sub_stats_all = sub_stats_all.append(sub_stats)
+                sub_stats_all = pd.concat([sub_stats_all, sub_stats])
                 #sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
 
         # for each stat type in the submovement stats, calculate aggregate stat for the whole trial
         stats = pd.DataFrame()
-        for colname, colvalues in sub_stats_all.iteritems():
+        for colname, colvalues in sub_stats_all.items():
             # print(colname)
             if abs_val is True:
                 colvalues = np.abs(colvalues)
@@ -243,15 +239,13 @@ class GradientSet(LegacyBaseModel):
                             "10th": np.percentile(colvalues, 10), "90th": np.percentile(colvalues, 90)}
             #print(aggregate_stats)
             stats = pd.concat([stats, pd.DataFrame([aggregate], index=[colname])])
-        #print(stats)
-        #self.aggregate = memoryview(pickle.dumps(motionstats))
         return memoryview(pickle.dumps(stats))
 
     def get_aggregate_stats(self):
         return pickle.loads(self.aggregated_stats)
 
-    def get_aggregate_non_norm_stats(self, abs_val=False):
-        return pickle.loads(self.calc_aggregate_stats(abs_val=abs_val, non_normed=True))
+    def get_aggregate_non_norm_stats(self, abs_val=False, non_normed=True):
+        return pickle.loads(self.calc_aggregate_stats(abs_val=abs_val, non_normed=non_normed))
         
     # def get_tsfresh_data(self):
     #     matrix_df = self.mat_df()

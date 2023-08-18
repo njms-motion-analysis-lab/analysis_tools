@@ -6,7 +6,6 @@ class Table:
     cursor = conn.cursor()
     @classmethod
     def create_tables(cls):
-
         cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS patient (
                 id INTEGER PRIMARY KEY,
@@ -169,11 +168,111 @@ class Table:
             );
         """)
 
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS predictor (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                sensor_id INTEGER,
+                non_norm INTEGER,
+                abs_val INTEGER,
+                accuracies TEXT,
+                matrix TEXT,
+                FOREIGN KEY (task_id) REFERENCES Tasks(id),
+                FOREIGN KEY (sensor_id) REFERENCES Sensors(id)
+            );
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS multi_predictor (
+                id INTEGER PRIMARY KEY,
+                task_id INTEGER,
+                codes_score TEXT,
+                model TEXT,
+                items TEXT,
+                FOREIGN KEY(task_id) REFERENCES Task(id)
+            );
+        """)
+
+
+        # Classifier table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS classifier (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL UNIQUE,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL
+            )
+        """)
+
+        # Params and Hyperparams table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS params (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                classifier_id INTEGER NOT NULL,
+                params TEXT NOT NULL,  -- Serialized parameters
+                hyperparams TEXT NOT NULL,  -- Serialized hyperparameters
+                features TEXT NOT NULL,  -- Serialized feature list
+                FOREIGN KEY (classifier_id) REFERENCES classifier (id)
+            )
+        """)
+
+        # Scores table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scores (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                params_id INTEGER NOT NULL,
+                average_score REAL NOT NULL,
+                classifier_accuracies TEXT NOT NULL,  -- Serialized accuracies
+                rf_auc_roc REAL NOT NULL,
+                rf_accuracy REAL NOT NULL,
+                rf_confusion_matrix TEXT NOT NULL,  -- Serialized confusion matrix
+                rf_f1_score REAL NOT NULL,
+                rf_log_loss REAL NOT NULL,
+                rf_precision REAL NOT NULL,
+                rf_recall REAL NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (params_id) REFERENCES params (id)
+            )
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                params_id INTEGER NOT NULL,
+                scores_id INTEGER NOT NULL,  -- Corrected the column name
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                FOREIGN KEY (params_id) REFERENCES params (id)
+                FOREIGN KEY (scores_id) REFERENCES scores (id)  -- Corrected the reference
+            )
+        """)
+
+                # Session-Params join table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_params (
+                session_id INTEGER NOT NULL,
+                params_id INTEGER NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES session (id),
+                FOREIGN KEY (params_id) REFERENCES params (id),
+                UNIQUE (session_id, params_id)
+            )
+        """)
+
+        # Session-Scores join table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS session_scores (
+                session_id INTEGER NOT NULL,
+                scores_id INTEGER NOT NULL,
+                FOREIGN KEY (session_id) REFERENCES session (id),
+                FOREIGN KEY (scores_id) REFERENCES scores (id),
+                UNIQUE (session_id, scores_id)
+            )
+        """)
 
         cls.conn.commit()
         
-        BaseModel.set_class_connection()
-    
+        LegacyBaseModel.set_class_connection()
 
     @classmethod
     def column_exists(cls, table_name, column_name):
@@ -206,6 +305,14 @@ class Table:
         cls.add_column_if_not_exists('trial', "is_dominant", "BOOLEAN")
         cls.add_column_if_not_exists('task', "is_dominant", "BOOLEAN")
         cls.add_column_if_not_exists('patient', "dominant_side", "TEXT")
+        cls.add_column_if_not_exists('predictor', "created_at", "TEXT")
+        cls.add_column_if_not_exists('predictor', "updated_at", "DATETIME")
+        cls.add_column_if_not_exists('predictor', "multi_predictor_id", "INTEGER")
+        cls.add_column_if_not_exists('predictor', "aggregated_stats", "TEXT")
+        cls.add_column_if_not_exists('predictor', "aggregated_stats_non_normed", "TEXT")
+        cls.add_column_if_not_exists('multi_predictor', "created_at", "TEXT")
+        cls.add_column_if_not_exists('multi_predictor', "updated_at", "DATETIME")
+        cls.add_column_if_not_exists('predictor', "multi_predictor_id", "INTEGER")
         print("Done!!")
         
 

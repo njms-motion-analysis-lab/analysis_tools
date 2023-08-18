@@ -3,7 +3,7 @@ import pickle
 import sqlite3
 import pandas as pd
 
-from database import Database
+from legacy_database import Database
 
 
 class BaseModel:
@@ -11,10 +11,28 @@ class BaseModel:
     _conn = db.connection
     _cursor = db.cursor
 
+
+    @classmethod
+    def class_sort_by(cls, attribute):
+        if not cls.table_exists():
+            raise Exception(f"Table {cls.table_name} does not exist.")
+
+        cls._cursor.execute(f"SELECT * FROM {cls.table_name} ORDER BY {attribute} ASC")
+        rows = cls._cursor.fetchall()
+
+        if rows:
+            return [cls(*row) for row in rows]
+        else:
+            return None
+    
+    @classmethod
+    def sort_by(cls, instances, attribute):
+        return sorted(instances, key=lambda instance: getattr(instance, attribute))
+
     def __init__(self, id=None, created_at=None, updated_at=None, **kwargs):
         self.id = id
-        self.created_at = datetime.now()
-        self.updated_at = datetime.now()
+        self.created_at = created_at if created_at else datetime.now()
+        self.updated_at = updated_at if updated_at else datetime.now()
     
     @classmethod
     def set_class_connection(cls, test_mode=False):
@@ -74,6 +92,18 @@ class BaseModel:
         self.__class__._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
         self.__class__._conn.commit()
 
+    def delete_self_and_children(self):
+        # Retrieve and delete child instances first
+        for subclass in self.__class__.__subclasses__():
+            child_instances = subclass.where(**{f"{self.table_name}_id": self.id})
+            for instance in child_instances:
+                instance.delete_self_and_children()
+        
+        # Delete the current instance
+        self.__class__._cursor.execute(f"DELETE FROM {self.table_name} WHERE id=?", (self.id,))
+        self.__class__._conn.commit()
+
+
     def get_matrix(self, column_name):
         # Fetch the binary data for the specified column from the database
         self.__class__._cursor.execute(f"SELECT {column_name} FROM {self.table_name} WHERE id=?", (self.id,))
@@ -89,7 +119,7 @@ class BaseModel:
         attributes = vars(self)
         print("Attributes:")
         for attribute, value in attributes.items():
-            print(f"{attribute}: {value}")
+            print(f"{attribute}: {str(value)[:200]}")
 
     @classmethod
     def get(cls, id):
@@ -124,6 +154,7 @@ class BaseModel:
 
         if row:
             print(f"found {conditions}")
+            print(*row)
             return cls(*row)
         else:
             print("creating..")
@@ -143,7 +174,6 @@ class BaseModel:
                 raise ValueError(f"Failed to create instance of {cls.__name__} with parameters: {kwargs}")
             
             return cls_instance
-    
     @classmethod
     def all(cls):
         cls._cursor.execute(f"SELECT * FROM {cls.table_name}")
@@ -201,3 +231,4 @@ class BaseModel:
         # Execute the query
         cls._cursor.execute(query, tuple(values))
         return [cls(*row) for row in cls._cursor.fetchall()]
+    

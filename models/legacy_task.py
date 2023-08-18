@@ -7,8 +7,8 @@ from types import NoneType
 from typing import List
 import sqlite3
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.patient_task import PatientTask
-from models.trial import Trial
+from models.legacy_patient_task import PatientTask
+from models.legacy_trial import Trial
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
@@ -35,7 +35,7 @@ class Task(LegacyBaseModel):
         self.is_dominant = is_dominant
 
     def get_patients(self):
-        from models.patient import Patient
+        from models.legacy_patient import Patient
         self._cursor.execute("""
             SELECT patient.* FROM patient
             JOIN patient_task ON patient.id = patient_task.patient_id
@@ -57,7 +57,7 @@ class Task(LegacyBaseModel):
 
     def trials(self):
         from importlib import import_module
-        Trial = import_module("models.trial").Trial
+        Trial = import_module("models.legacy_trial").Trial
         self._cursor.execute("""
             SELECT trial.* FROM trial
             JOIN patient_task ON trial.patient_task_id = patient_task.id
@@ -69,7 +69,7 @@ class Task(LegacyBaseModel):
 
     def get_gradient_sets_for_sensor(self, sensor):
         from importlib import import_module
-        GradientSet = import_module("models.gradient_set").GradientSet
+        GradientSet = import_module("models.legacy_gradient_set").GradientSet
         query = f"""
             SELECT gradient_set.*
             FROM gradient_set
@@ -85,7 +85,7 @@ class Task(LegacyBaseModel):
 
     def get_position_sets_for_sensor(self, sensor):
         from importlib import import_module
-        PositionSet = import_module("models.position_set").PositionSet
+        PositionSet = import_module("models.legacy_position_set").PositionSet
         query = f"""
             SELECT position_set.*
             FROM position_set
@@ -100,7 +100,7 @@ class Task(LegacyBaseModel):
 
     def get_pos_sets(self):
         from importlib import import_module
-        PositionSet = import_module("models.position_set").PositionSet
+        PositionSet = import_module("models.legacy_position_set").PositionSet
         query = f"""
             SELECT position_set.*
             FROM position_set
@@ -115,7 +115,7 @@ class Task(LegacyBaseModel):
 
     def gradient_sets(self):
         from importlib import import_module
-        GradientSet = import_module("models.gradient_set").GradientSet
+        GradientSet = import_module("models.legacy_gradient_set").GradientSet
         query = f"""
             SELECT gradient_set.*
             FROM gradient_set
@@ -141,7 +141,7 @@ class Task(LegacyBaseModel):
         gradient_sets = self.get_gradient_sets_for_sensor(sensor)
         plotters = []
         for gradient_set in gradient_sets:
-            if gradient_set.get_aggregate_stats() is not Empty:
+            if gradient_set.get_aggregate_stats() is not None:
                 print(f"yolo {gradient_set.id}")
                 aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
 
@@ -154,10 +154,52 @@ class Task(LegacyBaseModel):
         ns.append(Plotter(combined_stats_series))
         return MultiPlotter(ns).display_combined_box_plot(title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index: {loc}")
 
+    def get_counterpart_task(self):
+        """
+        If the current task's description contains 'dominant', 
+        this function returns the counterpart 'non-dominant' task.
+        """
+        if 'dominant' in self.description.lower():
+            # Replace this with the actual query to fetch the non-dominant task
+            # I'm assuming you have some sort of method to find tasks by patient ID and description
+            non_dominant_description = self.description.replace('dominant', 'nondominant').capitalize()
+            return Task.where(description=non_dominant_description)
+
+        elif 'nondominant' in self.description.lower():
+            # Replace this with the actual query to fetch the dominant task
+            
+            dominant_description = self.description.replace('nondominant', 'dominant').capitalize()
+            return Task.where(description=dominant_description)
+
+        else:
+            print("This task's description does not contain 'dominant' or 'nondominant'")
+            return None
+
+    @classmethod
+    def dominant(cls):
+        cls._cursor.execute("""
+            SELECT * FROM task
+            WHERE description LIKE '%dominant%'
+            AND description NOT LIKE '%nondominant%'
+        """)
+        return [cls(*row) for row in cls._cursor.fetchall()]
+
+    def get_patient_tasks(self):
+        self._cursor.execute(f"SELECT * FROM patient_task WHERE task_id=?", (self.id,))
+        rows = self._cursor.fetchall()
+        return rows
+
+    def get_pos_set_matrices(self):
+        pos_sets = self.get_pos_sets()
+        pos_set_matrices = [pos_set.get_matrix("matrix") for pos_set in pos_sets]
+        return pos_set_matrices
+
+    def __str__(self) -> str:
+        return self.description
 
     def combined_gradient_set_stats_by_patient(self, sensor, loc='grad_data__sum_values'):
         from importlib import import_module
-        PatientTask = import_module("models.patient_task").PatientTask
+        PatientTask = import_module("models.legacy_patient_task").PatientTask
         patient_task_rows = self.get_patient_tasks()
         patient_tasks = [PatientTask(*row) for row in patient_task_rows]
 
@@ -244,7 +286,7 @@ class Task(LegacyBaseModel):
         os.makedirs(full_dir_path, exist_ok=True)
         
         from importlib import import_module
-        Sensor = import_module("models.sensor").Sensor
+        Sensor = import_module("models.legacy_sensor").Sensor
 
         sensors = [
             "rwra_x",
@@ -418,8 +460,8 @@ class Task(LegacyBaseModel):
             return None
 
     def dom_nondom_stats(self, loc='grad_data__abs_energy', abs_val=False, non_normed=False, dynamic=False):
-        Sensor = import_module("models.sensor").Sensor
-        Patient = import_module("models.patient").Patient
+        Sensor = import_module("models.legacy_sensor").Sensor
+        Patient = import_module("models.legacy_patient").Patient
 
         names = [
             "rwra_x",
@@ -662,46 +704,3 @@ class Task(LegacyBaseModel):
             p_path = os.path.join(directory, stat + addn + '_p_score' + '.csv')
             cls.generate_t_test_csv(path, p_path, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=stat)
 
-    def get_counterpart_task(self):
-        """
-        If the current task's description contains 'dominant', 
-        this function returns the counterpart 'non-dominant' task.
-        """
-        if 'dominant' in self.description.lower():
-            # Replace this with the actual query to fetch the non-dominant task
-            # I'm assuming you have some sort of method to find tasks by patient ID and description
-            non_dominant_description = self.description.replace('dominant', 'nondominant').capitalize()
-            print(non_dominant_description)
-            return Task.where(description=non_dominant_description)
-
-        elif 'nondominant' in self.description.lower():
-            # Replace this with the actual query to fetch the dominant task
-            
-            dominant_description = self.description.replace('nondominant', 'dominant').capitalize()
-            return Task.where(description=dominant_description)
-
-        else:
-            print("This task's description does not contain 'dominant' or 'nondominant'")
-            return None
-
-    @classmethod
-    def dominant(cls):
-        cls._cursor.execute("""
-            SELECT * FROM task
-            WHERE description LIKE '%dominant%'
-            AND description NOT LIKE '%nondominant%'
-        """)
-        return [cls(*row) for row in cls._cursor.fetchall()]
-
-    def get_patient_tasks(self):
-        self._cursor.execute(f"SELECT * FROM patient_task WHERE task_id=?", (self.id,))
-        rows = self._cursor.fetchall()
-        return rows
-
-    def get_pos_set_matrices(self):
-        pos_sets = self.get_pos_sets()
-        pos_set_matrices = [pos_set.get_matrix("matrix") for pos_set in pos_sets]
-        return pos_set_matrices
-
-    def __str__(self) -> str:
-        return self.description

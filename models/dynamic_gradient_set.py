@@ -2,7 +2,7 @@ from models.dynamic_position_set import DynamicPositionSet
 import pickle
 from typing import Any, List
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.patient import Patient
+from models.legacy_patient import Patient
 from datetime import datetime
 from models.dynamic_sub_gradient import DynamicSubGradient
 from tsfresh import extract_features
@@ -11,7 +11,7 @@ import numpy as np
 import pdb
 
 
-from models.patient_task import PatientTask
+from models.legacy_patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 

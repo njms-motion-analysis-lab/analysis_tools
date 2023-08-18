@@ -66,7 +66,7 @@ class DynamicSubGradient(LegacyBaseModel):
         return parent_matrix.loc[self.start_time:self.stop_time]
 
     def pos_matrix(self):
-        from models.position_set import DynamicPositionSet
+        from models.legacy_position_set import DynamicPositionSet
         parent_dynamic_gradient_set = self.dynamic_gradient_set()
         position_set = DynamicPositionSet.where(name=parent_dynamic_gradient_set.name, trial_id=parent_dynamic_gradient_set.trial_id, sensor_id=parent_dynamic_gradient_set.sensor_id)[0]
         parent_position_matrix = position_set.mat()

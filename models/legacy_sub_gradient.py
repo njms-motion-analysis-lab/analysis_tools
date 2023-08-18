@@ -7,6 +7,7 @@ import pickle
 import matplotlib.pyplot as plt
 from scipy.stats import skew
 from tsfresh import extract_features
+from tsfresh.feature_extraction import ComprehensiveFCParameters
 
 import sqlite3
 
@@ -59,7 +60,7 @@ class SubGradient(LegacyBaseModel):
 
     
     def gradient_set(self):
-        from models.gradient_set import GradientSet
+        from models.legacy_gradient_set import GradientSet
         return GradientSet.get(id=self.gradient_set_id)
 
     def grad_matrix(self):
@@ -67,7 +68,7 @@ class SubGradient(LegacyBaseModel):
         return parent_matrix.loc[self.start_time:self.stop_time]
 
     def pos_matrix(self):
-        from models.position_set import PositionSet
+        from models.legacy_position_set import PositionSet
         parent_gradient_set = self.gradient_set()
         position_set = PositionSet.where(name=parent_gradient_set.name, trial_id=parent_gradient_set.trial_id, sensor_id=parent_gradient_set.sensor_id)[0]
         parent_position_matrix = position_set.mat()
@@ -97,6 +98,7 @@ class SubGradient(LegacyBaseModel):
         return pickle.loads(self.matrix)
 
     def calc_sub_stats(self):
+        print("yolololo")
         motion = self.get_normalized()['grad_data']
         #print("MATRIX\n",pickle.loads(self.matrix))
         motionstats = {"mean": np.mean(motion), "median": np.median(motion), 
@@ -116,29 +118,33 @@ class SubGradient(LegacyBaseModel):
 
     def get_sub_stats(self, normalized=True):
         if normalized is True:
-            stats_needed = self.submovement_stats
-        else:
-            stats_needed = self.submovement_stats_nonnorm
-
-        if stats_needed is None:
-            if normalized is True:
+            if self.submovement_stats is None:
                 stats_needed = SubGradient.get_tsfresh_stats(self)
             else:
+                stats_needed = self.submovement_stats
+        else:
+            if self.submovement_stats_nonnorm is None:
                 stats_needed = SubGradient.get_tsfresh_stats_non_normalized(self)
+            else:
+                stats_needed = self.submovement_stats_nonnorm
         return pickle.loads(stats_needed)
 
     def get_tsfresh_stats(self, normalized=True):
         submovement = self.get_normalized()
         submovement["id"] = self.id
-        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
-        return memoryview(pickle.dumps(features))
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=ComprehensiveFCParameters())
+        ans = memoryview(pickle.dumps(features))
+        # self.update(submovement_stats=ans)
+        return ans
 
     def get_tsfresh_stats_non_normalized(self):
         submovement = pd.DataFrame(self.get_matrix())
         submovement["id"] = self.id
         submovement["samplepoint"] = submovement.index.tolist()
-        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
-        return memoryview(pickle.dumps(features))
+        features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=ComprehensiveFCParameters())
+        ans = memoryview(pickle.dumps(features))
+        # self.update(submovement_stats_nonnorm=ans)
+        return ans
     
     def get_tsfresh_stats_position(self, manual_position_data=None, default_fc_parameters=FEATURE_EXTRACT_SETTINGS):
         if manual_position_data is not None:
@@ -151,6 +157,6 @@ class SubGradient(LegacyBaseModel):
         positiondata["samplepoint"] = positiondata.index.tolist()
 
 
-        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=FEATURE_EXTRACT_SETTINGS)
+        features = extract_features(positiondata, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=ComprehensiveFCParameters())
 
         return memoryview(pickle.dumps(features))

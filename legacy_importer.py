@@ -1,12 +1,11 @@
 from multiprocessing import freeze_support
 import os
 import sqlite3
-from creation_services.legacy_generator import LegacyGenerator
-from models.sensor import Sensor
-from migrations.legacy_table import LegacyTable
+from creation_services.old_generator import OldGenerator
+from models.legacy_sensor import Sensor
+from migrations.legacy_table import Table
 import pdb
-from progress import Progress
-
+RAW_DATA_FOLDER = "raw_data/controls_alignedCoordinateSystem"
 if __name__ == '__main__':
     freeze_support()
     exp = {}
@@ -28,6 +27,7 @@ if __name__ == '__main__':
             placement = sensor_string[3:5]
         axis = sensor_string[-1]
         Sensor.find_or_create(name=sensor_string, side=side, axis=axis, placement=placement, part=part)
+
 
 
     def generate_sensors():
@@ -117,13 +117,32 @@ if __name__ == '__main__':
     # DynamicSubGradient.delete_all()
     # DynamicGradientSet.delete_all()
     # DynamicPositionSet.delete_all()
-    for subdir, _, files in os.walk(root_dir):
-        for file in files:
-            file_path = os.path.join(subdir, file)
-            # print(file_path)
-            if file.lower().endswith('.npy'):
+    # Table.drop_all_tables()
+    # Table.clear_tables()
+    # Table.create_tables()
+    # Table.update_tables()
+    files = []
+    
+    for subdir, _, filenames in os.walk(RAW_DATA_FOLDER):
+        for filename in filenames:
+            file_path = os.path.join(subdir, filename)
+            if file_path.lower().endswith('.npy'):
+                files.append(file_path)
+
+    n = 0
+    for file in files:
+        print(file.lower())
+        if "alignedcoordsbystart" in file.lower():
+            if "block" in file.lower():
                 print(file)
-                v = LegacyGenerator(file_path)
+                OldGenerator(file)
+                n += 1
+                print(file,"finished", n, "features complete")
+            else:
+                print("skipping", file)
+        else:
+            print("nope", file.lower())
+        
 
 print("Done!")
 

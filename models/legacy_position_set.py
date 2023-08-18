@@ -1,11 +1,11 @@
 import pickle
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.task import Task
-from models.patient import Patient
+from models.legacy_task import Task
+from models.legacy_patient import Patient
 from datetime import datetime
 import pandas as pd
 
-from models.patient_task import PatientTask
+from models.legacy_patient_task import PatientTask
 
 class PositionSet(LegacyBaseModel):
     table_name = "position_set"

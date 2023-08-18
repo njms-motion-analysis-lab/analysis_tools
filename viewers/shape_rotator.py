@@ -1,13 +1,15 @@
 import re
-from models.sensor import Sensor
-from models.task import Task
+from models.legacy_patient import Patient
+from models.legacy_patient_task import PatientTask
+from models.legacy_sensor import Sensor
+from models.legacy_task import Task
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from PIL import Image
 from matplotlib import pyplot as plt
-from models.gradient_set import GradientSet
+from models.legacy_gradient_set import GradientSet
 
 
 class ShapeRotator:
@@ -111,19 +113,465 @@ class ShapeRotator:
 
 
 
+num = 1
+
+lnr = Sensor.where(name='lwra_x')[0]
+snr = Sensor.where(name='rwra_x')[0]
+max = 0
+min = 10000
+sum = 0
+while num < 26:
+    amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+    print(amt, num)
+    
+    if amt > max:
+        curr = num
+        max = amt
+    if amt < min:
+        curr_m = num
+        min = amt
+    num += 1
+    sum += amt
+
+print(curr)
+print(curr_m)
+print(sum)
+print("next...")
+max = 0
+min = 10000
+num = 1
+sum = 0
+while num < 26:
+    amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_gradient_set_stats_list(lnr, loc='grad_data__sum_values')['mean']
+    print(amt, num)
+    
+    if amt > max:
+        curr = num
+        max = amt
+    if amt < min:
+        curr_m = num
+        min = amt
+    num += 1
+    sum += amt
+
+
+print(curr)
+print(curr_m)
+print(sum)
+print("next...")
+
+max = 0
+min = 10000
+sum = 0
+num = 1
+# while num < 26:
+#     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+#     print(amt, num)
+    
+#     if amt > max:
+#         curr = num
+#         max = amt
+#     if amt < min:
+#         curr_m = num
+#         min = amt
+#     num += 1
+#     sum += amt
+
+# print(curr)
+# print(curr_m)
+# print(sum)
+# print("next...")
+# max = 0
+# min = 10000
+# num = 1
+# sum = 0
+# while num < 26:
+#     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+#     print(amt, num)
+    
+#     if amt > max:
+#         curr = num
+#         max = amt
+#     if amt < min:
+#         curr_m = num
+#         min = amt
+#     num += 1
+#     sum += amt
+
+
+# print(curr)
+# print(curr_m)
+# print(sum)
+# print("next...")
+
+
+
+
+
+
 
 
 tsk = Task.where(id=3)[0]
+tsknd = Task.where(id=4)[0]
+
+
+tskk = Task.where(id=2)[0]
+tskknd = Task.where(id=1)[0]
+
+
 print(tsk.description)
+print(tskk.description)
 snr = Sensor.where(name='rwra_x')[0]
 tnr = Sensor.where(name='rwrb_x')[0]
 gss = tsk.get_gradient_sets_for_sensor(snr)
 pss = tsk.get_position_sets_for_sensor(snr)
-gs = GradientSet.all()[3]
-ps = gs.get_position_set()
-sid = gs.sensor_id
-mini = pss[:4]
 
-# ShapeRotator.plot_3d(pss[0])
-# ShapeRotator.plot_3d(gss[0])
-ShapeRotator.plot_3d_sg(gss[0])
+gsss = tskk.get_gradient_sets_for_sensor(snr)
+psss = tskk.get_position_sets_for_sensor(snr)
+
+ptn = Patient.where(name='S005')[0]
+pti = Patient.where(id=5)[0]
+ptc = Patient.where(id=1)[0]
+
+pti_ = Patient.where(id=1)[0]
+pti_1 = Patient.where(id=2)[0]
+pti_2 = Patient.where(id=3)[0]
+pti_3 = Patient.where(id=4)[0]
+pti_4 = Patient.where(id=5)[0]
+pti_5 = Patient.where(id=6)[0]
+pti_6 = Patient.where(id=7)[0]
+pti_7 = Patient.where(id=8)[0]
+pti_8 = Patient.where(id=9)[0]
+pti_9 = Patient.where(id=10)[0]
+pti_10 = Patient.where(id=11)[0]
+pti_11 = Patient.where(id=12)[0]
+pti_12 = Patient.where(id=13)[0]
+pti_13 = Patient.where(id=14)[0]
+pti_14 = Patient.where(id=15)[0]
+pti_15 = Patient.where(id=16)[0]
+pti_16 = Patient.where(id=17)[0]
+pti_17 = Patient.where(id=18)[0]
+pti_18 = Patient.where(id=19)[0]
+pti_19 = Patient.where(id=20)[0]
+pti_20 = Patient.where(id=21)[0]
+pti_21 = Patient.where(id=22)[0]
+pti_22 = Patient.where(id=23)[0]
+pti_23 = Patient.where(id=24)[0]
+pti_24 = Patient.where(id=25)[0]
+lnr = Sensor.where(name='lwra_x')[0]
+
+
+
+
+
+
+import pdb;pdb.set_trace()
+
+tskknd = Task.where(id=1)[0]
+x = pti_.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+x = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+
+x = pti_.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_1.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_2.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_3.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_4.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_5.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_6.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_7.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_8.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_9.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_10.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_11.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_12.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_13.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_14.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_15.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_16.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+# x = pti_17.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_18.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_19.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_20.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0] # this one is the lefty
+x = pti_21.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_22.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_23.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+x = pti_24.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+
+
+ShapeRotator.plot_3d_sg(x)
+
+import pdb;pdb.set_trace()
+tpti_ = PatientTask.where(patient_id=1, task_id=4)[0]
+PatientTask.where(patient_id=1, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_1 = PatientTask.where(patient_id=2, task_id=4)[0]
+PatientTask.where(patient_id=2, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_2 = PatientTask.where(patient_id=3, task_id=4)[0]
+PatientTask.where(patient_id=3, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_3 = PatientTask.where(patient_id=4, task_id=4)[0]
+PatientTask.where(patient_id=4, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_4 = PatientTask.where(patient_id=5, task_id=4)[0]
+PatientTask.where(patient_id=5, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_5 = PatientTask.where(patient_id=6, task_id=4)[0]
+PatientTask.where(patient_id=6, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_6 = PatientTask.where(patient_id=7, task_id=4)[0]
+PatientTask.where(patient_id=7, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_7 = PatientTask.where(patient_id=8, task_id=4)[0]
+PatientTask.where(patient_id=8, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_8 = PatientTask.where(patient_id=9, task_id=4)[0]
+PatientTask.where(patient_id=9, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_9 = PatientTask.where(patient_id=10, task_id=4)[0]
+PatientTask.where(patient_id=10, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_10 = PatientTask.where(patient_id=11, task_id=4)[0]
+PatientTask.where(patient_id=11, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_20 = PatientTask.where(patient_id=12, task_id=4)[0]
+PatientTask.where(patient_id=12, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_30 = PatientTask.where(patient_id=13, task_id=4)[0]
+PatientTask.where(patient_id=13, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_40 = PatientTask.where(patient_id=14, task_id=4)[0]
+PatientTask.where(patient_id=14, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_50 = PatientTask.where(patient_id=15, task_id=4)[0]
+PatientTask.where(patient_id=15, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_60 = PatientTask.where(patient_id=16, task_id=4)[0]
+PatientTask.where(patient_id=16, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_70 = PatientTask.where(patient_id=17, task_id=4)[0]
+PatientTask.where(patient_id=17, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_80 = PatientTask.where(patient_id=18, task_id=4)[0]
+PatientTask.where(patient_id=18, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_90 = PatientTask.where(patient_id=19, task_id=4)[0]
+PatientTask.where(patient_id=19, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_50 = PatientTask.where(patient_id=20, task_id=4)[0]
+PatientTask.where(patient_id=20, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_60 = PatientTask.where(patient_id=21, task_id=4)[0]
+PatientTask.where(patient_id=21, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_70 = PatientTask.where(patient_id=22, task_id=4)[0]
+PatientTask.where(patient_id=22, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_80 = PatientTask.where(patient_id=23, task_id=4)[0]
+PatientTask.where(patient_id=23, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_90 = PatientTask.where(patient_id=24, task_id=4)[0]
+PatientTask.where(patient_id=24, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+tpti_90 = PatientTask.where(patient_id=25, task_id=4)[0]
+PatientTask.where(patient_id=25, task_id=4)[0].get_gradient_sets_for_sensor(lnr, loc='grad_data__mean')
+
+
+
+
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+# pti_ = Patient.where(id=)[0]
+
+
+bl_gsi = pti.patient_task_by_task(tsk).get_gradient_sets_for_sensor(lnr)[0]
+
+
+gsn = ptn.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+gsi = pti.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+
+
+
+
+
+# block and ring dom
+b_gsi = pti.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+bl_gsi = pti.patient_task_by_task(tsk).get_gradient_sets_for_sensor(lnr)[0]
+bnd_gsi = pti.patient_task_by_task(tsknd).get_gradient_sets_for_sensor(snr)[0]
+bndl_gsi = pti.patient_task_by_task(tsknd).get_gradient_sets_for_sensor(lnr)[0]
+
+
+rb_gsi = pti.patient_task_by_task(tskk).get_gradient_sets_for_sensor(snr)[0]
+rbl_gsi = pti.patient_task_by_task(tskk).get_gradient_sets_for_sensor(lnr)[0]
+rbnd_gsi = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+rbndl_gsi = pti.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(lnr)[0]
+
+
+# name
+nb_gsi = ptn.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+nbl_gsi = ptn.patient_task_by_task(tsk).get_gradient_sets_for_sensor(lnr)[0]
+nbnd_gsi = ptn.patient_task_by_task(tsknd).get_gradient_sets_for_sensor(snr)[0]
+nbndl_gsi = ptn.patient_task_by_task(tsknd).get_gradient_sets_for_sensor(lnr)[0]
+
+rnb_gsi = ptn.patient_task_by_task(tskk).get_gradient_sets_for_sensor(snr)[0]
+rnbl_gsi = ptn.patient_task_by_task(tskk).get_gradient_sets_for_sensor(lnr)[0]
+rnbnd_gsi = ptn.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(snr)[0]
+rnbndl_gsi = ptn.patient_task_by_task(tskknd).get_gradient_sets_for_sensor(lnr)[0]
+
+
+r_gsi = pti.patient_task_by_task(tskk).get_gradient_sets_for_sensor(snr)[0]
+
+
+
+lsi = pti.patient_task_by_task(tskk).get_gradient_sets_for_sensor(lnr)[0]
+
+
+
+
+
+
+gsc = ptc.patient_task_by_task(tsk).get_gradient_sets_for_sensor(snr)[0]
+
+
+import pdb;pdb.set_trace()
+# # ShapeRotator.plot_3d(pss[0])
+# # ShapeRotator.plot_3d(gss[0])
+
+# #  pt id 5, right wrist block => looks normalish
+# ShapeRotator.plot_3d_sg(b_gsi)
+
+
+# #  pt id 5, left wrist block => looks weird
+# ShapeRotator.plot_3d_sg(bl_gsi)
+
+
+# #  pt id 5, right wrist non dom block
+# ShapeRotator.plot_3d_sg(bnd_gsi)
+
+
+# #  pt id 5, left wrist non dom block
+# ShapeRotator.plot_3d_sg(bndl_gsi)
+
+
+
+
+
+# #  pt id 5, right wrist ring => looks normalish
+# ShapeRotator.plot_3d_sg(rb_gsi)
+
+
+# #  pt id 5, left wrist ring => looks weird
+# ShapeRotator.plot_3d_sg(rbl_gsi)
+
+
+# #  pt id 5, right wrist non dom ring
+# ShapeRotator.plot_3d_sg(rbnd_gsi)
+
+
+# #  pt id 5, left wrist non dom ring
+# ShapeRotator.plot_3d_sg(rbndl_gsi)
+
+
+
+
+
+
+
+# #  pt name S005, right wrist block => looks still
+# ShapeRotator.plot_3d_sg(nb_gsi)
+
+
+# #  pt name S005, left wrist block => looks still
+# ShapeRotator.plot_3d_sg(nbl_gsi)
+
+
+# #  pt name S005, right wrist non dom block
+# ShapeRotator.plot_3d_sg(nbnd_gsi)
+
+
+# #  pt name S005, left wrist non dom block
+# ShapeRotator.plot_3d_sg(nbndl_gsi)
+
+
+
+# #  pt name S005, right wrist ring => looks normalish
+# ShapeRotator.plot_3d_sg(rnb_gsi)
+
+
+# #  pt name S005, left wrist ring => looks weird
+# ShapeRotator.plot_3d_sg(rnbl_gsi)
+
+
+# #  pt name S005, right wrist non dom ring
+# ShapeRotator.plot_3d_sg(rnbnd_gsi)
+
+
+# #  pt name S005, left wrist non dom ring
+# ShapeRotator.plot_3d_sg(rnbndl_gsi)
+
+
+
+
+
+
+
+# ShapeRotator.plot_3d_sg(x)
+# ShapeRotator.plot_3d_sg(gsss[0])
+
+ShapeRotator.plot_3d_sg(x)

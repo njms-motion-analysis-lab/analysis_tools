@@ -1,13 +1,14 @@
 import os
-from models.sensor import Sensor
-from models.trial import Trial
+import threading
+from models.legacy_sensor import Sensor
+from models.legacy_trial import Trial
 import numpy as np
-from models.task import Task
-from models.patient import Patient
+from models.legacy_task import Task
+from models.legacy_patient import Patient
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-import pdb
 
-class Multi:
+
+class OldGenerator:
     def __init__(self, filename: str, conn=None, cursor=None):
         # Load the data from the specified `filename`, convert it to a dictionary, and store it as an instance attribute.
         # The `name` attribute is set to the base name of the file, without the extension.
@@ -20,6 +21,7 @@ class Multi:
         # Output:
         # - None.
         self.data = np.load(filename, allow_pickle=True).tolist()
+        self.filename = filename
         self.name = os.path.splitext(os.path.basename(filename))[0]
         self.patient = ""
         self.task = ""
@@ -36,6 +38,7 @@ class Multi:
         # If the experimental task description ends with an underscore, remove it.
         # Set the `patient` and `task` attributes of the instance to the extracted values.
         sub_dir = self.name.split('_')
+        print("hello")
         root, patient, exp_task, variant = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
         if root != 'alignedCoordsByStart':
             self.dynamic = True
@@ -59,21 +62,20 @@ class Multi:
         c_task = Task.find_or_create(description=self.task)
         
         c_patient.add_task(c_task)
-        
         pm = c_patient.patient_task_by_task(c_task)
-        
-        counts = 0
-        for key, value in self.data.items():
-            tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
+        if pm == None:
+            print("empty pt")
+        else:    
+            counts = 0
+            for key, value in self.data.items():
+                tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
 
-            if not self.dynamic:
-                tr.generate_sets(data=value)
-            else:
-                tr.generate_dynamic_gradient_sets(data=value)
-            counts += 1
+                if not self.dynamic:
+                    tr.generate_sets(data=value)
+                    counts += 1
+                
         
         print("done")
-
 
 
 
