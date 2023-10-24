@@ -1,5 +1,6 @@
 from collections import Counter
 import datetime
+import shap
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.legacy_patient_task import PatientTask
 from sklearn.model_selection import GroupKFold
@@ -28,6 +29,7 @@ from sklearn.base import BaseEstimator, ClassifierMixin
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
 import tensorflow as tf
+from prediction_tools.predictor_score import PredictorScore
 print(tf.__version__)
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
@@ -50,11 +52,102 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import AdaBoostClassifier, ExtraTreesClassifier
+from prediction_tools.predictor_score import PredictorScore
 from sklearn.naive_bayes import GaussianNB  # Assuming features are continuous
+
+from sklearn.model_selection import LeaveOneOut
 
 
 
 DEFAULT_FEATURES = ['grad_data__sum_values','grad_data__abs_energy','grad_data__mean_abs_change', 'grad_data__mean_change', 'grad_data__mean_second_derivative_central', 'grad_data__variation_coefficient','grad_data__standard_deviation','grad_data__skewness','grad_data__kurtosis','grad_data__variance','grad_data__root_mean_square','grad_data__mean', 'grad_data__length']
+MINIMUM_SAMPLE_SIZE = 15
+MINI_PARAMS = {
+    'RandomForest': {
+        'classifier': RandomForestClassifier(),
+        'param_grid': {
+            'classifier__n_estimators': [1, 2, 3, 4, 5],
+            'classifier__max_depth': [1, 2, 3],
+            'classifier__min_samples_split': [2, 3],
+            'classifier__min_samples_leaf': [1, 2, 3,],
+            'classifier__max_features': ['sqrt', 'log2']
+        }
+    },
+    'KNN': {
+        'classifier': KNeighborsClassifier(),
+        'param_grid': {
+            'classifier__n_neighbors': [1, 2, 3, 4],
+            'classifier__weights': ['uniform', 'distance'],
+            'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+        }
+    },
+    'LogisticRegression': {
+        'classifier': LogisticRegression(max_iter=10000, solver='liblinear'),
+        'param_grid': {
+            'classifier__C': [0.01, 0.1, 1],
+            'classifier__penalty': ['l1', 'l2'],
+            'classifier__solver': ['liblinear', 'saga']
+        }
+    },
+    'XGBoost': {
+        'classifier': XGBClassifier(),
+        'param_grid': {
+            'classifier__learning_rate': [0.01, 0.1],
+            'classifier__n_estimators': [1, 2, 3],
+            'classifier__max_depth': [1, 2]
+        }
+    },
+    'CatBoost': {
+        'classifier': CatBoostClassifier(verbose=0),
+        'param_grid': {
+            'classifier__learning_rate': [0.01, 0.1],
+            'classifier__iterations': [1, 2, 3],
+            'classifier__depth': [1, 2]
+        }
+    },
+    'SVM': {
+        'classifier': SVC(probability=True),
+        'param_grid': {
+            'classifier__C': [0.1, 1],
+            'classifier__gamma': ['scale', 0.1],
+            'classifier__kernel': ['linear', 'poly']
+        }
+    },
+    'AdaBoost': {
+        'classifier': AdaBoostClassifier(),
+        'param_grid': {
+            'classifier__n_estimators': [1, 2, 3],
+            'classifier__learning_rate': [0.01, 0.1]
+        }
+    },
+    'ExtraTrees': {
+        'classifier': ExtraTreesClassifier(),
+        'param_grid': {
+            'classifier__n_estimators': [1, 2, 3],
+            'classifier__max_depth': [1, 2],
+            'classifier__min_samples_split': [2],
+            'classifier__min_samples_leaf': [1, 2]
+        }
+    },
+    'GradientBoosting': {
+        'classifier': GradientBoostingClassifier(),
+        'param_grid': {
+            'classifier__learning_rate': [0.01, 0.1],
+            'classifier__n_estimators': [1, 2, 3],
+            'classifier__max_depth': [1, 2],
+            'classifier__subsample': [0.8, 1.0],
+            'classifier__max_features': ['sqrt', 'log2']
+        }
+    },
+    'DecisionTree': {
+        'classifier': DecisionTreeClassifier(),
+        'param_grid': {
+            'classifier__max_depth': [1, 2],
+            'classifier__min_samples_split': [2],
+            'classifier__min_samples_leaf': [1, 2],
+            'classifier__max_features': ['sqrt', 'log2', None]
+        }
+    },
+}
 
 class CustomKerasClassifier(BaseEstimator, ClassifierMixin):
     def __init__(self, batch_size=32, epochs=50, dropout_rate=0.2):
@@ -92,8 +185,8 @@ class CustomKerasClassifier(BaseEstimator, ClassifierMixin):
 class Predictor(LegacyBaseModel):
     table_name = "predictor"
 
-    def __init__(self, id=None, task_id=None, sensor_id=None, non_norm=False, abs_val=False, accuracies={}, matrix=None, created_at=None, updated_at=None, multi_predictor_id=None, aggregated_stats=None, aggregated_stats_non_normed=None):
-        # super().__init__(id=id, created_at=created_at, updated_at=updated_at)
+    def __init__(self, id=None, task_id=None, sensor_id=None, non_norm=False, abs_val=False, accuracies={}, matrix=None, created_at=None, updated_at=None, multi_predictor_id=None, aggregated_stats=None, aggregated_stats_non_normed=None, cohort_id=None):
+        super().__init__()
         self.id = id
         self.task_id = task_id
         self.sensor_id = sensor_id
@@ -101,11 +194,10 @@ class Predictor(LegacyBaseModel):
         self.abs_val = abs_val
         self.accuracies = accuracies
         self.matrix = matrix
-        self.created_at = created_at
-        self.updated_at = updated_at
         self.aggregated_stats_non_normed = aggregated_stats_non_normed
         self.aggregated_stats = aggregated_stats
         self.multi_predictor_id = multi_predictor_id
+        self.cohort_id = cohort_id
     
     def sensor(self):
         return Sensor.get(self.sensor_id)
@@ -237,7 +329,7 @@ class Predictor(LegacyBaseModel):
             sensor = Sensor.get(self.sensor_id)
     
         nondom_sensor = self.non_dom_sensor(sensor=sensor)
-        self_pts = PatientTask.where(task_id=dom_task.id)
+        self_pts = PatientTask.where(task_id=dom_task.id, cohort_id=self.cohort_id)
 
         dom_dataframes = []
         nondom_dataframes = []
@@ -246,10 +338,10 @@ class Predictor(LegacyBaseModel):
 
         for self_pt in self_pts:
             # Skip certain patients
-            if self_pt.id == 24:
+            if self_pt.id == 24 or self_pt.id == 29:
                 continue
             try:
-                counterpart_pts = PatientTask.where(task_id=counterpart_task.id, patient_id=self_pt.patient_id)
+                counterpart_pts = PatientTask.where(task_id=counterpart_task.id, patient_id=self_pt.patient_id, cohort_id=self.cohort_id)
                 counterpart_sensor = nondom_sensor
                 if not counterpart_pts:
                     continue
@@ -257,7 +349,7 @@ class Predictor(LegacyBaseModel):
                 curr_patient = Patient.where(id=self_pt.patient_id)[0].name
                 self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pt, sensor, counterpart_sensor, curr_patient, features_dom, features_non_dom)
                 # switch places for lefty patient TODO: something more general here...
-                if self_pt.patient_id == 21:
+                if self_pt.patient_id == 21 or self_pt.patient_id == 26 or self_pt.patient_id == 27 or self_pt.patient_id == 28:
                     print("switching places for lefty pt....")
                     dom_dataframes.append(counter_temp)
                     nondom_dataframes.append(self_temp)
@@ -265,7 +357,9 @@ class Predictor(LegacyBaseModel):
                 else:
                     dom_dataframes.append(self_temp)
                     nondom_dataframes.append(counter_temp)
-            except (TypeError, KeyError):
+            except (TypeError, KeyError) as e:
+                print(e)
+                
                 continue
         dom_df = pd.concat(dom_dataframes)
         nondom_df = pd.concat(nondom_dataframes)
@@ -335,14 +429,25 @@ class Predictor(LegacyBaseModel):
 
         label_encoder = LabelEncoder()
         bdf['patient'] = label_encoder.fit_transform(bdf.get('patient', pd.Series()))
+        pt = bdf['patient'].copy()
         bdf = bdf.loc[:, bdf.nunique() != 1]
 
         
         corr_matrix = bdf.corr().abs()
         upper = corr_matrix.where(np.triu(np.ones(corr_matrix.shape), k=1).astype(bool))
-        to_drop = [column for column in upper.columns if any(upper[column] > .95)]
+        
+        # If we have very few rows, its easy to see false correlations
+        # so far the ones that show up are similar to the prev non cp pt
+        # so even if the correlations are way higher, some of the order seems to remain.
+        if len(bdf.index) < MINIMUM_SAMPLE_SIZE:
+            threshold = .999
+        else:
+            threshold = .95
+         
+        to_drop = [column for column in upper.columns if any(upper[column] > threshold)]
+        
         bdf.drop(to_drop, axis=1, inplace=True)
-
+        bdf['patient'] = pt
         return bdf
 
     def clean_bdf(self, bdf):
@@ -393,30 +498,21 @@ class Predictor(LegacyBaseModel):
         else:
             self.holdout_data = self.holdout_data[bdf.columns]
     
-    def retrain_from(self, obj=None):   
+    def retrain_from(self, obj=None, use_shap=False, force_load=False):   
         if obj is None:
             obj = self
-        # get params
-        best_params = obj.get_accuracies()['best_params']
-        # get columns
-        param_grid = {
-            'classifier__n_estimators': range(max(1, best_params['classifier__n_estimators'] - 10), best_params['classifier__n_estimators'] + 10),
-            'classifier__max_depth': range(max(1, best_params['classifier__max_depth'] - 2), best_params['classifier__max_depth'] + 2),
-        }
-
         # get df
-        print("Hiiiiiii")
+        bdf = self.get_df(force_load=force_load)
         bdf = self.get_bdf(holdout=False)
+
         y = self.get_y(bdf)
         bdf['is_dominant'] = y
+        is_dominant = bdf['is_dominant'].copy()
         bdf = self.clean_bdf(bdf) 
         bdf = self.trim_bdf(bdf)
-        # if True:
-        #     self.match_holdout_columns_to_bdf(bdf)
+        bdf['is_dominant'] = is_dominant
 
-        # bdf = bdf.drop('is_dominant', inplace=True, axis=1)
-
-        self.fit_multi_models(bdf, y, param_grid)
+        self.fit_multi_models(bdf, y, use_shap)
         print("Done retraining!")
 
     def clean_data(self, df):
@@ -462,9 +558,7 @@ class Predictor(LegacyBaseModel):
         bdf = self.trim_bdf(bdf)
         # bdf = bdf.drop('is_dominant', inplace=True, axis=1)
 
-        param_grid = {'classifier__n_estimators': range(120, 300, 10),'classifier__max_depth': range(1, 5),}
-
-        self.fit_model(bdf, y, param_grid)
+        self.fit_multi_models(bdf, y, True)
 
     def median_confusion_matrix(self, confusion_matrices, accuracy_scores):
         print(confusion_matrices)
@@ -475,10 +569,18 @@ class Predictor(LegacyBaseModel):
         
         return median_matrix
 
+    def fit_multi_models(self, bdf, y, use_shap=False):
+        curr_len = len(bdf.index)
+        mini_params = False
+        if curr_len < MINIMUM_SAMPLE_SIZE:
+            mini_params = True
 
-    def fit_multi_models(self, bdf, y, param_grid):
-        classifiers = self._define_classifiers(bdf.shape[1], param_grid)
-        skf = StratifiedKFold(n_splits=5)
+
+        classifiers = self.define_classifiers(use_shap, mini_params) 
+
+
+
+
         groups = bdf['patient']
         scores = {}
         params = {}
@@ -489,7 +591,7 @@ class Predictor(LegacyBaseModel):
         for classifier_name, classifier_data in classifiers.items():
             print(classifier_name, classifier_data)
             print(f"Training {classifier_name}...")
-            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = self._train_classifier(bdf, y, groups, skf, classifier_name, classifier_data, scores, params, acc_metrics)
+            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = self._train_classifier(bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=use_shap)
             classifier_accuracies[classifier_name] = np.mean(classifier_scores)
             classifier_params[classifier_name] = best_params
             classifier_metrics[classifier_name] = extra_metrics
@@ -511,59 +613,49 @@ class Predictor(LegacyBaseModel):
         print("done......")
         self.save()
 
-    def _define_classifiers(self, input_shape, param_grid):
-        # Definition of classifiers and their parameters
-        # classifiers = {
-        #     'SVM': {
-        #         'classifier': SVC(probability=True),
-        #         'param_grid': {
-        #             'classifier__C': [0.01, 0.1, 1, 10, 100],
-        #             'classifier__gamma': ['scale', 'auto', 0.1, 1, 10, 100], c
-        #             'classifier__kernel': ['linear', 'poly', 'rbf', 'sigmoid']
-        #         }
-        #     },
-        #     'DecisionTree': {
-        #         'classifier': DecisionTreeClassifier(), 
-        #         'param_grid': {
-        #                 'classifier__max_depth': range(1, 11),
-        #                 'classifier__min_samples_split': range(2, 21, 5),
-        #                 'classifier__min_samples_leaf': range(1, 21, 5),
-        #                 'classifier__max_features': ['auto', 'sqrt', 'log2']
-        #             }
-        #         },
-        #     'LightGBM': {
-        #     'classifier': LGBMClassifier(),
-        #     'param_grid': {
-        #         'classifier__learning_rate': [0.01, 0.03, 0.05],
-        #         'classifier__n_estimators': [50, 75, 90, 100,],
-        #         'classifier__max_depth': [2, 3, 4]
-        #     }
-        # },
-        # 'NaiveBayes': {
-        #     'classifier': GaussianNB(),
-        #     'param_grid': {}
-        # },
-        #     'NeuralNetwork': {'classifier': CustomKerasClassifier(input_shape), 'param_grid': {
-        #                                 'classifier__batch_size': [16, 32, 64],
-        #                                 'classifier__epochs': [50, 100, 200],
-        #                                 'classifier__dropout_rate': [0.3, 0.4]
-        #                             }},
-        #     'RandomForest': {'classifier': RandomForestClassifier(), 'param_grid': param_grid},
-        # }
-            # 'NeuralNetwork': {
-            #     'classifier': CustomKerasClassifier(input_shape),
-            #     'param_grid': {
-            #         'classifier__batch_size': [8, 16, 32, 64],
-            #         'classifier__epochs': [50, 100, 250],
-            #         'classifier__dropout_rate': [0.2, 0.3, 0.4]
-            #     }
-            # },
+    def is_supported_by_tree_explainer(self, classifier_name):
+        # List of classifier names known to be supported by TreeExplainer
+        supported_classifiers = [
+            'XGBoost', 'RandomForest', 'DecisionTree', 'ExtraTrees', 'CatBoost', 'GradientBoosting'
+        ]
+        
+        return classifier_name in supported_classifiers
 
+    def neighbor_params(self):
+        curr_len = len(self.get_bdf().index)
+        if curr_len < MINIMUM_SAMPLE_SIZE:
+            return range(1, curr_len - 1)
+        return range(5, 15)
+
+    def define_classifiers(self, use_shap_compatible, use_mini_params):
+        if use_mini_params:
+            classifiers = MINI_PARAMS
+            if use_shap_compatible:
+                classifiers = {k: v for k, v in classifiers.items() if self.is_supported_by_tree_explainer(k)}
+            return classifiers
+    
         classifiers = {
+            'KNN': {
+                'classifier': KNeighborsClassifier(),
+                'param_grid': {
+                    'classifier__n_neighbors': self.neighbor_params(),
+                    'classifier__weights': ['uniform', 'distance'],
+                    'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+                }
+            },
+            'RandomForest': {
+                'classifier': RandomForestClassifier(),
+                'param_grid': {
+                    'classifier__n_estimators': [30, 50, 75, 125, 175],
+                    'classifier__max_depth': [2, 3, 4],
+                    'classifier__min_samples_split': [1, 2, 4, 6],
+                    'classifier__min_samples_leaf': [1, 2, 3, 4, 5]
+                }
+            },
             'LogisticRegression': {
                 'classifier': LogisticRegression(max_iter=10000, solver='liblinear'),
                 'param_grid': {
-                    'classifier__C': [0.01, 0.05, 0.1, 1, 10, 100],
+                    'classifier__C': [.005, 0.01, 0.05, 0.1, 1, 10],
                     'classifier__penalty': ['l1', 'l2'],
                     'classifier__solver': ['liblinear', 'saga']
                 }
@@ -571,9 +663,9 @@ class Predictor(LegacyBaseModel):
             'XGBoost': {
                 'classifier': XGBClassifier(),
                 'param_grid': {
-                    'classifier__learning_rate': [0.01, 0.03, 0.05, 0.1],
-                    'classifier__n_estimators': [50, 75, 90, 100, 150],
-                    'classifier__max_depth': [2, 3, 4, 5, 7]
+                    'classifier__learning_rate': [0.005, 0.01, 0.03, 0.05, 0.1],
+                    'classifier__n_estimators': [25, 50, 75, 90, 100],
+                    'classifier__max_depth': [1, 2, 3, 4, 5]
                 }
             },
             'CatBoost': {
@@ -587,7 +679,7 @@ class Predictor(LegacyBaseModel):
             'SVM': {
                 'classifier': SVC(probability=True),
                 'param_grid': {
-                    'classifier__C': [0.1, 1, 10, 100],
+                    'classifier__C': [0.05, 0.1, 1, 10],
                     'classifier__gamma': ['scale', 'auto', 0.1, 1, 10, 100],
                     'classifier__kernel': ['linear', 'poly']
                 }
@@ -602,7 +694,7 @@ class Predictor(LegacyBaseModel):
             'ExtraTrees': {
                 'classifier': ExtraTreesClassifier(),
                 'param_grid': {
-                    'classifier__n_estimators': [30, 50, 75, 100, 125],
+                    'classifier__n_estimators': [75, 100, 125, 150, 175],
                     'classifier__max_depth': [3, 4, 6, 8, 10],
                     'classifier__min_samples_split': [2, 4, 6, 8],
                     'classifier__min_samples_leaf': [1, 2, 3, 4, 5]
@@ -611,17 +703,9 @@ class Predictor(LegacyBaseModel):
             'GradientBoosting': {
                 'classifier': GradientBoostingClassifier(),
                 'param_grid': {
-                    'classifier__learning_rate': [0.001, 0.01, 0.03, 0.05, 0.1],
-                    'classifier__n_estimators': [50, 75, 90, 100, 125],
-                    'classifier__max_depth': [2, 3, 4, 5, 7]
-                }
-            },
-            'KNN': {
-                'classifier': KNeighborsClassifier(),
-                'param_grid': {
-                    'classifier__n_neighbors': range(5, 15),
-                    'classifier__weights': ['uniform', 'distance'],
-                    'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+                    'classifier__learning_rate': [.0005, 0.001, 0.01, 0.03, 0.05],
+                    'classifier__n_estimators': [30, 50, 75, 90, 100],
+                    'classifier__max_depth': [1, 2, 3, 4, 5]
                 }
             },
             'DecisionTree': {
@@ -633,16 +717,10 @@ class Predictor(LegacyBaseModel):
                     'classifier__max_features': ['sqrt', 'log2', None]
                 }
             },
-            'RandomForest': {
-                'classifier': RandomForestClassifier(),
-                'param_grid': {
-                    'classifier__n_estimators': [30, 50, 75, 125, 175],
-                    'classifier__max_depth': [3, 4, 6, 8, 10],
-                    'classifier__min_samples_split': [2, 4, 6, 8],
-                    'classifier__min_samples_leaf': [1, 2, 3, 4, 5]
-                }
-            },
         }
+        
+        if use_shap_compatible:
+            classifiers = {k: v for k, v in classifiers.items() if self.is_supported_by_tree_explainer(k)}
 
         return classifiers
 
@@ -676,15 +754,31 @@ class Predictor(LegacyBaseModel):
 
 
 
-    def _train_classifier(self, bdf, y, groups, skf, classifier_name, classifier_data, scores, params, acc_metrics):
+    def _train_classifier(self, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=False):
         # Training of a specific classifier
         classifier = classifier_data['classifier']
         pipe = Pipeline(steps=[('classifier', classifier)])
         param_grid_classifier = classifier_data['param_grid']
         classifier_scores, accuracy_scores, precision_scores, recall_scores = [], [], [], []
-        f1_scores, auc_roc_scores, log_loss_scores, confusion_matrices, important_features_list = [], [], [], [], []
+        f1_scores, auc_roc_scores, log_loss_scores, confusion_matrices, all_importance_dfs = [], [], [], [], []
 
-        for train_index, test_index in skf.split(bdf, y, groups):
+        all_X = []
+        combined_shap_values = []
+
+
+        if len(bdf.index) < MINIMUM_SAMPLE_SIZE:
+            splitter = LeaveOneOut()
+            split = splitter.split(bdf, y)
+            round_set_size = False
+
+        else:
+            splitter = StratifiedKFold(n_splits=5)
+            split = splitter.split(bdf, y, groups)
+            round_set_size = True
+        
+        
+        
+        for train_index, test_index in split:
             X_train, X_test = bdf.iloc[train_index].drop('is_dominant', axis=1), bdf.iloc[test_index].drop('is_dominant', axis=1)
             y_train, y_test = y[train_index], y[test_index]
 
@@ -696,31 +790,34 @@ class Predictor(LegacyBaseModel):
             X_test = X_test.reset_index(drop=True)
             y_test = y_test.reset_index(drop=True)
 
-            X_train, y_train, X_test, y_test = self._fix_odd_test_set(X_train, y_train, X_test, y_test)
-            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=skf, scoring='accuracy')
+            if round_set_size:
+                X_train, y_train, X_test, y_test = self._fix_odd_test_set(X_train, y_train, X_test, y_test)
+            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
             grid_search.fit(X_train, y_train)
 
-            # Get the best score and parameters
-            classifier = grid_search.best_estimator_.named_steps['classifier']
-            important_features_counter = Counter()
-            important_features_values = {}
+            best_classifier = grid_search.best_estimator_.named_steps['classifier']
+            if use_shap is True:
+                explainer = shap.TreeExplainer(best_classifier)
+                shap_values = explainer.shap_values(X_train)
+                if isinstance(shap_values, list):  # If there are multiple classes
+                    # Here I'm taking only the SHAP values for class 1, which is typical for binary classification.
+                    # If you have a multi-class problem, this needs to be adjusted.
+                    shap_values = shap_values[1]
+                combined_shap_values.append(shap_values)
+                all_X.append(X_train)
 
-            # ... inside your loop over the folds ...
+
             if hasattr(classifier, 'feature_importances_'):
                 feature_importances = grid_search.best_estimator_.named_steps['classifier'].feature_importances_
                 importance_df = pd.DataFrame({
                     'Feature': X_train.columns,
                     'Importance': feature_importances
                 })
-                important_features = importance_df[importance_df['Importance'] > 0.10]
-                
-                # Increase the count of the feature in the counter
-                important_features_counter.update(important_features['Feature'].tolist())
 
-                # Store the importance values for the features (assuming they don't change across folds)
-                for feature, importance in zip(important_features['Feature'], important_features['Importance']):
-                    important_features_values[feature] = importance
+                # Append this dataframe to the list
+                all_importance_dfs.append(importance_df)
 
+                # Your existing code remains here...
             else:
                 print(f"{type(classifier).__name__} doesn't have feature_importances_ attribute.")
 
@@ -733,17 +830,18 @@ class Predictor(LegacyBaseModel):
             print("Current best params:", current_best_params)
 
             # Compute metrics
+
             y_pred = grid_search.predict(X_test)
             y_pred_proba = grid_search.predict_proba(X_test)[:, 1]
-
             
             confusion_matrices.append(confusion_matrix(y_test, y_pred))
             accuracy_scores.append(metrics.accuracy_score(y_test, y_pred))
             precision_scores.append(metrics.precision_score(y_test, y_pred, average='weighted'))
             recall_scores.append(metrics.recall_score(y_test, y_pred, average='weighted'))
             f1_scores.append(metrics.f1_score(y_test, y_pred, average='weighted'))
-            auc_roc_scores.append(metrics.roc_auc_score(y_test, y_pred_proba))
-            log_loss_scores.append(metrics.log_loss(y_test, y_pred_proba))
+            if len(np.unique(y_test)) > 1:
+                auc_roc_scores.append(metrics.roc_auc_score(y_test, y_pred_proba))
+                log_loss_scores.append(metrics.log_loss(y_test, y_pred_proba))
 
             classifier_scores.append(current_best_score)
 
@@ -788,6 +886,17 @@ class Predictor(LegacyBaseModel):
             print("Recall:", holdout_recall)
             print("F1-score:", holdout_f1)
 
+        if use_shap is True:
+            aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
+            combined_X = pd.concat(all_X, axis=0).reset_index(drop=True)
+
+            cpc = PredictorScore.where(classifier_name=classifier_name, predictor_id=self.id, score_type="ShapleySummary")
+            if len(cpc) == 0:
+                cpc = PredictorScore.find_or_create(classifier_name=classifier_name,score_type="ShapleySummary",predictor_id=self.id)
+            else:
+                cpc = cpc[0]
+            cpc.set_shap_matrix(aggregated_shap_values=aggregated_shap_values, combined_X=combined_X)
+        
         average_accuracy_scores = np.mean(accuracy_scores)
         average_precision_scores = np.mean(precision_scores)
         print("Test accuracy...", average_accuracy_scores)
@@ -799,8 +908,25 @@ class Predictor(LegacyBaseModel):
 
 
         extra_metrics = {}
-        final_important_features = {feature: importance for feature, importance in important_features_values.items() if important_features_counter[feature] >= 1}
-        extra_metrics["Important Features"] = final_important_features
+        # try different value here, interactions of different features
+        # may be non linear relationship between features, not sure if this is the case for diff iterations
+        # try running this a bunch of times
+        if hasattr(classifier, 'feature_importances_'):
+            # After the loop over the K-Folds is completed (outside the loop):
+            # Concatenate all importance dataframes
+            all_importance_concat = pd.concat(all_importance_dfs)
+            # Group by Feature and compute median
+            median_importance = all_importance_concat.groupby('Feature').median().reset_index()
+
+            # Get the top 5 features with highest median importance
+            top_5_median_features_df = median_importance.nlargest(5, 'Importance')
+            # Convert the dataframe to a dictionary for storage
+            top_5_median_features = dict(zip(top_5_median_features_df['Feature'], top_5_median_features_df['Importance']))
+            print(top_5_median_features)
+
+        else: 
+            top_5_median_features = {}
+        extra_metrics["Important Features"] = top_5_median_features
         extra_metrics["Accuracy:"] = average_accuracy_scores
         extra_metrics["Precision:"] = average_precision_scores
         extra_metrics["Recall:"] = average_recall_scores
@@ -853,11 +979,16 @@ class Predictor(LegacyBaseModel):
 
     def fit_model(self, bdf, y, param_grid):
         pipe = Pipeline(steps=[('classifier', RandomForestClassifier())])
-        skf = StratifiedKFold(n_splits=5)
+        # skf = StratifiedKFold(n_splits=5)
+
+        if len(bdf.index) < MINIMUM_SAMPLE_SIZE:
+            counts = LeaveOneOut()
+        else:
+            counts = StratifiedKFold(n_splits=5)
         groups = bdf['patient']
         scores = []
 
-        for train_index, test_index in skf.split(bdf, y, groups):
+        for train_index, test_index in counts.split(bdf, y, groups):
             X_train, X_test = bdf.iloc[train_index].drop('is_dominant', axis=1), bdf.iloc[test_index].drop('is_dominant', axis=1)
             y_train, y_test = y[train_index], y[test_index]
 
@@ -931,6 +1062,10 @@ class Predictor(LegacyBaseModel):
         """
         # matrix_json = json.dumps(self.matrix)
         json_accuracies = json.dumps(self.accuracies)
+        if self.matrix is not None:
+            mat = memoryview(self.matrix)
+        else:
+            mat = None
 
         # update the object properties in database
         updated_rows = self.update(
@@ -939,14 +1074,43 @@ class Predictor(LegacyBaseModel):
             sensor_id=self.sensor_id,
             non_norm=self.non_norm,
             abs_val=self.abs_val,
-            matrix=None,
+            matrix=mat,
             accuracies=json_accuracies
         )
     
         # You might need a commit after updating the rows. It will depend on your specific DB library
         self.__class__._conn.commit()
         return updated_rows > 0
-    
+
+    def get_predictor_scores(self, score_type=None):
+        # Query the predictor_score table where predictor_id matches this instance's id
+        if score_type is None:
+            return PredictorScore.where(predictor_id=self.id)
+        else:
+            return PredictorScore.where(predictor_id=self.id, score_type=score_type)
+
+
+    def get_predictor_scores_by_classifier_names(self, classifier_names):
+        # Query the predictor_score table where predictor_id matches this instance's id
+        return PredictorScore.where(predictor_id=self.id, classifier_name=classifier_names)
     
     def get_accuracies(self):
         return self.multiple_deserialize(self.accuracies)
+
+    def get_metrics(self):
+        return self.multiple_deserialize(self.accuracies)['classifier_metrics']
+
+    def get_classifiers(self):
+        return self.multiple_deserialize(self.accuracies)['classifier_metrics'].keys()
+    
+    def get_feature_importance(self):
+        feature_importance = {}
+        metrics = self.get_metrics()
+
+        for classifier in self.get_classifiers():
+            if classifier in metrics and 'Important Features' in metrics[classifier]:
+                feature_importance[classifier] = metrics[classifier]['Important Features']
+            else:
+                print(f"Warning: 'Important Features' not found for classifier {classifier}")
+        
+        return feature_importance

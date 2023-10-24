@@ -23,7 +23,7 @@ SENSORS = [
     "rwrb_x",
     "rwra_y",
     "rwrb_y",
-    "rwra_z",
+    "rwra_z", 
     "rwrb_z",
     "rfrm_x",
     "rfrm_y",

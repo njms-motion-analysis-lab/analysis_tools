@@ -9,25 +9,26 @@ class Patient(LegacyBaseModel):
     # A subclass of the `LegacyBaseModel` class, representing a patient in the database.
     # The `table_name` class attribute specifies the name of the database table where patient data is stored.
     
-    def __init__(self, id=None, name=None, created_at=None, updated_at=None, dominant_side="R"):
+    def __init__(self, id=None, name=None, created_at=None, updated_at=None, dominant_side="R", cohort_id=None):
         super().__init__()
         self.id = id
         self.name = name
         self.created_at = created_at
         self.updated_at = updated_at
         self.dominant_side = dominant_side
+        self.cohort_id = cohort_id
 
     def add_task(self, task):
         from importlib import import_module
         Task = import_module("models.legacy_task").Task
         # Check if the relationship already exists
-        self._cursor.execute("SELECT * FROM patient_task WHERE patient_id=? AND task_id=?", (self.id, task.id))
+        self._cursor.execute("SELECT * FROM patient_task WHERE patient_id=? AND cohort_id=? AND task_id=?", (self.id, self.cohort_id, task.id))
         existing_relation = self._cursor.fetchone()
 
         if not existing_relation:
             curr = datetime.now()
             # Add a task to the list of tasks associated with the patient.
-            self._cursor.execute("INSERT INTO patient_task (patient_id, task_id, created_at, updated_at) VALUES (?, ?, ?, ?)", (self.id, task.id, curr, curr))
+            self._cursor.execute("INSERT INTO patient_task (patient_id, task_id, cohort_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)", (self.id, task.id, self.cohort_id, curr, curr))
             self._conn.commit()
         else:
             print("The relationship between this patient and task already exists.")

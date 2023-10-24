@@ -10,12 +10,13 @@ from viewers.plotter import Plotter
 class PatientTask(LegacyBaseModel):
     table_name = "patient_task"
 
-    def __init__(self, id=None, patient_id=None, task_id=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, patient_id=None, task_id=None, created_at=None, updated_at=None, cohort_id=None):
         self.id = id
         self.patient_id = patient_id
         self.task_id = task_id
         self.created_at = created_at
         self.updated_at = updated_at
+        self.cohort_id = cohort_id
 
     def create(self, **kwargs):
         self.patient_id = kwargs.get("patient_id")
@@ -45,7 +46,7 @@ class PatientTask(LegacyBaseModel):
     def get_trials(self):
         from importlib import import_module
         Trial = import_module("models.legacy_trial").Trial
-        Trial.where(patient_task_id=self.id)
+        return Trial.where(patient_task_id=self.id)
 
     def get_gradient_sets_for_sensor(self, sensor, all=False):
         from importlib import import_module

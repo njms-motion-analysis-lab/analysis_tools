@@ -246,6 +246,13 @@ class GradientSet(LegacyBaseModel):
 
     def get_aggregate_non_norm_stats(self, abs_val=False, non_normed=True):
         return pickle.loads(self.calc_aggregate_stats(abs_val=abs_val, non_normed=non_normed))
+
+    def view_3d(self):
+        from importlib import import_module
+        ShapeRotator = import_module("viewers.shape_rotator").ShapeRotator
+        ShapeRotator.plot_3d_sg(self)
+
+
         
     # def get_tsfresh_data(self):
     #     matrix_df = self.mat_df()

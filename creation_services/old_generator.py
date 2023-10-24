@@ -9,7 +9,7 @@ from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 
 
 class OldGenerator:
-    def __init__(self, filename: str, conn=None, cursor=None):
+    def __init__(self, filename: str, cohort=None, conn=None, cursor=None):
         # Load the data from the specified `filename`, convert it to a dictionary, and store it as an instance attribute.
         # The `name` attribute is set to the base name of the file, without the extension.
         # The `patient` and `task` attributes are initialized to empty strings, and are set in the `set_attributes` method.
@@ -25,6 +25,7 @@ class OldGenerator:
         self.name = os.path.splitext(os.path.basename(filename))[0]
         self.patient = ""
         self.task = ""
+        self.cohort = cohort
         self.conn = None
         self.cursor = None
         self.dynamic = False
@@ -40,6 +41,8 @@ class OldGenerator:
         sub_dir = self.name.split('_')
         print("hello")
         root, patient, exp_task, variant = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
+        if self.cohort is not None:
+            patient = patient + "_cp"
         if root != 'alignedCoordsByStart':
             self.dynamic = True
 
@@ -58,7 +61,7 @@ class OldGenerator:
         # Find or create a `Task` object with the `description` attribute equal to the `task` attribute of the instance.
         # Add the `Task` object to the list of tasks associated with the `Patient` object.
         # Generates columns corresponding to x,y, and z values.
-        c_patient = Patient.find_or_create(name=self.patient)
+        c_patient = Patient.find_or_create(name=self.patient, cohort_id=self.cohort.id)
         c_task = Task.find_or_create(description=self.task)
         
         c_patient.add_task(c_task)
@@ -73,7 +76,7 @@ class OldGenerator:
                 if not self.dynamic:
                     tr.generate_sets(data=value)
                     counts += 1
-                
+        
         
         print("done")
 

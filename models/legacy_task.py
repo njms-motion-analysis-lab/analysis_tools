@@ -16,6 +16,7 @@ from scipy import stats
 import plotly.express as px
 from scipy.stats import t
 import plotly.io as pio
+from models.legacy_cohort import Cohort
 
 from viewers.multi_plotter import MultiPlotter
 from viewers.plotter import Plotter
@@ -159,17 +160,18 @@ class Task(LegacyBaseModel):
         If the current task's description contains 'dominant', 
         this function returns the counterpart 'non-dominant' task.
         """
-        if 'dominant' in self.description.lower():
+        if 'nondominant' in self.description.lower():
+            # Replace this with the actual query to fetch the dominant task
+            
+            dominant_description = self.description.replace('nondominant', 'dominant').capitalize()
+            return Task.where(description=dominant_description)
+        elif 'dominant' in self.description.lower():
             # Replace this with the actual query to fetch the non-dominant task
             # I'm assuming you have some sort of method to find tasks by patient ID and description
             non_dominant_description = self.description.replace('dominant', 'nondominant').capitalize()
             return Task.where(description=non_dominant_description)
 
-        elif 'nondominant' in self.description.lower():
-            # Replace this with the actual query to fetch the dominant task
-            
-            dominant_description = self.description.replace('nondominant', 'dominant').capitalize()
-            return Task.where(description=dominant_description)
+
 
         else:
             print("This task's description does not contain 'dominant' or 'nondominant'")
@@ -257,20 +259,28 @@ class Task(LegacyBaseModel):
             'grad_data__sum_values',
         ]
         statistics_list = [
-            'grad_data__variance_larger_than_standard_deviation',
+            'grad_data__mean',
+            'grad_data__length',
             'grad_data__abs_energy',
             'grad_data__mean_abs_change',
             'grad_data__mean_change',
             'grad_data__mean_second_derivative_central',
             'grad_data__median',
-            'grad_data__mean',
-            'grad_data__length',
             'grad_data__standard_deviation',
             'grad_data__variation_coefficient',
             'grad_data__variance',
             'grad_data__skewness',
             'grad_data__kurtosis',
             'grad_data__root_mean_square',
+            'grad_data__absolute_sum_of_changes',
+            'grad_data__longest_strike_below_mean',
+            'grad_data__longest_strike_above_mean',
+            'grad_data__count_above_mean',
+            'grad_data__count_below_mean',
+            'grad_data__last_location_of_maximum',
+            'grad_data__first_location_of_maximum',
+            'grad_data__last_location_of_minimum',
+            'grad_data__first_location_of_minimum',
         ]
 
         # Get the current date and time
@@ -449,7 +459,7 @@ class Task(LegacyBaseModel):
         # Save the figure as HTML
         if not os.path.exists(directory):
             os.makedirs(directory)
-        pio.write_image(fig, f'{directory}/{str(description)}_{str(sensor_name)}.png')
+        pio.write_image(fig, f'{directory}/{str(description_string)}_{str(sensor_name)}.png')
 
     def get_opposite_sensor(self, sensor_name):
         if sensor_name.startswith('l'):
@@ -459,13 +469,15 @@ class Task(LegacyBaseModel):
         else:
             return None
 
-    def dom_nondom_stats(self, loc='grad_data__abs_energy', abs_val=False, non_normed=False, dynamic=False):
+    def dom_nondom_stats(self, loc='grad_data__abs_energy', abs_val=False, non_normed=False, dynamic=False, cohort=None):
         Sensor = import_module("models.legacy_sensor").Sensor
         Patient = import_module("models.legacy_patient").Patient
 
         names = [
             "rwra_x",
+            "lwra_x",
             "rwrb_x",
+            "lwrb_x",
             "rwra_y",
             "rwrb_y",
             "rwra_z",
@@ -504,8 +516,10 @@ class Task(LegacyBaseModel):
 
         all_sensors = Sensor.where(name=names)  # get all sensors with names in the `names` list
         sensors = sorted(all_sensors, key=lambda sensor: names.index(sensor.name))
-
-        self_pts = PatientTask.where(task_id=self.id)
+        if cohort is not None:
+            self_pts = PatientTask.where(task_id=self.id, cohort_id=cohort.id)   
+        else:
+            self_pts = PatientTask.where(task_id=self.id)
         row = []
         p_row = []
 
@@ -533,7 +547,6 @@ class Task(LegacyBaseModel):
                 try:
                     counterpart_pts = PatientTask.where(task_id=counterpart_task.id, patient_id=self_pt.patient_id)
                     counterpart_sensor = Sensor.where(name=self.get_opposite_sensor(sensor.name))[0]
-                    import pdb; pdb.set_trace()
                     if not counterpart_pts:
                         print(f"No counterpart patient task found for task with id {counterpart_task.id} and patient id {self_pt.patient_id}")
                         continue
@@ -544,6 +557,7 @@ class Task(LegacyBaseModel):
                         self_means.append([curr_patient, abs(self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
                         counterpart_means.append([curr_patient, abs(counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
                     else:
+                        import pdb;pdb.set_trace()
                         self_means.append([curr_patient, self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
                         counterpart_means.append([curr_patient, counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
                 except TypeError as e:
@@ -578,11 +592,12 @@ class Task(LegacyBaseModel):
 
             directory_path = f'parallel_plots_{addn}/{loc}/'
             directory_path = "generated_pngs_" + directory_path
-            self.generate_parallel_coordinates(
-                self_means, counterpart_means, t_stat, p_score,
-                sensor.name, self.description, loc,
-                directory=directory_path
-            )
+            if sensor.name == 'lwra_x' or sensor.name == 'rwra_x' or sensor.name == 'lwrb_x' or sensor.name == 'rwrb_x':
+                self.generate_parallel_coordinates(
+                    self_means, counterpart_means, t_stat, p_score,
+                    sensor.name, self.description, loc,
+                    directory=directory_path
+                )
 
             row.append(t_stat)
             p_row.append(p_score)
@@ -592,9 +607,10 @@ class Task(LegacyBaseModel):
 
 
     @classmethod
-    def generate_t_test_csv(cls, output_csv_path, output_csv_p_score_path, abs_val=False, non_normed=False, dynamic=False, loc='grad_data__abs_energy'):
+    def generate_t_test_csv(cls, output_csv_path, output_csv_p_score_path, abs_val=False, non_normed=False, dynamic=False, cohort=None, loc='grad_data__abs_energy'):
         # Fetch all tasks
-        all_tasks = [task for task in cls.all() if ('dominant' in task.description and 'nondominant' not in task.description)]
+        # all_tasks = [task for task in cls.all() if ('dominant' in task.description and 'nondominant' not in task.description)]
+        all_tasks = [task for task in cls.all() if ('nondominant' in task.description)]
 
         # Prepare to write to CSV
         with open(output_csv_path, 'w', newline='') as csvfile:
@@ -605,7 +621,9 @@ class Task(LegacyBaseModel):
                 # Write header row
                 sensor_names = [
                     "rwra_x",
+                    "lwra_x",
                     "rwrb_x",
+                    "lwrb_x",
                     "rwra_y",
                     "rwrb_y",
                     "rwra_z",
@@ -646,20 +664,23 @@ class Task(LegacyBaseModel):
 
                 # Iterate over each task and generate t-test stats
                 for task in all_tasks:
-                    result = task.dom_nondom_stats(loc, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic)
-                    if result is not None:
-                        t_test_stats, p_score_stats = result
-                    else:
-                        t_test_stats, p_score_stats = [], []
+                    print(task.id)
+                    if task.id == 4:
+                        print("hi")
+                        result = task.dom_nondom_stats(loc, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, cohort=cohort)
+                        if result is not None:
+                            t_test_stats, p_score_stats = result
+                        else:
+                            t_test_stats, p_score_stats = [], []
 
-                    writer.writerow([task.id, task.description] + t_test_stats)
-                    p_writer.writerow([task.id, task.description] + p_score_stats)
+                        writer.writerow([task.id, task.description] + t_test_stats)
+                        p_writer.writerow([task.id, task.description] + p_score_stats)
 
         print(f'T-test results saved to {output_csv_path}.')
         print(f'P score results saved to {output_csv_p_score_path}.')
 
     @classmethod
-    def gen_all_stats_csv(cls, abs_val=False, non_normed=False, dynamic=False):
+    def gen_all_stats_csv(cls, abs_val=False, non_normed=False, dynamic=False, cohort=None):
         ignore = [
             'grad_data__has_duplicate_max',
             'grad_data__has_duplicate_min',
@@ -682,6 +703,15 @@ class Task(LegacyBaseModel):
             'grad_data__skewness',
             'grad_data__kurtosis',
             'grad_data__root_mean_square',
+            'grad_data__absolute_sum_of_changes',
+            'grad_data__longest_strike_below_mean',
+            'grad_data__longest_strike_above_mean',
+            'grad_data__count_above_mean',
+            'grad_data__count_below_mean',
+            'grad_data__last_location_of_maximum',
+            'grad_data__first_location_of_maximum',
+            'grad_data__last_location_of_minimum',
+            'grad_data__first_location_of_minimum',
         ]
 
         # Define the directory where the files will be saved
@@ -702,5 +732,4 @@ class Task(LegacyBaseModel):
             # Join the directory name with the file name
             path = os.path.join(directory, stat + addn + '.csv')
             p_path = os.path.join(directory, stat + addn + '_p_score' + '.csv')
-            cls.generate_t_test_csv(path, p_path, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=stat)
-
+            cls.generate_t_test_csv(path, p_path, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, cohort=cohort, loc=stat)

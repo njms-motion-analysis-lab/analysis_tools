@@ -15,7 +15,7 @@ class Table:
             )
         """)
 
-    # change to task
+        # change to task
         cls.cursor.execute("""
             CREATE TABLE IF NOT EXISTS task (
                 id INTEGER PRIMARY KEY,
@@ -270,6 +270,48 @@ class Table:
             )
         """)
 
+        # Session-Scores join table
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS predictor_score (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                classifier_name TEXT,
+                score_type TEXT,
+                matrix TEXT,
+                classifier_id INTEGER,
+                predictor_id INTEGER,
+                FOREIGN KEY (classifier_id) REFERENCES classifier (id),
+                FOREIGN KEY (predictor_id) REFERENCES predictor (id)
+            )
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS cohort (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT UNIQUE NOT NULL,
+                is_control BOOLEAN NOT NULL,
+                is_treated BOOLEAN NOT NULL,
+                description TEXT,
+                created_at TEXT NOT NULL,
+                updated_at DATETIME NOT NULL,
+                UNIQUE (name, is_control, is_treated)
+            )
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS patient_cohort_task (
+                id INTEGER PRIMARY KEY,
+                patient_id INTEGER NOT NULL,
+                task_id INTEGER NOT NULL,
+                cohort_id INTEGER NOT NULL,
+                created_at TIMESTAMP NOT NULL,
+                updated_at TIMESTAMP NOT NULL,
+                UNIQUE (patient_id, task_id, cohort_id),
+                FOREIGN KEY (patient_id) REFERENCES patient (id),
+                FOREIGN KEY (cohort_id) REFERENCES cohort (id),
+                FOREIGN KEY (task_id) REFERENCES task (id)
+            )
+        """)
+
         cls.conn.commit()
         
         LegacyBaseModel.set_class_connection()
@@ -313,6 +355,12 @@ class Table:
         cls.add_column_if_not_exists('multi_predictor', "created_at", "TEXT")
         cls.add_column_if_not_exists('multi_predictor', "updated_at", "DATETIME")
         cls.add_column_if_not_exists('predictor', "multi_predictor_id", "INTEGER")
+        cls.add_column_if_not_exists('predictor_score', "created_at", "TEXT")
+        cls.add_column_if_not_exists('predictor_score', "updated_at", "DATETIME")
+        cls.add_column_if_not_exists('patient_task', 'cohort_id', 'INTEGER')
+        cls.add_column_if_not_exists('patient', 'cohort_id', 'INTEGER')
+        cls.add_column_if_not_exists('predictor', 'cohort_id', 'INTEGER')
+        cls.add_column_if_not_exists('multi_predictor', 'cohort_id', 'INTEGER')
         print("Done!!")
         
 
@@ -321,6 +369,43 @@ class Table:
             ON dynamic_sub_gradient (dynamic_gradient_set_id, dynamic_gradient_set_ord)
         """)
 
+    @classmethod
+    def modify_patient_task_unique_constraint(cls):
+        # Drop the old constraint
+        cls.cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_patient_task_patient_id_task_id_cohort_id ON patient_task (patient_id, task_id, cohort_id)")
+        cls.conn.commit()
+    
+    @classmethod
+    def set_predictors_and_multi_predictors(cls):
+        cohort_id = cls.cursor.execute("SELECT id FROM cohort WHERE name = ?", ("healthy_controls",)).fetchone()[0]
+        cls.cursor.execute("UPDATE predictor SET cohort_id = ?", (cohort_id,))
+        cls.conn.commit()
+
+    @classmethod
+    def set_multi_predictors(cls):
+        cohort_id = cls.cursor.execute("SELECT id FROM cohort WHERE name = ?", ("healthy_controls",)).fetchone()[0]
+        cls.cursor.execute("UPDATE multi_predictor SET cohort_id = ?", (cohort_id,))
+        cls.conn.commit()
+
+    @classmethod
+    def create_and_set_cohort(cls):
+        # Insert the cohort "healthy controls"
+        try:
+            cls.cursor.execute("""
+                INSERT INTO cohort (name, is_control, is_treated, created_at, updated_at)
+                VALUES (?, ?, ?, datetime('now'), datetime('now'))
+            """, ("healthy_controls", 1, 0))
+            cls.conn.commit()
+        except sqlite3.IntegrityError:
+            # Cohort might already exist, get its ID
+            pass
+
+        cohort_id = cls.cursor.execute("SELECT id FROM cohort WHERE name = ?", ("healthy_controls",)).fetchone()[0]
+
+        # Update all patient_task and patient entries to set the cohort_id
+        cls.cursor.execute("UPDATE patient_task SET cohort_id = ?", (cohort_id,))
+        cls.cursor.execute("UPDATE patient SET cohort_id = ?", (cohort_id,))
+        cls.conn.commit()
 
     @classmethod
     def drop_all_tables(cls):

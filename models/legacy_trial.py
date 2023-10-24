@@ -15,6 +15,11 @@ class Trial(LegacyBaseModel):
         self.trial_num = trial_num
         self.timestamp = timestamp
         self.is_dominant = is_dominant
+    
+    def get_gradient_sets(self):
+        from importlib import import_module
+        GradientSet = import_module("models.legacy_gradient_set").GradientSet
+        return GradientSet.where(trial_id=self.id)
 
     def update(self, **kwargs):
         self.patient_task_id = kwargs.get("patient_task_id", self.patient_task_id)

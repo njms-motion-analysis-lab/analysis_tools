@@ -3,17 +3,19 @@ import os
 import sqlite3
 from creation_services.old_generator import OldGenerator
 from models.legacy_sensor import Sensor
+from models.legacy_cohort import Cohort
 from migrations.legacy_table import Table
 import pdb
-RAW_DATA_FOLDER = "raw_data/controls_alignedCoordinateSystem"
+
+RAW_DATA_FOLDER = "raw_data/CP_alignedcoords_2023.10.03"
+
+
+
 if __name__ == '__main__':
     freeze_support()
     exp = {}
     root_dir = "controls_alignedCoordinateSystem"
 
-    # Call the function to create the tables before you start using the LegacyGenerator class
-    # Table.drop_all_tables()
-    # Table.update_tables()
     def create_sensor_from_string(sensor_string):
         side_map = {"l": "left", "r": "right"}
         side = side_map.get(sensor_string[0], None)
@@ -27,8 +29,6 @@ if __name__ == '__main__':
             placement = sensor_string[3:5]
         axis = sensor_string[-1]
         Sensor.find_or_create(name=sensor_string, side=side, axis=axis, placement=placement, part=part)
-
-
 
     def generate_sensors():
         # sensors = []
@@ -109,20 +109,8 @@ if __name__ == '__main__':
         for s_string in sensors:
             create_sensor_from_string(s_string)
 
-    generate_sensors()
-    print("done 1")
-    # from models.dynamic_sub_gradient import DynamicSubGradient
-    # from models.dynamic_position_set import DynamicPositionSet
-    # from models.dynamic_gradient_set import DynamicGradientSet
-    # DynamicSubGradient.delete_all()
-    # DynamicGradientSet.delete_all()
-    # DynamicPositionSet.delete_all()
-    # Table.drop_all_tables()
-    # Table.clear_tables()
-    # Table.create_tables()
-    # Table.update_tables()
+    # generate_sensors()
     files = []
-    
     for subdir, _, filenames in os.walk(RAW_DATA_FOLDER):
         for filename in filenames:
             file_path = os.path.join(subdir, filename)
@@ -133,9 +121,13 @@ if __name__ == '__main__':
     for file in files:
         print(file.lower())
         if "alignedcoordsbystart" in file.lower():
-            if "block" in file.lower():
+            if "cp" in file.lower():
+                cohort = Cohort.find_or_create(name="cp_before", is_control=False, is_treated=False)
+
+            
+            if "block" in file.lower() and "dynamic" not in file.lower():
                 print(file)
-                OldGenerator(file)
+                OldGenerator(file, cohort)
                 n += 1
                 print(file,"finished", n, "features complete")
             else:
