@@ -4,6 +4,7 @@
 # from migrations.legacy_table import Table as LegacyTable
 import csv
 import pdb
+import shap
 import re
 import pandas as pd
 from models.legacy_task import Task
@@ -20,13 +21,14 @@ from models.legacy_sub_gradient import SubGradient
 from collections import defaultdict
 from models.legacy_sensor import Sensor
 from sklearn.model_selection import cross_val_score, GridSearchCV
+from models.legacy_cohort import Cohort
 from sklearn.ensemble import RandomForestClassifier
 # from viewers.shape_rotator import ShapeRotator
 from viewers.matrix_plotter import MatrixPlotter
 import seaborn as sns
 import matplotlib.pyplot as plt
 from prediction_tools.legacy_multi_predictor import MultiPredictor
-snr = Sensor.all()
+# import pdb;pdb.set_trace()
 allowed = [
     "lwra_x",
     "lwrb_x",
@@ -72,6 +74,7 @@ allowed = [
     'lfin_z',
 ]
 
+
 all_patients = Patient.all()
 # for patient in all_patients:
 #     patient.delete_duplicate_trials()
@@ -104,8 +107,11 @@ from models.legacy_trial import Trial
 
 # dir = 'parallel_plots/grad_data__kurtosis'
 # replace_axis_labels(dir)
-# for t in tasks:
-#     t.gen_all_stats_csv(abs_val=False, non_normed=True)
+
+
+
+
+    
 
 
 from prediction_tools.legacy_predictor import Predictor
@@ -114,9 +120,124 @@ from models.legacy_sensor import Sensor
 
 
 # LegacyTable.update_tables()
+from migrations.legacy_table import Table
+
+
 from models.legacy_task import Task
 
-t = Task.all()[2]
+
+
+cohort = Cohort.where(id=2)[0]
+
+t = Task.get(id=3)
+
+
+# Task.gen_all_stats_csv(abs_val=False, non_normed=True, cohort=cohort)
+
+cp_results = []
+# Iterate through the mpss list
+mps = Predictor.where(multi_predictor_id=3)
+cohort = Cohort.where(id=2)[0]
+cohort_one = Cohort.where(id=1)[0]
+cohort_one = Cohort.where(id=1)[0]
+
+
+TOP_MODELS = [
+    'RandomForest',
+    'ExtraTrees',
+    'DecisionTree'
+]
+
+def view_shap_values():
+    # get cohort
+    cohort_one = Cohort.where(id=1)[0]
+
+    # get prediction sets
+    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id)
+    print(len(mps_pred_sets))
+
+    for mps in mps_pred_sets:
+        preds = mps.get_predictors()
+        print(preds[0].get_accuracies())
+        for pred in preds:
+            
+            scores = pred.get_predictor_scores_by_classifier_names(TOP_MODELS)
+
+            for score in scores:
+                s_name = pred.sensor().name
+                m_name = score.classifier_name
+                t_name = pred.task().description
+                plt_title = t_name + " " + s_name + " " + m_name
+                score.view_shap_heatmap(title=plt_title)
+
+            print(pred.get_accuracies()['classifier_metrics'])
+
+
+view_shap_values()
+
+import pdb;pdb.set_trace()
+
+
+            
+
+
+mpd = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=3)
+mpdd = MultiPredictor.find_or_create(cohort_id=cohort_one.id, task_id=3)
+mps = Predictor.where(multi_predictor_id=mpd.id)
+mpss = Predictor.where(multi_predictor_id=mpdd.id)
+
+for mp in mps:
+    # Extracting the classifier accuracies
+    if mp.get_accuracies() != {}:
+        accuracies = mp.get_accuracies()['classifier_accuracies']
+        
+        # Sorting by accuracy in descending order and rounding to three decimal places
+        sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
+        
+        # Append sensor name and its sorted accuracies to the ring_results list
+        cp_results.append((mp.sensor().name, sorted_accuracies))
+
+cp_results.sort(key=lambda x: sum(x[1].values()) / len(x[1].values()), reverse=True)
+hc_results = []
+for mp in mpss:
+    # Extracting the classifier accuracies
+    if mp.get_accuracies() != {}:
+        accuracies = mp.get_accuracies()['classifier_accuracies']
+        
+        # Sorting by accuracy in descending order and rounding to three decimal places
+        sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
+        
+        # Append sensor name and its sorted accuracies to the ring_results list
+        hc_results.append((mp.sensor().name, sorted_accuracies))
+
+# Sort ring_results based on the maximum accuracy value from the sorted accuracies
+# yolo = cp_results.sort(key=lambda x: max(x[1].values()), reverse=True)
+hc_results.sort(key=lambda x: sum(x[1].values()) / len(x[1].values()), reverse=True)
+
+
+
+# import pdb;pdb.set_trace()
+# def get_predictors_for_cp():
+#   cohort = Cohort.where(id=2)[0]
+  
+#   mpd = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=3)
+#   import pdb; pdb.set_trace()
+#   mpd.gen_scores_for_sensor()
+#   mpn = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=4)
+#   import pdb; pdb.set_trace()
+  
+  
+
+
+
+
+
+# get_predictors_for_cp()
+
+
+import pdb;pdb.set_trace()
+MatrixPlotter.view_and_save_results(hc_results, results_two=cp_results)
+
 # Retrieve all instances of the Trial class
 # all_trials = Task.all()
 
@@ -175,8 +296,6 @@ for tk in tsk:
 snr = Sensor.where(name=SENSOR_CODES)
 dt = Task.dominant()
 
-
-
 dtt = dt[0]
 # print("task", dtt.description)
 snr = Sensor.all()[7]
@@ -192,41 +311,67 @@ mps = []
 
 new_accuracies = []
 
-mps = Predictor.where(multi_predictor_id=1)
 
 
-ring_results = []
-# Iterate through the mpss list
-for mp in mps:
-    # Extracting the classifier accuracies
-    accuracies = mp.get_accuracies()['classifier_accuracies']
-    
-    # Sorting by accuracy in descending order and rounding to three decimal places
-    sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
-    
-    # Append sensor name and its sorted accuracies to the ring_results list
-    ring_results.append((mp.sensor().name, sorted_accuracies))
 
-# Sort ring_results based on the maximum accuracy value from the sorted accuracies
-ring_results.sort(key=lambda x: max(x[1].values()), reverse=True)
+
+
+
+
+
 
 # Create a list to store sensor names and their sorted accuracies
 results = []
 mpss = Predictor.where(multi_predictor_id=2)
+
+
+def make_csv(mpss, task_name):
+    # Create the directories if they do not exist
+    os.makedirs(f'generated_csvs/feature_importances/{task_name}', exist_ok=True)
+    
+    for i, mp in enumerate(mpss):
+        feature_importance_dict = mp.get_feature_importance()
+        
+        df = pd.DataFrame(feature_importance_dict)
+
+        # Write the DataFrame to a CSV file
+        df.to_csv(f'generated_csvs/feature_importances/{task_name}/feature_importance_sensor_{mp.sensor().name}.csv')
+
 import pdb;pdb.set_trace()
-print("Blocks")
-for mp in mpss:
-    mp.retrain_from()
-    print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_accuracies'], mp.get_accuracies()['classifier_metrics'])
-
 print("Rings")
-for mp in mps:
-    mp.retrain_from()
-    print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_accuracies'], mp.get_accuracies()['classifier_metrics'])
+n = 0
+# skip the last one since we already did it...
+for mp in mps[:-1]:  # Iterate through all items except the last one
+    mp.retrain_from(use_shap=True)
+    print(mp.get_accuracies()['classifier_metrics']['ExtraTrees']['Important Features'])
+
+
+print("Blocks")
+# skip the last one since we already did it...
+for mp in mpss[:-1]:
+    mp.retrain_from(use_shap=True)
+    mp.get_feature_importance()
+    # mp.retrain_from(us)
+
+    print(mp.get_accuracies()['classifier_metrics']['ExtraTrees']['Important Features'])
 
 
 
 
+# if n >= 9:
+    #     mp.retrain_from()
+    # n += 1
+
+
+
+
+
+
+# MatrixPlotter.view_and_save_results(results, ring_results)
+
+
+
+mp.retrain_from(use_shap=True)
 
 
 
@@ -293,9 +438,52 @@ for mp in mpss:
     print()
 
 
+def make_averages_csv(mpss, model_name):
+
+    # Loop through the sensors and accumulate the metrics
+    # Initialize a dictionary to hold the sums of all metrics for each model
+    metrics_sum = {}
+    metrics_count = {}
+
+    # Loop through the sensors and accumulate the metrics
+    for mp in mpss:
+        accuracies = mp.get_accuracies()['classifier_accuracies']
+        metrics = mp.get_accuracies()['classifier_metrics']
+        for model, accuracy in accuracies.items():
+            if model not in metrics_sum:
+                metrics_sum[model] = {
+                    'Accuracy': 0,
+                    'AUC-ROC': 0,
+                    'F1-score': 0,
+                    'Log loss': 0,
+                    'Precision': 0,
+                    'Recall': 0,
+                }
+                metrics_count[model] = 0
+            
+            metrics_sum[model]['Accuracy'] += accuracy
+            metrics_sum[model]['AUC-ROC'] += metrics[model]['AUC-ROC']
+            metrics_sum[model]['F1-score'] += metrics[model]['F1-score']
+            metrics_sum[model]['Log loss'] += metrics[model]['Log loss']
+            metrics_sum[model]['Precision'] += metrics[model]['Precision:']
+            metrics_sum[model]['Recall'] += metrics[model]['Recall:']
+            
+            metrics_count[model] += 1
+
+    # Compute the averages
+    metrics_avg = {model: {metric: total / metrics_count[model] for metric, total in metrics.items()} for model, metrics in metrics_sum.items()}
+
+    # Write the averages to a CSV file
+    file_name = model_name + '_averages.csv'
+    with open(file_name, 'w', newline='') as file:
+        writer = csv.writer(file)
+        writer.writerow(['Model', 'Accuracy', 'AUC-ROC', 'F1-score', 'Log loss', 'Precision', 'Recall'])
+        for model, metrics in metrics_avg.items():
+            writer.writerow([model, metrics['Accuracy'], metrics['AUC-ROC'], metrics['F1-score'], metrics['Log loss'], metrics['Precision'], metrics['Recall']])
 
 
-
+make_averages_csv(mpss, "blocks")
+make_averages_csv(mps, "rings")
 
 import pdb;pdb.set_trace()
 
@@ -310,71 +498,71 @@ import pdb;pdb.set_trace()
 
 
 
-# def view_and_save_results(results, results_two=None, task=None):
-#     # Convert the list to a dictionary
-#     results_dict = {sensor: accuracies for sensor, accuracies in results}
-#     if results_two is not None:
-#         results_two_dict = {sensor: accuracies for sensor, accuracies in results_two}
+def view_and_save_results(results, results_two=None, task=None):
+    # Convert the list to a dictionary
+    results_dict = {sensor: accuracies for sensor, accuracies in results}
+    if results_two is not None:
+        results_two_dict = {sensor: accuracies for sensor, accuracies in results_two}
 
-#     # Get all model names
-#     all_models = set()
-#     for accuracies in results_dict.values():
-#         all_models.update(accuracies.keys())
-#     all_models = sorted(list(all_models))
+    # Get all model names
+    all_models = set()
+    for accuracies in results_dict.values():
+        all_models.update(accuracies.keys())
+    all_models = sorted(list(all_models))
 
-#     # Remove unwanted models
-#     unwanted_models = ['LightGBM', 'NaiveBayes']
-#     for model in unwanted_models:
-#         try:
-#             all_models.remove(model)
-#         except ValueError:
-#             pass  # Model not in the list, so simply pass
+    # Remove unwanted models
+    unwanted_models = ['LightGBM', 'NaiveBayes']
+    for model in unwanted_models:
+        try:
+            all_models.remove(model)
+        except ValueError:
+            pass  # Model not in the list, so simply pass
 
-#     # Write to CSV
-#     with open('output.csv', 'w', newline='') as csvfile:
-#         writer = csv.writer(csvfile)
-#         writer.writerow(['Sensor'] + all_models)  # Writing header
+    # Write to CSV
+    with open('output.csv', 'w', newline='') as csvfile:
+        writer = csv.writer(csvfile)
+        writer.writerow(['Sensor'] + all_models)  # Writing header
         
-#         for sensor, accuracies in results_dict.items():
-#             row = [sensor.replace('_x', '')]
-#             for model in all_models:
-#                 row.append(accuracies.get(model, 'N/A'))  # Appending model accuracy, if not found write 'N/A'
-#             writer.writerow(row)
+        for sensor, accuracies in results_dict.items():
+            row = [sensor.replace('_x', '')]
+            for model in all_models:
+                row.append(accuracies.get(model, 'N/A'))  # Appending model accuracy, if not found write 'N/A'
+            writer.writerow(row)
 
-#     # Convert the results into a dataframe for easy plotting
-#     df = pd.DataFrame(columns=['Sensor'] + all_models)
+    # Convert the results into a dataframe for easy plotting
+    df = pd.DataFrame(columns=['Sensor'] + all_models)
 
-#     for sensor, accuracies in results_dict.items():
-#         row = {'Sensor': sensor.replace('_x', '')}
-#         for model in all_models:
-#             row[model] = accuracies.get(model, None)
-#         df = df.append(row, ignore_index=True)
+    for sensor, accuracies in results_dict.items():
+        row = {'Sensor': sensor.replace('_x', '')}
+        for model in all_models:
+            row[model] = accuracies.get(model, None)
+        df = df.append(row, ignore_index=True)
 
-#     # Order columns by their highest score
-#     ordered_columns = ['Sensor'] + df.drop('Sensor', axis=1).max().sort_values(ascending=False).index.tolist()
-#     if results_two is not None:
-#         for sensor, accuracies in results_two_dict.items():
-#             row = {'Sensor': sensor.replace('_x', '')}
-#             for model in all_models:
-#                 row[model] = accuracies.get(model, None)
-#             df = df.append(row, ignore_index=True)
+    # Order columns by their highest score
+    ordered_columns = ['Sensor'] + df.drop('Sensor', axis=1).max().sort_values(ascending=False).index.tolist()
+    if results_two is not None:
+        for sensor, accuracies in results_two_dict.items():
+            row = {'Sensor': sensor.replace('_x', '')}
+            for model in all_models:
+                row[model] = accuracies.get(model, None)
+            df = df.append(row, ignore_index=True)
     
 
-#     df = df[ordered_columns]
+    df = df[ordered_columns]
 
-#     # Heatmap
-#     plt.figure(figsize=(12, 8))
-#     sns.heatmap(df.set_index('Sensor').astype(float), cmap="YlGnBu", annot=True, cbar_kws={'label': 'Accuracy'}, yticklabels=1)
-#     if task is not None and results_two is None:
-#         plt.title(f"Model Accuracies Across Sensors for {task} Task")  # Using provided method to get title
-#     else:
-#         plt.title(f"Model Accuracies Across Sensors")  # Using provided method to get title
+    # Heatmap
+    plt.figure(figsize=(12, 8))
+    sns.heatmap(df.set_index('Sensor').astype(float), cmap="YlGnBu", annot=True, cbar_kws={'label': 'Accuracy'}, yticklabels=1)
+    if task is not None and results_two is None:
+        plt.title(f"Model Accuracies Across Sensors for {task} Task")  # Using provided method to get title
+    else:
+        plt.title(f"Model Accuracies Across Sensors")  # Using provided method to get title
 
-#     plt.xticks(rotation=45)
-#     plt.yticks(rotation=0)  # This ensures that sensor names are horizontal
-#     plt.show()
+    plt.xticks(rotation=45)
+    plt.yticks(rotation=0)  # This ensures that sensor names are horizontal
+    plt.show()
 
-# MatrixPlotter.view_and_save_results(results, ring_results)
+
 
 # import pdb;pdb.set_trace()
 
