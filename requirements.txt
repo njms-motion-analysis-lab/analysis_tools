@@ -10,7 +10,7 @@ cloudpickle
 # contourpy==1.0.7
 cycler
 dask
-dataclasses-json
+# dataclasses-json
 dill
 distributed
 Django
@@ -35,7 +35,7 @@ keras
 kiwisolver
 lazy-object-proxy
 libclang
-libcst
+# libcst
 lightgbm
 llvmlite
 locket
@@ -59,7 +59,7 @@ patsy
 Pillow
 platformdirs
 plotly
-protobuf
+# protobuf
 psutil
 psycopg2-binary
 pyasn1
@@ -67,14 +67,14 @@ pyasn1-modules
 Pygments
 pylint
 pyparsing
-PyQt3D
-PyQt5
+# PyQt3D
+# PyQt5
 PyQt5-sip
-PyQtChart
-PyQtDataVisualization
-PyQtNetworkAuth
-PyQtPurchasing
-PyQtWebEngine
+# PyQtChart
+# PyQtDataVisualization
+# PyQtNetworkAuth
+# PyQtPurchasing
+# PyQtWebEngine
 pyre-check
 pyre-extensions
 python-dateutil
@@ -89,8 +89,8 @@ seaborn
 shap
 sip
 six
-sklearn
-slicer
+# sklearn
+# slicer
 sortedcontainers
 SQLAlchemy
 sqlparse
@@ -100,15 +100,15 @@ tabulate
 tblib
 tenacity
 tensorboard
-tensorboard-data-server
+# tensorboard-data-server
 tensorflow
 tensorflow-estimator
-tensorflow-macos
+# tensorflow-macos
 termcolor
-TestSlide
+# TestSlide
 threadpoolctl
 toml
-tomli
+# tomli
 tomlkit
 toolz
 tornado
@@ -123,4 +123,5 @@ Werkzeug
 wrapt
 xgboost
 zict
-zipp
+# zipp
+
