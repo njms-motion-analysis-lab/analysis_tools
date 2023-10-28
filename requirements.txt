@@ -7,7 +7,7 @@ certifi
 charset-normalizer
 click
 cloudpickle
-contourpy
+contourpy==1.0.7
 cycler
 dask
 dataclasses-json
