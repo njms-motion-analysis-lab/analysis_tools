@@ -9,7 +9,7 @@ from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 class PredictorScore(LegacyBaseModel):
     table_name = "predictor_score"
 
-    def __init__(self, id=None, classifier_name=None, score_type=None, matrix=None, classifier_id=None, predictor_id=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, classifier_name=None, score_type=None, matrix=None, classifier_id=None, predictor_id=None, created_at=None, updated_at=None, multi_predictor_id=None):
         self.id = id
         self.classifier_name = classifier_name
         self.score_type = score_type
@@ -18,6 +18,7 @@ class PredictorScore(LegacyBaseModel):
         self.predictor_id = predictor_id
         self.created_at = created_at
         self.updated_at = updated_at
+        self.multi_predictor_id = multi_predictor_id
 
 
     def set_shap_matrix(self, aggregated_shap_values, combined_X):

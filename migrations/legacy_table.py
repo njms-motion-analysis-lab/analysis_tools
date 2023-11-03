@@ -361,6 +361,7 @@ class Table:
         cls.add_column_if_not_exists('patient', 'cohort_id', 'INTEGER')
         cls.add_column_if_not_exists('predictor', 'cohort_id', 'INTEGER')
         cls.add_column_if_not_exists('multi_predictor', 'cohort_id', 'INTEGER')
+        cls.add_column_if_not_exists('predictor_score', "multi_predictor_id", "INTEGER")
         print("Done!!")
         
 

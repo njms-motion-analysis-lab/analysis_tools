@@ -148,6 +148,61 @@ TOP_MODELS = [
     'DecisionTree'
 ]
 
+def combine_shap_beeswarm(predictor_score1, predictor_score2, title=None):
+    # Retrieve SHAP values and feature data from the first PredictorScore
+    shap_values1, combined_X1_np, combined_X1_cols = predictor_score1.get_matrix("matrix")
+    feature_data1 = pd.DataFrame(combined_X1_np, columns=combined_X1_cols)
+    
+    # Retrieve SHAP values and feature data from the second PredictorScore
+    shap_values2, combined_X2_np, combined_X2_cols = predictor_score2.get_matrix("matrix")
+    feature_data2 = pd.DataFrame(combined_X2_np, columns=combined_X2_cols)
+    
+    # Intersect the feature names to find common features
+    common_features = feature_data1.columns.intersection(feature_data2.columns)
+    
+    # Filter the SHAP values and feature data to only include the common features
+    filtered_shap_values1 = shap_values1[:, feature_data1.columns.isin(common_features)]
+    filtered_shap_values2 = shap_values2[:, feature_data2.columns.isin(common_features)]
+    filtered_combined_X1 = feature_data1[common_features].values
+    filtered_combined_X2 = feature_data2[common_features].values
+    
+    # Concatenate the SHAP values and feature values vertically
+    combined_shap_values = np.vstack([filtered_shap_values1, filtered_shap_values2])
+    combined_features = np.vstack([filtered_combined_X1, filtered_combined_X2])
+    
+    # Create an Explanation object with the concatenated values
+    combined_explanation = shap.Explanation(values=combined_shap_values,
+                                            data=combined_features,
+                                            feature_names=common_features.tolist())
+
+    # Verify that the feature names are the same for both tasks
+    # if not all(feature_names1 == feature_names2):
+    #     raise ValueError("The feature names between the tasks do not match.")
+
+    # Concatenate the SHAP values and feature data for both tasks
+    # combined_shap_values = np.vstack((shap_values1, shap_values2))
+    # combined_feature_data = np.vstack((feature_data1, feature_data2))
+    # combined_explanation = shap.Explanation(values=combined_shap_values, data=combined_feature_data, feature_names=feature_names1)
+    
+    # Create the directory if it doesn't exist
+    directory_path = "generated_pngs/shap_beeswarm/"
+    if not os.path.exists(directory_path):
+        os.makedirs(directory_path)
+
+    # Construct the filename from the provided title
+    filename = os.path.join(directory_path, (title or "combined_beeswarm").replace(" ", "_") + ".png")
+
+    # Create the beeswarm plot
+    plt.figure()
+    shap.plots.beeswarm(combined_explanation, show=False)
+    
+    # Save the figure
+    plt.savefig(filename, bbox_inches='tight')
+    plt.close()
+    
+    # Return the filename of the saved plot for reference
+    return filename
+
 def view_shap_values():
     # get cohort
     cohort_one = Cohort.where(id=1)[0]
@@ -155,6 +210,7 @@ def view_shap_values():
     # get prediction sets
     mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id)
     print(len(mps_pred_sets))
+    import pdb;pdb.set_trace()
 
     for mps in mps_pred_sets:
         preds = mps.get_predictors()
@@ -172,10 +228,78 @@ def view_shap_values():
 
             print(pred.get_accuracies()['classifier_metrics'])
 
+def gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_names):
+    """
+    Gathers PredictorScores for specified tasks, sensor, and classifiers.
+    
+    Parameters:
+    - task_descriptions: list of task descriptions to filter tasks
+    - sensor_name: the name of the sensor to filter predictors
+    - classifier_names: list of classifier names to filter PredictorScores
+    
+    Returns:
+    A dictionary where keys are task descriptions and values are lists of PredictorScore objects.
+    """
+    # Gather PredictorScores by tasks
+    predictor_scores_by_task = {task_desc: [] for task_desc in task_descriptions}
+    relevant_pred_tasks = []
+
+    # get cohort
+    cohort_one = Cohort.where(id=1)[0]
+
+    # get prediction sets
+    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id)
+
+    for mps in mps_pred_sets:
+        preds = mps.get_predictors()
+        for pred in preds:
+            
+            if pred.sensor().name != sensor_name:
+                continue  # Skip predictors not matching the sensor name
+            
+            scores = pred.get_predictor_scores_by_classifier_names(classifier_names)
+
+            for score in scores:
+                t_name = pred.task().description
+                print(t_name)
+                if t_name in task_descriptions:
+                    print("yolo")
+                    relevant_pred_tasks.append(pred)
+                    predictor_scores_by_task[t_name].append(score)
+
+    # Remove any tasks that did not have scores collected
+    mps.combo_train(relevant_pred_tasks[0], relevant_pred_tasks[1], 'RandomForest')
+    predictor_scores_by_task = {k: v for k, v in predictor_scores_by_task.items() if v}
+    
+    
+    return predictor_scores_by_task
+
+# Define the tasks, sensor, and classifier names you are interested in
+task_descriptions = ['Block_dominant', 'Rings_dominant']
+sensor_name = 'rsho_x'
+classifier_names = ['RandomForest']  # Your TOP_MODELS list
+
+# Gather the PredictorScores
+scores_by_task = gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_names)
+
+
+
+# Assuming you want to combine Task 1 and Task 2
+# if 'Task 1 Description' in scores_by_task and 'Task 2 Description' in scores_by_task:
+for classifier_name in classifier_names:
+    # Filter scores by classifier name
+    task1_scores = [score for score in scores_by_task['Block_dominant'] if score.classifier_name == classifier_name]
+    task2_scores = [score for score in scores_by_task['Rings_dominant'] if score.classifier_name == classifier_name]
+
+    # Combine and plot if there are scores for both tasks for the classifier
+    if task1_scores and task2_scores:
+        # Use the first score for each task (assuming only one score per task-classifier combo)
+        combined_plot_filename = combine_shap_beeswarm(task1_scores[0], task2_scores[0], title=f"{classifier_name} {sensor_name} Combined Tasks")
+        print(f"Combined SHAP beeswarm plot saved as {combined_plot_filename}")
+
 
 view_shap_values()
 
-import pdb;pdb.set_trace()
 
 
             

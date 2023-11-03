@@ -307,7 +307,8 @@ class Predictor(LegacyBaseModel):
 
         if self.non_norm == 1:
             # self.update(aggregated_stats_non_normed = self.aggregated_stats)
-            self.save()
+            if force_load == True:
+                self.save()
             if self.aggregated_stats_non_normed is None or force_load == True:
                 print("generating non normed agg df...")
                 stats = memoryview(pickle.dumps(gen_df()))
@@ -501,7 +502,12 @@ class Predictor(LegacyBaseModel):
     def retrain_from(self, obj=None, use_shap=False, force_load=False):   
         if obj is None:
             obj = self
-        # get df
+        bdf, y = self.get_final_bdf(force_load=force_load)
+
+        self.fit_multi_models(bdf, y, use_shap)
+        print("Done retraining!")
+    
+    def get_final_bdf(self, force_load=False):
         bdf = self.get_df(force_load=force_load)
         bdf = self.get_bdf(holdout=False)
 
@@ -511,9 +517,9 @@ class Predictor(LegacyBaseModel):
         bdf = self.clean_bdf(bdf) 
         bdf = self.trim_bdf(bdf)
         bdf['is_dominant'] = is_dominant
+        return [bdf, y]
 
-        self.fit_multi_models(bdf, y, use_shap)
-        print("Done retraining!")
+        
 
     def clean_data(self, df):
         """
@@ -724,7 +730,111 @@ class Predictor(LegacyBaseModel):
 
         return classifiers
 
-    def _fix_odd_test_set(self, X_train, y_train, X_test, y_test):
+    @classmethod
+    def is_supported_by_tree_explainer(cls, classifier_name):
+        # ... your implementation ...
+        pass
+
+    @classmethod
+    def define_classifiers_cls(cls, use_shap_compatible, use_mini_params, classifier_name=None):
+        if use_mini_params:
+            classifiers = cls.MINI_PARAMS
+        else:         
+            classifiers = {
+                'KNN': {
+                    'classifier': KNeighborsClassifier(),
+                    'param_grid': {
+                        'classifier__n_neighbors': range(5, 15),
+                        'classifier__weights': ['uniform', 'distance'],
+                        'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+                    }
+                },
+                'RandomForest': {
+                    'classifier': RandomForestClassifier(),
+                    'param_grid': {
+                        'classifier__n_estimators': [30, 50, 75, 125, 175],
+                        'classifier__max_depth': [2, 3, 4],
+                        'classifier__min_samples_split': [1, 2, 4, 6],
+                        'classifier__min_samples_leaf': [1, 2, 3, 4, 5]
+                    }
+                },
+                'LogisticRegression': {
+                    'classifier': LogisticRegression(max_iter=10000, solver='liblinear'),
+                    'param_grid': {
+                        'classifier__C': [.005, 0.01, 0.05, 0.1, 1, 10],
+                        'classifier__penalty': ['l1', 'l2'],
+                        'classifier__solver': ['liblinear', 'saga']
+                    }
+                },
+                'XGBoost': {
+                    'classifier': XGBClassifier(),
+                    'param_grid': {
+                        'classifier__learning_rate': [0.005, 0.01, 0.03, 0.05, 0.1],
+                        'classifier__n_estimators': [25, 50, 75, 90, 100],
+                        'classifier__max_depth': [1, 2, 3, 4, 5]
+                    }
+                },
+                'CatBoost': {
+                    'classifier': CatBoostClassifier(verbose=0),
+                    'param_grid': {
+                        'classifier__learning_rate': [0.01, 0.03, 0.05, 0.1],
+                        'classifier__iterations': [250, 500, 1000],
+                        'classifier__depth': [4, 6, 8, 10]
+                    }
+                },
+                'SVM': {
+                    'classifier': SVC(probability=True),
+                    'param_grid': {
+                        'classifier__C': [0.05, 0.1, 1, 10],
+                        'classifier__gamma': ['scale', 'auto', 0.1, 1, 10, 100],
+                        'classifier__kernel': ['linear', 'poly']
+                    }
+                },
+                'AdaBoost': {
+                    'classifier': AdaBoostClassifier(),
+                    'param_grid': {
+                        'classifier__n_estimators': [30, 50, 75, 100, 125],
+                        'classifier__learning_rate': [0.001, 0.01, 0.05, 0.1]
+                    }
+                },
+                'ExtraTrees': {
+                    'classifier': ExtraTreesClassifier(),
+                    'param_grid': {
+                        'classifier__n_estimators': [75, 100, 125, 150, 175],
+                        'classifier__max_depth': [3, 4, 6, 8, 10],
+                        'classifier__min_samples_split': [2, 4, 6, 8],
+                        'classifier__min_samples_leaf': [1, 2, 3, 4, 5]
+                    }
+                },
+                'GradientBoosting': {
+                    'classifier': GradientBoostingClassifier(),
+                    'param_grid': {
+                        'classifier__learning_rate': [.0005, 0.001, 0.01, 0.03, 0.05],
+                        'classifier__n_estimators': [30, 50, 75, 90, 100],
+                        'classifier__max_depth': [1, 2, 3, 4, 5]
+                    }
+                },
+                'DecisionTree': {
+                    'classifier': DecisionTreeClassifier(),
+                    'param_grid': {
+                        'classifier__max_depth': range(1, 12),
+                        'classifier__min_samples_split': range(6, 21, 2),
+                        'classifier__min_samples_leaf': range(1, 11),
+                        'classifier__max_features': ['sqrt', 'log2', None]
+                    }
+                },
+            }
+        
+        if use_shap_compatible:
+            classifiers = {k: v for k, v in classifiers.items() if cls.is_supported_by_tree_explainer(k)}
+
+        if classifier_name:
+            return classifiers.get(classifier_name, None)
+
+        return classifiers
+
+    @classmethod
+    def _fix_odd_test_set(cls, X_train, y_train, X_test, y_test):
         """Ensure that the test set has an even size."""
         if len(X_test) % 2 != 0:
             # Count the occurrence of each patient in the test set
@@ -791,7 +901,7 @@ class Predictor(LegacyBaseModel):
             y_test = y_test.reset_index(drop=True)
 
             if round_set_size:
-                X_train, y_train, X_test, y_test = self._fix_odd_test_set(X_train, y_train, X_test, y_test)
+                X_train, y_train, X_test, y_test = self.cls._fix_odd_test_set(X_train, y_train, X_test, y_test)
             grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
             grid_search.fit(X_train, y_train)
 
@@ -1114,3 +1224,147 @@ class Predictor(LegacyBaseModel):
                 print(f"Warning: 'Important Features' not found for classifier {classifier}")
         
         return feature_importance
+
+    @classmethod
+    def _train_from_mp(cls, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=True, mps=None):
+        # Training of a specific classifier
+        classifier = classifier_data['classifier']
+        pipe = Pipeline(steps=[('classifier', classifier)])
+        param_grid_classifier = classifier_data['param_grid']
+        classifier_scores, accuracy_scores, precision_scores, recall_scores = [], [], [], []
+        f1_scores, auc_roc_scores, log_loss_scores, confusion_matrices, all_importance_dfs = [], [], [], [], []
+
+        all_X = []
+        combined_shap_values = []
+
+
+        if len(bdf.index) < MINIMUM_SAMPLE_SIZE:
+            splitter = LeaveOneOut()
+            split = splitter.split(bdf, y)
+            round_set_size = False
+
+        else:
+            splitter = StratifiedKFold(n_splits=5)
+            split = splitter.split(bdf, y, groups)
+            round_set_size = True
+        
+        
+        
+        for train_index, test_index in split:
+            X_train, X_test = bdf.iloc[train_index].drop('is_dominant', axis=1), bdf.iloc[test_index].drop('is_dominant', axis=1)
+            y_train, y_test = y[train_index], y[test_index]
+
+            # Convert y_train and y_test to pandas Series
+            y_train, y_test = pd.Series(y_train, index=train_index), pd.Series(y_test, index=test_index)
+
+            X_train = X_train.reset_index(drop=True)
+            y_train = y_train.reset_index(drop=True)
+            X_test = X_test.reset_index(drop=True)
+            y_test = y_test.reset_index(drop=True)
+
+            if round_set_size:
+                X_train, y_train, X_test, y_test = cls._fix_odd_test_set(X_train, y_train, X_test, y_test)
+            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
+            grid_search.fit(X_train, y_train)
+
+            best_classifier = grid_search.best_estimator_.named_steps['classifier']
+            if use_shap is True:
+                explainer = shap.TreeExplainer(best_classifier)
+                shap_values = explainer.shap_values(X_train)
+                if isinstance(shap_values, list):  # If there are multiple classes
+                    # Here I'm taking only the SHAP values for class 1, which is typical for binary classification.
+                    # If you have a multi-class problem, this needs to be adjusted.
+                    shap_values = shap_values[1]
+                combined_shap_values.append(shap_values)
+                all_X.append(X_train)
+
+
+            if hasattr(classifier, 'feature_importances_'):
+                feature_importances = grid_search.best_estimator_.named_steps['classifier'].feature_importances_
+                importance_df = pd.DataFrame({
+                    'Feature': X_train.columns,
+                    'Importance': feature_importances
+                })
+
+                # Append this dataframe to the list
+                all_importance_dfs.append(importance_df)
+
+                # Your existing code remains here...
+            else:
+                print(f"{type(classifier).__name__} doesn't have feature_importances_ attribute.")
+
+
+            train_accuracy = grid_search.score(X_train, y_train)
+            print("Training accuracy...", train_accuracy)
+            current_best_score = grid_search.best_score_
+            current_best_params = grid_search.best_params_
+            print("Current best score:", current_best_score)
+            print("Current best params:", current_best_params)
+
+            # Compute metrics
+
+            y_pred = grid_search.predict(X_test)
+            y_pred_proba = grid_search.predict_proba(X_test)[:, 1]
+            
+            confusion_matrices.append(confusion_matrix(y_test, y_pred))
+            accuracy_scores.append(metrics.accuracy_score(y_test, y_pred))
+            precision_scores.append(metrics.precision_score(y_test, y_pred, average='weighted'))
+            recall_scores.append(metrics.recall_score(y_test, y_pred, average='weighted'))
+            f1_scores.append(metrics.f1_score(y_test, y_pred, average='weighted'))
+            if len(np.unique(y_test)) > 1:
+                auc_roc_scores.append(metrics.roc_auc_score(y_test, y_pred_proba))
+                log_loss_scores.append(metrics.log_loss(y_test, y_pred_proba))
+
+            classifier_scores.append(current_best_score)
+
+        average_score = np.mean(classifier_scores)
+
+        if use_shap is True:
+            aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
+            combined_X = pd.concat(all_X, axis=0).reset_index(drop=True)
+            # TODO: obvi fix id thing.
+            cpc = PredictorScore.find_or_create(classifier_name=classifier_name,score_type="MultiShapleySummary", multi_predictor_id=mps.id)
+            import pdb; pdb.set_trace()
+            cpc.set_shap_matrix(aggregated_shap_values=aggregated_shap_values, combined_X=combined_X)
+        
+        average_accuracy_scores = np.mean(accuracy_scores)
+        average_precision_scores = np.mean(precision_scores)
+        print("Test accuracy...", average_accuracy_scores)
+        average_recall_scores = np.mean(recall_scores)
+        average_f1_scores = np.mean(f1_scores)
+        average_auc_roc_scores = np.mean(auc_roc_scores)
+        average_log_loss_scores = np.mean(log_loss_scores)
+
+
+        extra_metrics = {}
+        # try different value here, interactions of different features
+        # may be non linear relationship between features, not sure if this is the case for diff iterations
+        # try running this a bunch of times
+        if hasattr(classifier, 'feature_importances_'):
+            # After the loop over the K-Folds is completed (outside the loop):
+            # Concatenate all importance dataframes
+            all_importance_concat = pd.concat(all_importance_dfs)
+            # Group by Feature and compute median
+            median_importance = all_importance_concat.groupby('Feature').median().reset_index()
+
+            # Get the top 5 features with highest median importance
+            top_5_median_features_df = median_importance.nlargest(5, 'Importance')
+            # Convert the dataframe to a dictionary for storage
+            top_5_median_features = dict(zip(top_5_median_features_df['Feature'], top_5_median_features_df['Importance']))
+            print(top_5_median_features)
+
+        else: 
+            top_5_median_features = {}
+        extra_metrics["Important Features"] = top_5_median_features
+        extra_metrics["Accuracy:"] = average_accuracy_scores
+        extra_metrics["Precision:"] = average_precision_scores
+        extra_metrics["Recall:"] = average_recall_scores
+        extra_metrics["F1-score"] = average_f1_scores
+        extra_metrics["AUC-ROC"] = average_auc_roc_scores
+        extra_metrics["Log loss"] = average_log_loss_scores
+
+        scores[classifier_name] = average_score
+        params[classifier_name] = current_best_params
+        acc_metrics[classifier_name] = extra_metrics
+        log_loss_scores
+        return classifier_scores, grid_search.best_params_, extra_metrics, scores, params, acc_metrics

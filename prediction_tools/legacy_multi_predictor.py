@@ -78,5 +78,49 @@ class MultiPredictor(LegacyBaseModel):
         with open('items.pickle', 'wb') as handle:
             pickle.dump(self.items, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("done!")
-   
-    
+
+    @classmethod
+    def combo_train(self, pred_1, pred_2, classifier_name):
+        print('umm,')
+        df1 , y1 = pred_1.get_final_bdf()
+        df2 , y2 = pred_1.get_final_bdf()
+        combo_df= MultiPredictor().create_composite_dataframe(df1, df2)
+        print('start')
+        classifier_accuracies, classifier_params, classifier_metrics = {}, {}, {}
+        print("hey")
+        classifiers = Predictor.define_classifiers_cls(False, False, classifier_name=classifier_name)
+        groups = combo_df['patient']
+        scores = {}
+        params = {}
+        acc_metrics = {}
+        # Check to make sure classifiers is a dictionary
+        if classifiers is not None:
+            if 'classifier' in classifiers and 'param_grid' in classifiers:
+                # We have a single classifier's configuration, not a dictionary of classifiers
+                classifier_data = classifiers  # The current dictionary is actually the data
+                classifier_name = classifier_name
+                scores = {}
+                params = {}
+                acc_metrics = {}
+                import pdb; pdb.set_trace()
+                classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = Predictor._train_from_mp(combo_df, y1, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=True, mps=self)
+            # Existing code where you use the loop
+        else:
+            
+            print('yo')
+
+
+        
+
+
+
+    @classmethod
+    def create_composite_dataframe(cls, df1, df2):
+        # First, ensure that the 'patient' and 'is_dominant' columns are of the same data type in both DataFrames
+        df1['patient'] = df1['patient'].astype(int)
+        df1['is_dominant'] = df1['is_dominant'].astype(int)
+        df2['patient'] = df2['patient'].astype(int)
+        df2['is_dominant'] = df2['is_dominant'].astype(int)
+
+        # Perform an inner join on 'patient' and 'is_dominant' columns
+        return pd.merge(df1, df2, on=['patient', 'is_dominant'], suffixes=('_task1', '_task2'))

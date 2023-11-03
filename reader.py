@@ -56,3 +56,8 @@ i2 = Interview("resident_two.txt")
 
 
 import pdb;pdb.set_trace()
+
+# if language is not first language 
+# check incomplete sent.
+# need information of context
+# confirm tues
