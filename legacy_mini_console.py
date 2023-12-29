@@ -1,18 +1,11 @@
-# pr = MultiPredictor.all()[0].get_predictors()[0]# import sqlite3
-# from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-
-# from migrations.legacy_table import Table as LegacyTable
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
+from migrations.legacy_table import Table as LegacyTable
 import csv
-import pdb
 import shap
 import re
 import pandas as pd
 from models.legacy_task import Task
-
-# from models.legacy_gradient_set import GradientSet
-# from models.legacy_sensor import Sensor
 import os
-
 from models.legacy_patient_task import PatientTask
 from models.legacy_patient import Patient
 from models.legacy_gradient_set import GradientSet
@@ -23,12 +16,18 @@ from models.legacy_sensor import Sensor
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from models.legacy_cohort import Cohort
 from sklearn.ensemble import RandomForestClassifier
-# from viewers.shape_rotator import ShapeRotator
+from viewers.shape_rotator import ShapeRotator
 from viewers.matrix_plotter import MatrixPlotter
+from prediction_tools.predictor_score import PredictorScore
 import seaborn as sns
 import matplotlib.pyplot as plt
+from prediction_tools.legacy_predictor import Predictor
+from models.legacy_task import Task
+from models.legacy_sensor import Sensor
+from migrations.legacy_table import Table
+from models.legacy_task import Task
+from models.legacy_trial import Trial
 from prediction_tools.legacy_multi_predictor import MultiPredictor
-# import pdb;pdb.set_trace()
 allowed = [
     "lwra_x",
     "lwrb_x",
@@ -74,79 +73,35 @@ allowed = [
     'lfin_z',
 ]
 
+TOP_MODELS = ['RandomForest', 'ExtraTrees', 'DecisionTree']  # Your TOP_MODELS list
+classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree']  # Your TOP_MODELS list
 
-all_patients = Patient.all()
-# for patient in all_patients:
-#     patient.delete_duplicate_trials()
 
-from models.legacy_trial import Trial
 
-# def replace_axis_labels(directory):
-#     for filename in os.listdir(directory):
-#         if filename.endswith(".png"):
-#             filepath = os.path.join(directory, filename)
+
+
+def replace_axis_labels(directory):
+    for filename in os.listdir(directory):
+        if filename.endswith(".png"):
+            filepath = os.path.join(directory, filename)
             
-#             # Read the current title
-#             with open(filepath, "rb") as file:
-#                 content = file.read()
-#                 title_start = content.find(b"tEXtTitle")
-#                 title_end = content.find(b"\x00", title_start)
-#                 title = content[title_start+9:title_end].decode("latin-1")
+            # Read the current title
+            with open(filepath, "rb") as file:
+                content = file.read()
+                title_start = content.find(b"tEXtTitle")
+                title_end = content.find(b"\x00", title_start)
+                title = content[title_start+9:title_end].decode("latin-1")
             
-#             # Replace the axis portion of the title
-#             new_title = title.replace("x", "x (anterior-posterior)").replace("y", "y (medial-lateral)").replace("z", "z (superior-inferior)")
+            # Replace the axis portion of the title
+            new_title = title.replace("x", "x (anterior-posterior)").replace("y", "y (medial-lateral)").replace("z", "z (superior-inferior)")
             
-#             # Modify the title in the PNG file
-#             modified_content = content[:title_start+9] + new_title.encode("latin-1") + content[title_end:]
+            # Modify the title in the PNG file
+            modified_content = content[:title_start+9] + new_title.encode("latin-1") + content[title_end:]
             
-#             # Save the modified PNG file
-#             with open(filepath, "wb") as file:
-#                 file.write(modified_content)
+            # Save the modified PNG file
+            with open(filepath, "wb") as file:
+                file.write(modified_content)
 
-
-
-# dir = 'parallel_plots/grad_data__kurtosis'
-# replace_axis_labels(dir)
-
-
-
-
-    
-
-
-from prediction_tools.legacy_predictor import Predictor
-from models.legacy_task import Task
-from models.legacy_sensor import Sensor
-
-
-# LegacyTable.update_tables()
-from migrations.legacy_table import Table
-
-
-from models.legacy_task import Task
-
-
-
-cohort = Cohort.where(id=2)[0]
-
-t = Task.get(id=3)
-
-
-# Task.gen_all_stats_csv(abs_val=False, non_normed=True, cohort=cohort)
-
-cp_results = []
-# Iterate through the mpss list
-mps = Predictor.where(multi_predictor_id=3)
-cohort = Cohort.where(id=2)[0]
-cohort_one = Cohort.where(id=1)[0]
-cohort_one = Cohort.where(id=1)[0]
-
-
-TOP_MODELS = [
-    'RandomForest',
-    'ExtraTrees',
-    'DecisionTree'
-]
 
 def combine_shap_beeswarm(predictor_score1, predictor_score2, title=None):
     # Retrieve SHAP values and feature data from the first PredictorScore
@@ -203,30 +158,28 @@ def combine_shap_beeswarm(predictor_score1, predictor_score2, title=None):
     # Return the filename of the saved plot for reference
     return filename
 
-def view_shap_values():
+
+def view_shap_values(abs_val=False):
     # get cohort
     cohort_one = Cohort.where(id=1)[0]
 
-    # get prediction sets
-    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id)
+    # get block dom prediction sets
+    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id, task_id=3, model="default")
     print(len(mps_pred_sets))
-    import pdb;pdb.set_trace()
-
     for mps in mps_pred_sets:
-        preds = mps.get_predictors()
+        preds = mps.get_predictors(abs_val=abs_val)
         print(preds[0].get_accuracies())
         for pred in preds:
-            
             scores = pred.get_predictor_scores_by_classifier_names(TOP_MODELS)
-
             for score in scores:
                 s_name = pred.sensor().name
                 m_name = score.classifier_name
                 t_name = pred.task().description
                 plt_title = t_name + " " + s_name + " " + m_name
-                score.view_shap_heatmap(title=plt_title)
+                score.view_shap_heatmap(title=plt_title, abs_val=abs_val)
 
             print(pred.get_accuracies()['classifier_metrics'])
+
 
 def gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_names):
     """
@@ -245,13 +198,13 @@ def gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_n
     relevant_pred_tasks = []
 
     # get cohort
-    cohort_one = Cohort.where(id=1)[0]
+    cohort_two = Cohort.where(id=2)[0]
 
     # get prediction sets
-    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_one.id)
+    mps_pred_sets = MultiPredictor.where(cohort_id=cohort_two.id)
 
     for mps in mps_pred_sets:
-        preds = mps.get_predictors()
+        preds = mps.get_predictors(abs_val=True)
         for pred in preds:
             
             if pred.sensor().name != sensor_name:
@@ -261,9 +214,7 @@ def gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_n
 
             for score in scores:
                 t_name = pred.task().description
-                print(t_name)
                 if t_name in task_descriptions:
-                    print("yolo")
                     relevant_pred_tasks.append(pred)
                     predictor_scores_by_task[t_name].append(score)
 
@@ -273,180 +224,6 @@ def gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_n
     
     
     return predictor_scores_by_task
-
-# Define the tasks, sensor, and classifier names you are interested in
-task_descriptions = ['Block_dominant', 'Rings_dominant']
-sensor_name = 'rsho_x'
-classifier_names = ['RandomForest']  # Your TOP_MODELS list
-
-# Gather the PredictorScores
-scores_by_task = gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_names)
-
-
-
-# Assuming you want to combine Task 1 and Task 2
-# if 'Task 1 Description' in scores_by_task and 'Task 2 Description' in scores_by_task:
-for classifier_name in classifier_names:
-    # Filter scores by classifier name
-    task1_scores = [score for score in scores_by_task['Block_dominant'] if score.classifier_name == classifier_name]
-    task2_scores = [score for score in scores_by_task['Rings_dominant'] if score.classifier_name == classifier_name]
-
-    # Combine and plot if there are scores for both tasks for the classifier
-    if task1_scores and task2_scores:
-        # Use the first score for each task (assuming only one score per task-classifier combo)
-        combined_plot_filename = combine_shap_beeswarm(task1_scores[0], task2_scores[0], title=f"{classifier_name} {sensor_name} Combined Tasks")
-        print(f"Combined SHAP beeswarm plot saved as {combined_plot_filename}")
-
-
-view_shap_values()
-
-
-
-            
-
-
-mpd = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=3)
-mpdd = MultiPredictor.find_or_create(cohort_id=cohort_one.id, task_id=3)
-mps = Predictor.where(multi_predictor_id=mpd.id)
-mpss = Predictor.where(multi_predictor_id=mpdd.id)
-
-for mp in mps:
-    # Extracting the classifier accuracies
-    if mp.get_accuracies() != {}:
-        accuracies = mp.get_accuracies()['classifier_accuracies']
-        
-        # Sorting by accuracy in descending order and rounding to three decimal places
-        sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
-        
-        # Append sensor name and its sorted accuracies to the ring_results list
-        cp_results.append((mp.sensor().name, sorted_accuracies))
-
-cp_results.sort(key=lambda x: sum(x[1].values()) / len(x[1].values()), reverse=True)
-hc_results = []
-for mp in mpss:
-    # Extracting the classifier accuracies
-    if mp.get_accuracies() != {}:
-        accuracies = mp.get_accuracies()['classifier_accuracies']
-        
-        # Sorting by accuracy in descending order and rounding to three decimal places
-        sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
-        
-        # Append sensor name and its sorted accuracies to the ring_results list
-        hc_results.append((mp.sensor().name, sorted_accuracies))
-
-# Sort ring_results based on the maximum accuracy value from the sorted accuracies
-# yolo = cp_results.sort(key=lambda x: max(x[1].values()), reverse=True)
-hc_results.sort(key=lambda x: sum(x[1].values()) / len(x[1].values()), reverse=True)
-
-
-
-# import pdb;pdb.set_trace()
-# def get_predictors_for_cp():
-#   cohort = Cohort.where(id=2)[0]
-  
-#   mpd = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=3)
-#   import pdb; pdb.set_trace()
-#   mpd.gen_scores_for_sensor()
-#   mpn = MultiPredictor.find_or_create(cohort_id=cohort.id, task_id=4)
-#   import pdb; pdb.set_trace()
-  
-  
-
-
-
-
-
-# get_predictors_for_cp()
-
-
-import pdb;pdb.set_trace()
-MatrixPlotter.view_and_save_results(hc_results, results_two=cp_results)
-
-# Retrieve all instances of the Trial class
-# all_trials = Task.all()
-
-# Iterate through each trial instance
-# for task in all_trials:
-#     if "Dominant" in task.description and "Nondominant" not in task.description:
-#         task.update(is_dominant=True)
-#     if "Nondominant" in task.description or "nondominant" in task.description:
-#         task.update(is_dominant=False)
-#     if "dominant" in task.description and "nondominant" not in task.description:
-#         task.update(is_dominant=True)
-
-#     for trial in task.trials():
-#         trial.update(is_dominant=task.is_dominant)
-
-print("done")
-
-
-
-snr = Sensor.all()
-
-
-
-
-
-SENSOR_CODES = [
-    'rbhd_x',
-    'relb_x',
-    'relbm_x',
-    'rfhd_x',
-    'rfin_x',
-    'rfrm_x',
-    'rsho_x',
-    'rupa_x',
-    'rwra_x',
-    'rwrb_x',
-]
-
-from constants import ALLOWED_SENSORS
-
-
-tsk = Task.dominant()
-dom_tsks = []
-
-for tk in tsk:
-    if 'Ring'.lower() in tk.description.lower() or 'Block'.lower() in tk.description.lower():
-        dom_tsks.append(tk)
- 
-
-# for tkk in dom_tsks:
-#     for sn in Sensor.where(name=ALLOWED_SENSORS):
-#         print(sn.name, tkk.description, len(tkk.get_gradient_sets_for_sensor(sn)))
-
-
-
-snr = Sensor.where(name=SENSOR_CODES)
-dt = Task.dominant()
-
-dtt = dt[0]
-# print("task", dtt.description)
-snr = Sensor.all()[7]
-# print("sensor:", snr.name)
-
-
-
-sens = Sensor.all()
-sss = Sensor.where(axis='x', side='right')
-# for sen in sss:
-#     print(sen.name)
-mps = []
-
-new_accuracies = []
-
-
-
-
-
-
-
-
-
-
-# Create a list to store sensor names and their sorted accuracies
-results = []
-mpss = Predictor.where(multi_predictor_id=2)
 
 
 def make_csv(mpss, task_name):
@@ -460,166 +237,6 @@ def make_csv(mpss, task_name):
 
         # Write the DataFrame to a CSV file
         df.to_csv(f'generated_csvs/feature_importances/{task_name}/feature_importance_sensor_{mp.sensor().name}.csv')
-
-import pdb;pdb.set_trace()
-print("Rings")
-n = 0
-# skip the last one since we already did it...
-for mp in mps[:-1]:  # Iterate through all items except the last one
-    mp.retrain_from(use_shap=True)
-    print(mp.get_accuracies()['classifier_metrics']['ExtraTrees']['Important Features'])
-
-
-print("Blocks")
-# skip the last one since we already did it...
-for mp in mpss[:-1]:
-    mp.retrain_from(use_shap=True)
-    mp.get_feature_importance()
-    # mp.retrain_from(us)
-
-    print(mp.get_accuracies()['classifier_metrics']['ExtraTrees']['Important Features'])
-
-
-
-
-# if n >= 9:
-    #     mp.retrain_from()
-    # n += 1
-
-
-
-
-
-
-# MatrixPlotter.view_and_save_results(results, ring_results)
-
-
-
-mp.retrain_from(use_shap=True)
-
-
-
-# mpss[9].retrain_from()
-# MatrixPlotter.plot_matrices(mps, 'LogisticRegression')
-# MatrixPlotter.plot_matrices(mpss, 'LogisticRegression')
-
-# MatrixPlotter.plot_matrices(mps, 'RandomForest')
-# MatrixPlotter.plot_matrices(mps, 'DecisionTree')
-# MatrixPlotter.plot_matrices(mps, 'ExtraTrees')
-
-
-# MatrixPlotter.plot_matrices(mpss, 'RandomForest')
-# MatrixPlotter.plot_matrices(mpss, 'DecisionTree')
-# MatrixPlotter.plot_matrices(mpss, 'ExtraTrees')
-
-
-
-# Iterate through the mpss list
-for mp in mpss:
-    # Extracting the classifier accuracies
-    accuracies = mp.get_accuracies()['classifier_accuracies']
-    
-    # Sorting by accuracy in descending order and rounding to three decimal places
-    sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
-    
-    # Append sensor name and its sorted accuracies to the results list
-    results.append((mp.sensor().name, sorted_accuracies))
-
-# Sort results based on the maximum accuracy value from the sorted accuracies
-results.sort(key=lambda x: max(x[1].values()), reverse=True)
-# Print the sorted results
-for sensor_name, accuracies in results:
-    print(sensor_name, accuracies)
-
-print("block results")
-for sensor_name, accuracies in results:
-    print(sensor_name, accuracies)
-
-# Print the sorted ring_results
-print("ring results")
-for sensor_name, accuracies in ring_results:
-    print(sensor_name, accuracies)
-
-
-
-
-
-
-
-
-import pdb;pdb.set_trace()
-
-
-print("Rings")
-for mp in mps:
-    print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_accuracies'], mp.get_accuracies()['classifier_metrics'])
-    print()
-    
-
-print("Blocks")
-for mp in mpss:
-    print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_accuracies'], mp.get_accuracies()['classifier_metrics'])
-    print()
-
-
-def make_averages_csv(mpss, model_name):
-
-    # Loop through the sensors and accumulate the metrics
-    # Initialize a dictionary to hold the sums of all metrics for each model
-    metrics_sum = {}
-    metrics_count = {}
-
-    # Loop through the sensors and accumulate the metrics
-    for mp in mpss:
-        accuracies = mp.get_accuracies()['classifier_accuracies']
-        metrics = mp.get_accuracies()['classifier_metrics']
-        for model, accuracy in accuracies.items():
-            if model not in metrics_sum:
-                metrics_sum[model] = {
-                    'Accuracy': 0,
-                    'AUC-ROC': 0,
-                    'F1-score': 0,
-                    'Log loss': 0,
-                    'Precision': 0,
-                    'Recall': 0,
-                }
-                metrics_count[model] = 0
-            
-            metrics_sum[model]['Accuracy'] += accuracy
-            metrics_sum[model]['AUC-ROC'] += metrics[model]['AUC-ROC']
-            metrics_sum[model]['F1-score'] += metrics[model]['F1-score']
-            metrics_sum[model]['Log loss'] += metrics[model]['Log loss']
-            metrics_sum[model]['Precision'] += metrics[model]['Precision:']
-            metrics_sum[model]['Recall'] += metrics[model]['Recall:']
-            
-            metrics_count[model] += 1
-
-    # Compute the averages
-    metrics_avg = {model: {metric: total / metrics_count[model] for metric, total in metrics.items()} for model, metrics in metrics_sum.items()}
-
-    # Write the averages to a CSV file
-    file_name = model_name + '_averages.csv'
-    with open(file_name, 'w', newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Model', 'Accuracy', 'AUC-ROC', 'F1-score', 'Log loss', 'Precision', 'Recall'])
-        for model, metrics in metrics_avg.items():
-            writer.writerow([model, metrics['Accuracy'], metrics['AUC-ROC'], metrics['F1-score'], metrics['Log loss'], metrics['Precision'], metrics['Recall']])
-
-
-make_averages_csv(mpss, "blocks")
-make_averages_csv(mps, "rings")
-
-import pdb;pdb.set_trace()
-
-
-
-
-
-
-
-
-
-
 
 
 def view_and_save_results(results, results_two=None, task=None):
@@ -688,52 +305,64 @@ def view_and_save_results(results, results_two=None, task=None):
 
 
 
+
+# view_shap_values(abs_val=True)
+
+# mp = MultiPredictor.where(cohort_id=1, task_id=3)[0]
+# mp.gen_train_combo_mp()
 # import pdb;pdb.set_trace()
 
-# view_and_save_results(ring_results, "Ring")
+# healthy controls, block dom 
+pr = Predictor.where(multi_predictor_id=6)
+# healthy controls bloc
+mpa = MultiPredictor.where(cohort_id=1, task_id=3)[0]
 
-# import pdb;pdb.set_trace()
+# cp block
+mpb = MultiPredictor.where(cohort_id=1, task_id=3)[1]
 
-# import pdb;pdb.set_trace()
+# combos block hc
+mpc = MultiPredictor.where(cohort_id=1, task_id=3)[2]
 
-# mps[0].retrain_from()
-# print("Rings")
-# for mp in mps:
-    
-#     print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_metrics'])
-#     print()
-    # print(mp.get_accuracies()['classifier_params'])
-    # print()
+# ring tasks
+rpa = MultiPredictor.where(cohort_id=1, task_id=2)[0]
 
-# print()
-# print()
-# print("Blocks")
-# for mp in mpss:
-#     print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_metrics'])
-#     print()
+# combo ring preds
+rpb = MultiPredictor.where(cohort_id=1, task_id=2)[1]
+# mpa.save_shap_values(abs_val=False, non_norm=False)
 
-# import pdb;pdb.set_trace()
+# block combo
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 
-
-print()
-print()
-print("Block Tasks...")
+# ring combo
+rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
 
 
-print("Ring Tasks...")
-# for mp in mps:
-#     mp.retrain_from()
-#     print(Sensor.get(mp.sensor_id).name, mp.get_accuracies()['classifier_metrics'])
-#     print()
+print(len(bc.get_all_preds()))
+print(len(rc.get_all_preds()))
+import pdb;pdb.set_trace()
+rc.show_predictor_scores(['RandomForest'], reverse_order=False, non_norm=False, abs_val=False)
+import pdb;pdb.set_trace()
+bc.save_shap_values(abs_val=False, non_norm=False)
+for bcc in bc.get_all_preds():
+    bcc.retrain_from(use_shap=True)
+
+for rcc in rc.get_all_preds():
+    rcc.retrain_from(use_shap=True)
+import pdb;pdb.set_trace()
+
+bc.show_predictor_scores(['RandomForest'], reverse_order=True, non_norm=False)
+
+print("Starting Block")
+mpa.gen_train_combo_mp(use_norm_pred=True)
+
+print("Done with Block!!")
 
 
+print("Starting Ring!")
+rpa.gen_train_combo_mp(use_norm_pred=True)
 
 
-
-    
-
-
-
+print("Done with Ring!!")
 import pdb;pdb.set_trace()
 
 
@@ -745,89 +374,203 @@ import pdb;pdb.set_trace()
 
 
 
-# print("starting...")
-
-
-mp = MultiPredictor.find_or_create(task_id=dom_tsks[1].id)
-mp.gen_scores_for_sensor()
-mps.append(MultiPredictor(task=dt))
-
-
-print("done!...")
-import pdb; pdb.set_trace()
 
 
 
-# print()
-# # non normalized
-# print("Normalized...")
 
 
 
-# Empty DataFrame to store best features
-best_features_df = pd.DataFrame()
 
-# Initialize a dictionary to store data
-best_rows = defaultdict(list)
-
-# Iterate over each index
-
-accuracies = {}
-bdf = pd.DataFrame()
-
-for col in items[0].df.columns:
-    if col in ['is_dominant', 'patient']:
-        continue
-    accuracies[col] = 0
-    cdf = pd.Series()
-    for item in items:
-        idf = item.df[col]
-        iacc = item.accuracies.get(col, 0) # It's good practice to use the get() method to avoid KeyErrors
-        if iacc > accuracies[col]:
-            accuracies[col] = iacc
-            cdf = idf
-    bdf[col] = cdf
-
-# Add 'is_dominant' and 'patient' columns from the first item
-bdf['is_dominant'] = items[0].df['is_dominant']
-bdf['patient'] = items[0].df['patient']
+# combo ring tasks
 
 
 
-# for index in range(len(items[0].df)):
-#     # For each index, find the item (predictor) with the highest accuracy
-#     best_item = max(items, key=lambda x: x.accuracies[x.features_dom[index]])
-
-#     # Add the row from the best predictor's dataframe to our new dictionary
-#     for feature in best_item.features_dom:
-#         best_rows[feature].append(best_item.df[feature].iloc[index])
-
-#     # Also keep track of the patient and is_dominant column
-#     best_rows['patient'].append(best_item.df['patient'].iloc[index])
-#     best_rows['is_dominant'].append(best_item.df['is_dominant'].iloc[index])
-
-
-# Create a dataframe from our dictionary
-best_df = bdf
+# mpa.save_shap_values(abs_val=False, non_norm=False)
 
 
 
-# Prepare the feature set X with the best features and patient
-X = best_df.drop(columns=['is_dominant'])
 
-# Prepare the target variable y
-y = best_df['is_dominant']
 
-# Instantiate the RandomForestClassifier
-model = RandomForestClassifier()
 
-# Fit the model
-model.fit(X, y)
+# for pr in mpa.get_norm_predictors():
+#     pr.train_from(use_shap=True)
 
-# Perform K-fold cross-validation and store accuracies
-cv_scores = cross_val_score(model, X, y, cv=5)
+# for pr in mpa.get_abs_predictors():
+#     pr.train_from(use_shap=True)
 
-# Print the average accuracy
-print('Accuracy:', np.mean(cv_scores))
+# for pr in mpa.get_predictors():
+#     pr.train_from(use_shap=True)
+
+
+
+
+# for pr in rpb.get_all_preds():
+#     pr.train_from(use_shap=True)
+
+
+# for pr in mpc.get_all_preds():
+#     pr.train_from(use_shap=True)
+
+
+mpc.save_shap_values(abs_val=False, non_norm=False)
+rpb.save_shap_values(abs_val=False, non_norm=False)
+
+
+
+rpa.gen_train_combo_mp(use_norm_pred=True)
+
+
+
+rpa.gen_scores_for_sensor(force_load=True)
+rpa.gen_scores_for_sensor(abs_val=True, force_load=True)
+rpa.gen_scores_for_sensor(non_norm=False, force_load=True)
+
+
+
+# for nrp in n_preds:
+#     nrp.train_from(use_shap=True)
+
+
+norm_pred =  mpa.get_norm_predictors()
+
+# mpa.gen_scores_for_sensor(non_norm=True, abs_val=True)
+import pdb;pdb.set_trace()
+mpa.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
+
+
+# bad_abs = mpa.get_abs_predictors()
+# good_abs = mpb.get_abs_predictors()
+
+# for ba in bad_abs:
+#     ba.delete()
+
+# for ga in good_abs:
+#     ga.update(cohort_id=1, multi_predictor_id=mpa.id)
+
+
+# mpa.gen_scores_for_sensor(non_norm=False, abs_val=True)
+
+# ara = mpcp.get_acc()
+# arb = mpcp.get_acc(abs_val=True)
+# arc = mpcp.get_acc(non_norm=False)
+
+
+# ara = mpb.get_acc(abs_val=True)
+# arb = mpcp.get_acc(abs_val=True)
+
+# MatrixPlotter.view_and_save_results(ara, results_two=arb, task="Reg")
+# MatrixPlotter.view_and_save_results(ara, results_two=arb, task="Reg")
+
+
+
+# MatrixPlotter.view_and_save_results(rb, results_two=ra, task="Reg")
+
+
+
+# abs value results
+
+
+results = []
+results_reg = []
+# Iterate through the mpss list
+# for mp in mpss:
+#     # Extracting the classifier accuracies
+#     accuracies = mp.get_accuracies()['classifier_accuracies']
+    
+#     # Sorting by accuracy in descending order and rounding to three decimal places
+#     sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
+
+#     print(sorted_accuracies)
+    
+#     # Append sensor name and its sorted accuracies to the results list
+#     results.append((mp.sensor().name, sorted_accuracies))
+
+# # Sort results based on the maximum accuracy value from the sorted accuracies
+# results.sort(key=lambda x: max(x[1].values()), reverse=True)
+
+# Iterate through the mpss list
+
+# mps = mpcp.get_predictors()
+
+# for mp in mps:
+#     # Extracting the classifier accuracies
+#     accuracies = mp.get_accuracies()['classifier_accuracies']
+    
+#     # Sorting by accuracy in descending order and rounding to three decimal places
+#     sorted_accuracies = {k: round(v, 3) for k, v in sorted(accuracies.items(), key=lambda item: item[1], reverse=True)}
+
+#     print(sorted_accuracies)
+    
+#     # Append sensor name and its sorted accuracies to the results list
+#     results_reg.append((mp.sensor().name, sorted_accuracies))
+
+# # Sort results based on the maximum accuracy value from the sorted accuracies
+# results_reg.sort(key=lambda x: max(x[1].values()), reverse=True)
+
+# MatrixPlotter.view_and_save_results(results_reg, results_two=results, task="Reg vs ABS")
+
+
+
+# Define the tasks, sensor, and classifier names you are interested in
+task_descriptions = ['Block_dominant']
+sensor_name = 'rsho_x'
+classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree']  # Your TOP_MODELS list
+
+
+
+mpd = MultiPredictor.where(task_id=3, cohort_id=1)
+
+
+# 30 predictors here (abs, non abs, norm)
+default_trials = mpd[0]
+
+# one predictor here (abs combo)
+combo_preds = mpd[1]
+
+# for pr in combo_preds.get_predictors():
+#     pr.train_from(use_shap=True)
+
+
+mpcp = MultiPredictor.where(task_id=3, cohort_id=2)
+
+
+cp_preds = mpcp[0]
+MatrixPlotter.view_and_save_results(default_trials.get_acc(), results_two=cp_preds.get_acc(), task="Reg")
+
+
+
+
+mpb.show_predictor_scores(['RandomForest'], reverse_order=True, non_norm=False)
+
+
+
+# mpb.show_predictor_scores(['RandomForest'], reverse_order=True, abs_val=True)
+
+
+
+# cp
+mpcp.show_predictor_scores(['RandomForest'], reverse_order=True, abs_val=True, non_norm=True)
+# Gather the PredictorScores
+scores_by_task = gather_predictor_scores_by_task(task_descriptions, sensor_name, classifier_names)
+
+# Assuming you want to combine Task 1 and Task 2
+if 'Task 1 Description' in scores_by_task and 'Task 2 Description' in scores_by_task:
+    for classifier_name in classifier_names:
+        # Filter scores by classifier name
+        task1_scores = [score for score in scores_by_task['Block_dominant'] if score.classifier_name == classifier_name]
+        task2_scores = [score for score in scores_by_task['Rings_dominant'] if score.classifier_name == classifier_name]
+        print(task1_scores)
+        print(task2_scores)
+        # Combine and plot if there are scores for both tasks for the classifier
+        if task1_scores and task2_scores:
+            # Use the first score for each task (assuming only one score per task-classifier combo)
+            combined_plot_filename = combine_shap_beeswarm(task1_scores[0], task2_scores[0], title=f"{classifier_name} {sensor_name} Combined Tasks")
+            print(f"Combined SHAP beeswarm plot saved as {combined_plot_filename}")
+
+
+
+
+for sensor_name, accuracies in results:
+    print(sensor_name, accuracies)
 
 

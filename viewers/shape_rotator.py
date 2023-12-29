@@ -69,6 +69,25 @@ class ShapeRotator:
         ax = fig.add_subplot(111, projection='3d')
         ax.plot(coords[0], coords[1], coords[2])
         plt.show()
+    
+    def get_other_set(set_instance):
+        sensor_id = set_instance.sensor_id
+        
+        # Determine the table name based on the class of the instance
+        table = re.sub(r'(?<!^)(?=[A-Z])', '_', set_instance.__class__.__name__).lower()
+        sensor = Sensor.find_by('id', sensor_id)
+        opposite_id = Task.get_opposite_sensor(sensor.name)
+        opposite_sensor = Sensor.find_by('id', opposite_id)
+
+        same_sensor_ids = Sensor.where(part=sensor.part, side=sensor.side, placement=sensor.placement)
+        opposite_sensor_ids = Sensor.where(part=opposite_sensor.part, side=opposite_sensor.side, placement=opposite_sensor.placement)
+
+        sensor_ids = [sensor.id for sensor in same_sensor_ids]
+        oppopsite_ids = [opp_sensor.id for opp_sensor in opposite_sensor_ids]
+
+        cls = type(set_instance)
+
+
 
 
     def plot_3ds(set_instances):

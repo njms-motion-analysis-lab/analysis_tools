@@ -1,6 +1,17 @@
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.legacy_gradient_set import GradientSet
 from models.legacy_position_set import PositionSet
+PART_NAME = {
+    'wr': "Wrist",
+    'fr': "Forearm",
+    'el': "Elbow",
+    'up': "Upper Arm",
+    'fr': "Forearm",
+    'sh': "Shoulder",
+    'fh': "Front of Head",
+    'bh': "Back of Head",
+    'fi': "Hand",
+}
 
 class Sensor(LegacyBaseModel):
     table_name = "sensor"
@@ -62,6 +73,9 @@ class Sensor(LegacyBaseModel):
         for el in dim:
             new_names.append(self.name[0:-1] + el)
         return self.where(name=new_names)
+    
+    def human_name(self):
+        return PART_NAME[self.part]
 
     @classmethod
     def delete_all(cls):

@@ -224,7 +224,7 @@ class GradientSet(LegacyBaseModel):
         for subgrad in subgrads:
             if subgrad.valid:
                 normalized = not non_normed
-                sub_stats = subgrad.get_sub_stats(normalized=normalized)
+                sub_stats = subgrad.get_sub_stats(normalized=normalized, abs_val=abs_val)
                 sub_stats_all = pd.concat([sub_stats_all, sub_stats])
                 #sub_stats_all = pd.concat([sub_stats_all, pd.DataFrame([sub_stats])], ignore_index=True)
 
@@ -232,8 +232,6 @@ class GradientSet(LegacyBaseModel):
         stats = pd.DataFrame()
         for colname, colvalues in sub_stats_all.items():
             # print(colname)
-            if abs_val is True:
-                colvalues = np.abs(colvalues)
             aggregate = {"mean": np.mean(colvalues), "median": np.median(colvalues), 
                             "sd":np.std(colvalues), "IQR": np.subtract(*np.percentile(colvalues, [75, 25])),
                             "10th": np.percentile(colvalues, 10), "90th": np.percentile(colvalues, 90)}

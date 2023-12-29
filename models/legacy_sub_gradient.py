@@ -98,7 +98,6 @@ class SubGradient(LegacyBaseModel):
         return pickle.loads(self.matrix)
 
     def calc_sub_stats(self):
-        print("yolololo")
         motion = self.get_normalized()['grad_data']
         #print("MATRIX\n",pickle.loads(self.matrix))
         motionstats = {"mean": np.mean(motion), "median": np.median(motion), 
@@ -116,29 +115,35 @@ class SubGradient(LegacyBaseModel):
         #self.submovement_stats = memoryview(pickle.dumps(motionstats))
         return memoryview(pickle.dumps(motionstats))
 
-    def get_sub_stats(self, normalized=True):
-        if normalized is True:
+    def get_sub_stats(self, normalized=True, abs_val=False):
+        if normalized is True or normalized is 1:
             if self.submovement_stats is None:
-                stats_needed = SubGradient.get_tsfresh_stats(self)
+                print("yoooooo")
+                stats_needed = SubGradient.get_tsfresh_stats(self, abs_val=abs_val)
             else:
                 stats_needed = self.submovement_stats
         else:
-            if self.submovement_stats_nonnorm is None:
-                stats_needed = SubGradient.get_tsfresh_stats_non_normalized(self)
+            if self.submovement_stats_nonnorm is None or abs_val is True or abs_val == 1:
+                stats_needed = SubGradient.get_tsfresh_stats_non_normalized(self, abs_val=abs_val)
             else:
                 stats_needed = self.submovement_stats_nonnorm
         return pickle.loads(stats_needed)
 
-    def get_tsfresh_stats(self, normalized=True):
+    def get_tsfresh_stats(self, normalized=True, abs_val=False):
         submovement = self.get_normalized()
+        if abs_val is True or abs_val is 1:
+            submovement = abs(submovement)
         submovement["id"] = self.id
         features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=ComprehensiveFCParameters())
         ans = memoryview(pickle.dumps(features))
         # self.update(submovement_stats=ans)
         return ans
 
-    def get_tsfresh_stats_non_normalized(self):
+    def get_tsfresh_stats_non_normalized(self, abs_val=False):
         submovement = pd.DataFrame(self.get_matrix())
+
+        if abs_val is True or abs_val is 1:
+            submovement = abs(submovement)
         submovement["id"] = self.id
         submovement["samplepoint"] = submovement.index.tolist()
         features = extract_features(submovement, column_id='id', column_sort='samplepoint', n_jobs=1, default_fc_parameters=ComprehensiveFCParameters())

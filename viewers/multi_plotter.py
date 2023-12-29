@@ -184,3 +184,16 @@ class MultiPlotter:
         })
 
         return combined_stats
+
+    @classmethod
+    def convert_feature_name(cls, feature_name):
+        # Remove the 'grad_data__' prefix if present
+        if feature_name.startswith("grad_data__"):
+            feature_name = feature_name.replace("grad_data__", "")
+        
+        
+        feature_name = feature_name.replace("_", " ")
+
+        return feature_name.title()
+
+

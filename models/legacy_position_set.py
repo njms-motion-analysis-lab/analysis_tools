@@ -17,6 +17,12 @@ class PositionSet(LegacyBaseModel):
         self.sensor_id = sensor_id
         self.trial_id = trial_id
         self.matrix = matrix
+    
+    # def get_contralateral_position(self):
+    #     sensor_name = Sensor.get(self.sensor_id).name
+    #     opposite_name = Task.get_opposite_sensor(sensor_name)
+
+
 
     def get_task(self):
         self._cursor.execute("""

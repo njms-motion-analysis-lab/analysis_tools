@@ -139,16 +139,16 @@ class PatientTask(LegacyBaseModel):
             return []
     
         dataframes = []
-        
+        print("GETTING STATS FOR GRAD SETS")
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
-                if (not non_normed) and (not abs_val):
+                if not non_normed:
                     aggregated_stats = gradient_set.get_aggregate_stats()
                     if loc:
                         aggregated_stats = aggregated_stats.loc[loc]
                     dataframes.append(aggregated_stats)
                 else:
-                    aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val)
+                    aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val, non_normed=non_normed)
                     if loc:
                         aggregated_stats = aggregated_stats.loc[loc]
                     dataframes.append(aggregated_stats)

@@ -469,6 +469,15 @@ class Task(LegacyBaseModel):
         else:
             return None
 
+    @classmethod
+    def get_opposite_sensor(cls, sensor_name):
+        if sensor_name.startswith('l'):
+            return 'r' + sensor_name[1:]
+        elif sensor_name.startswith('r'):
+            return 'l' + sensor_name[1:]
+        else:
+            return None
+
     def dom_nondom_stats(self, loc='grad_data__abs_energy', abs_val=False, non_normed=False, dynamic=False, cohort=None):
         Sensor = import_module("models.legacy_sensor").Sensor
         Patient = import_module("models.legacy_patient").Patient
@@ -557,7 +566,6 @@ class Task(LegacyBaseModel):
                         self_means.append([curr_patient, abs(self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
                         counterpart_means.append([curr_patient, abs(counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean'])])
                     else:
-                        import pdb;pdb.set_trace()
                         self_means.append([curr_patient, self_pt.combined_gradient_set_stats(sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
                         counterpart_means.append([curr_patient, counterpart_pt.combined_gradient_set_stats(counterpart_sensor, abs_val=abs_val, non_normed=non_normed, dynamic=dynamic, loc=loc)['mean']])
                 except TypeError as e:
