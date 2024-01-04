@@ -1,73 +1,57 @@
-from collections import Counter
-import datetime
-import shap
-from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.legacy_patient_task import PatientTask
-from sklearn.model_selection import GroupKFold
-from sklearn.preprocessing import LabelEncoder
-from models.legacy_task import Task
-import pandas as pd
-import pickle
-
-from models.legacy_sensor import Sensor
-import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import accuracy_score
-from models.legacy_patient import Patient
 import json
-from sklearn.model_selection import GridSearchCV, StratifiedKFold
-from sklearn.model_selection import cross_val_score, GridSearchCV
-from sklearn.preprocessing import LabelEncoder
-from sklearn.feature_selection import VarianceThreshold
+import pickle
+from collections import Counter
+
+import numpy as np
+import pandas as pd
+import shap
+import tensorflow as tf
+from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
+from models.legacy_patient import Patient
+from models.legacy_patient_task import PatientTask
+from models.legacy_sensor import Sensor
+from models.legacy_task import Task
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.impute import SimpleImputer
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import (GridSearchCV, StratifiedKFold,
+                                     cross_val_score, train_test_split)
+from sklearn.neural_network import MLPClassifier
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import LabelEncoder
 from sklearn.svm import SVC
 from sklearn.tree import DecisionTreeClassifier
-from sklearn.neural_network import MLPClassifier
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import GridSearchCV
-import tensorflow as tf
+
 from prediction_tools.predictor_score import PredictorScore
+
 print(tf.__version__)
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense, Dropout
-from tensorflow.keras.optimizers import Adam
-from skrebate import ReliefF
-
-from sklearn.feature_selection import SelectKBest, f_classif
-from sklearn.base import BaseEstimator, ClassifierMixin
-from tensorflow.keras.callbacks import EarlyStopping
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.metrics import confusion_matrix
-from sklearn.base import BaseEstimator, ClassifierMixin
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import Dense
-from xgboost import XGBClassifier
-from lightgbm import LGBMClassifier
 from catboost import CatBoostClassifier
-from sklearn.base import BaseEstimator, ClassifierMixin
-from sklearn.pipeline import Pipeline
-from sklearn.model_selection import GridSearchCV
 from sklearn import metrics
+from sklearn.base import BaseEstimator, ClassifierMixin
+from sklearn.ensemble import (AdaBoostClassifier, ExtraTreesClassifier,
+                              GradientBoostingClassifier)
+from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.metrics import confusion_matrix
+from sklearn.model_selection import GridSearchCV, LeaveOneOut
 from sklearn.neighbors import KNeighborsClassifier
-from sklearn.ensemble import AdaBoostClassifier, ExtraTreesClassifier
-from sklearn.naive_bayes import GaussianNB  # Assuming features are continuous
+from sklearn.pipeline import Pipeline
+from skrebate import ReliefF
+from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.layers import Dense, Dropout
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.optimizers import Adam
 from ts_fresh_params import PARAMS, get_params_for_column
-from sklearn.model_selection import LeaveOneOut
-
+from xgboost import XGBClassifier
 
 SHAP_CLASSIFIERS = [
     'XGBoost', 'RandomForest', 'DecisionTree', 'ExtraTrees', 'CatBoost', 
     'GradientBoosting'
 ]
 
-# SHAP_CLASSIFIERS = [
-#     'RandomForest'
-# ]
+NUMBER_OF_FEATURES = 50
+DEFAULT_K_FOLD_SPLITS = 5
 
 COMPATIBLE_MODELS = [
     "DecisionTreeClassifier", 
@@ -265,11 +249,6 @@ class Predictor(LegacyBaseModel):
         updated_at = self.aggregated_stats
         aggregated_stats_non_normed = self.updated_at
         aggregated_stats = None
-
-        # self.created_at = self.aggregated_stats_non_normed
-        # self.updated_at = self.aggregated_stats
-        # self.aggregated_stats_non_normed = self.updated_at
-        # self.aggregated_stats = None
         
         print(f"self", self.multi_predictor_id)
         print(
@@ -514,7 +493,6 @@ class Predictor(LegacyBaseModel):
 
 
     def get_bdf(self, holdout=False):
-        print("yo")
         if self.non_norm == 1 or self.non_norm == True:
             bdf = self.get_aggregated_stats_non_normed()
         else:
@@ -564,7 +542,7 @@ class Predictor(LegacyBaseModel):
         target = bdf['is_dominant']
 
         # Apply SelectKBest to select top 50 features
-        selector = SelectKBest(score_func=f_classif, k=50)  # Adjust 'k' as needed
+        selector = SelectKBest(score_func=f_classif, k=NUMBER_OF_FEATURES)  # Adjust 'k' as needed
         selector.fit(features, target)
         selected_features = features.columns[selector.get_support()]
 
@@ -929,7 +907,7 @@ class Predictor(LegacyBaseModel):
             split = splitter.split(bdf, y)
             round_set_size = False
         else:
-            splitter = StratifiedKFold(n_splits=5)
+            splitter = StratifiedKFold(n_splits=DEFAULT_K_FOLD_SPLITS)
             split = splitter.split(bdf, y, groups)
             round_set_size = True
 
@@ -953,7 +931,7 @@ class Predictor(LegacyBaseModel):
                 X_train = X_train.drop('patient', axis=1)
                 X_test = X_test.drop('patient', axis=1)
 
-            # Remove 'i's_dominant' column
+            # Remove 'is_dominant' column
             X_train = X_train.drop('is_dominant', axis=1)
             X_test = X_test.drop('is_dominant', axis=1)
 
@@ -1252,7 +1230,7 @@ class Predictor(LegacyBaseModel):
             split = splitter.split(bdf, y)
             round_set_size = False
         else:
-            splitter = StratifiedKFold(n_splits=5)
+            splitter = StratifiedKFold(n_splits=DEFAULT_K_FOLD_SPLITS)
             split = splitter.split(bdf, y, groups)
             round_set_size = True
         

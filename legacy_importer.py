@@ -9,8 +9,6 @@ import pdb
 
 RAW_DATA_FOLDER = "raw_data/CP_alignedcoords_2023.10.03"
 
-
-
 if __name__ == '__main__':
     freeze_support()
     exp = {}
@@ -120,6 +118,7 @@ if __name__ == '__main__':
     n = 0
     for file in files:
         print(file.lower())
+        # Modify this `if` statement to select the files of choice.
         if "alignedcoordsbystart" in file.lower():
             if "cp" in file.lower():
                 cohort = Cohort.find_or_create(name="cp_before", is_control=False, is_treated=False)

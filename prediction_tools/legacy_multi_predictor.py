@@ -21,14 +21,14 @@ from viewers.multi_plotter import MultiPlotter
 SENSOR_CODES = [
     'rfin_x',
     'rwra_x',
-    # 'rwrb_x',
+    'rwrb_x',
     'rfrm_x',
     'relb_x',
-    # 'relbm_x',
+    'relbm_x',
     'rupa_x',
     'rsho_x',
-    # 'rbhd_x',
-    # 'rfhd_x',
+    'rbhd_x',
+    'rfhd_x',
 ]
 
 NUM_TOP = 10
@@ -220,10 +220,10 @@ class MultiPredictor(LegacyBaseModel):
 
         for sensor in self.get_sensors():
             predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-            predictor = predictor.retrain_from(force_load=True)
+            predictor = predictor.train_from(force_load=True)
         with open('items.pickle', 'wb') as handle:
             pickle.dump(self.items, handle, protocol=pickle.HIGHEST_PROTOCOL)
-        print("done!")
+        print("Done training Predictors for MP:", self.id)
     
     def get_all_preds(self):
         return Predictor.where(multi_predictor_id=self.id)
