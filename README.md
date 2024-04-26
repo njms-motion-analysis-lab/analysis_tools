@@ -17,6 +17,69 @@
   * Install python packages `pip install -r requirements.txt`
   * If you encounter an errror, try installing an indivudal package manually without specifying the version
 
+# Setting up a Development Environment (some stuff I found online)
+
+
+[stack-defn]: https://en.wikipedia.org/wiki/Solution_stack
+
+
+## Phase 0: 
+
+Here we will install basic developer tools, such as [homebrew][homebrew] (a 3rd party package manager for MacOS), Xcode (a library of developer tools provided by Apple), git (a version control system we will be using throughout the course), and Atom (a full-featured text-editor).
+
+
+### Xcode
+
+Let's start with Xcode. The Xcode command line tools are a requirement for installing the homebrew package manager in the next step. 
+
+
+Install the Xcode command line tools by running the following from the console.
+
+```sh
+$ xcode-select --install
+```
+
+To conclude the installation you will need to agree to the Xcode license. Start the Xcode app, click "Agree", and allow the installation to finish. Then you can go ahead and quit the Xcode app.
+
+### Homebrew
+Homebrew is kind of like a low-tech App Store. It allows us access to and the ability to install a wide variety of software and command line tools from the console. These are distinct from those hosted on the App Store and will need to be managed by Homebrew.
+
+Enter the following in your terminal to download and install Homebrew:
+
+```sh
+/usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+```
+
+You will be given a list of dependencies that will be installed and prompted to continue or abort. Press `RETURN` to continue.
+
+Let's break this command down a bit. `curl`, a command-line tool commonly used for downloading files from the internet, is used to download the Homebrew installation file. The `"$(...)"` transforms the file content into a string. Finally, the string is passed to our Ruby executable (`/usr/bin/ruby` is where this the system Ruby executable file is stored on our machine) with the `-e` flag to tell Ruby to run the argument as code. 
+
+Check out the [Homebrew website][homebrew] to learn the basic commands.
+
+[xcode]: https://itunes.apple.com/us/app/xcode/id497799835
+[homebrew]: https://brew.sh/
+[chrome-dl]: https://www.google.com/chrome/browser/desktop/index.html
+[aa-chrome-tab]: https://github.com/appacademy/app-academy-chrome-tab
+[linux-git]: https://git-scm.com/book/en/v2/Getting-Started-Installing-Git
+[linux-rbenv]: https://github.com/rbenv/rbenv#basic-github-checkout
+
+### Git
+Git is a version control system that allows us to track, commit and revert changes to files within a directory. Here we will install it and add global user info.
+
+```sh
+# install git
+brew install git
+
+# makes git terminal output pretty
+git config --global color.ui true
+
+# this will mark you as the 'author' of each committed change
+git config --global user.name "your name here"
+
+# use the email associated with your GitHub account
+git config --global user.email your_email_here
+```
+
 # Data
  
  ## Ingestion
