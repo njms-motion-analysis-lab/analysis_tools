@@ -10,6 +10,7 @@ controls_filteredandtrimmed/
 controls_alignedCoordinateSystem
 .DS_Store
 .pyre/
+.history/
 .pyre_configuration
 .vscode/
 .watchmanconfig
