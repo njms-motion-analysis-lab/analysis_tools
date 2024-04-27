@@ -28,6 +28,8 @@ from migrations.legacy_table import Table
 from models.legacy_task import Task
 from models.legacy_trial import Trial
 from prediction_tools.legacy_multi_predictor import MultiPredictor
+from prediction_tools.result_compare import SigCheck
+
 
 allowed = [
     "lwra_x",
@@ -403,8 +405,16 @@ bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 # ring combo
 rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
 
-rc.show_norm_scores(axis=True, include_accuracy=True)
-# bc.show_norm_scores(axis=True, include_accuracy=True)
+import pprint
+
+# SigCheck().compare_obj(rc, bc)
+import pdb;pdb.set_trace()
+pprint.pp(bc.get_new_axis(abs_val=False, non_norm=False))
+import pdb;pdb.set_trace()
+
+bc.show_norm_scores(axis=True, include_accuracy=True)
+
+
 import pdb;pdb.set_trace()
 
 # MatrixPlotter.show(mpa.get_acc(), rpa.get_acc(), alt=True, h_one="Block", h_two="Ring")

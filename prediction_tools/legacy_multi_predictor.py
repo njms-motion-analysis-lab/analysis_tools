@@ -38,7 +38,7 @@ SENSOR_CODES = [
 ]
 
 # TOP_TREE_MODELS = ['RandomForest', 'ExtraTrees', 'XGBoost']
-TOP_TREE_MODELS = ['RandomForest']
+TOP_TREE_MODELS = ['CatBoost']
 
 NUM_TOP = 1000
 class MultiPredictor(LegacyBaseModel):
@@ -55,7 +55,8 @@ class MultiPredictor(LegacyBaseModel):
         self.updated_at = updated_at
         self.cohort_id = cohort_id
         self.non_norm = True,
-        self.abs_val = False
+        self.abs_val = False,
+        self.curr_axis = None
         
 
     def gen_items_for_sensors(self, sensors=None, ntaf=False):
@@ -217,7 +218,6 @@ class MultiPredictor(LegacyBaseModel):
     def linkage_mat(self, sim_matrix=None, view=True, abs_val=False, non_norm=True):
         if sim_matrix is None:
             sim_matrix, unique_features = self.sim_matrix(abs_val=abs_val, non_norm=non_norm)
-
         # Generate the linkage matrix
         Z = linkage(1 - sim_matrix, 'ward')  # Use 1-similarity as distance
 
@@ -382,9 +382,10 @@ class MultiPredictor(LegacyBaseModel):
     def get_new_axis(self, abs_val=False, non_norm=True):
         cluster_assignments, unique_colors = self.linkage_mat(view=False, abs_val=abs_val, non_norm=non_norm)
         self.unique_colors = unique_colors
-
+        
         reversed_assignments = {}
         for feature, cluster in cluster_assignments.items():
+        
             if cluster not in reversed_assignments:
                 reversed_assignments[cluster] = []
             reversed_assignments[cluster].append(feature)
@@ -414,7 +415,11 @@ class MultiPredictor(LegacyBaseModel):
 
             if use_cat is True:
                 if axis is True:
-                    axis = self.get_new_axis(abs_val=abs_val, non_norm=non_norm)
+                    if self.curr_axis is None:
+                        axis = self.get_new_axis(abs_val=abs_val, non_norm=non_norm)
+                        self.curr_axis = axis
+                    else:
+                        axis = self.curr_axis
                 print(axis)
                 # import pdb;pdb.set_trace()
 
@@ -423,7 +428,7 @@ class MultiPredictor(LegacyBaseModel):
                 # normalized_shap_values = aggregate_shap_values
                 
                 current_shap_scores = normalized_shap_values
-
+            import pdb;pdb.set_trace()
             shap_scores.append(current_shap_scores)
             top_scores.append(current_shap_scores)
             sensors.append(snr.human_name())

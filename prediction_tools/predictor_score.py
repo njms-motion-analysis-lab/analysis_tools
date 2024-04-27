@@ -173,13 +173,13 @@ class PredictorScore(LegacyBaseModel):
         
         return standardized_shap_values, feature_names
 
-    def find_optimal_clusters(self, standardized_shap_values, quick=False):
+    def find_optimal_clusters(self, standardized_shap_values, quick=True):
         best_score = -1
         optimal_clusters = 2
         
         for i in range(2, 5):  # Increased range of clusters to consider
             if quick is True:
-                c_alg = KMeans(n_clusters=i, init='k-means++', max_iter=1500, n_init=100, random_state=0)
+                c_alg = KMeans(n_clusters=i, init='k-means++', max_iter=2000, n_init=200, random_state=0)
             else:
                 c_alg = GaussianMixture(n_components=i, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
             labels = c_alg.fit_predict(standardized_shap_values)
@@ -187,6 +187,7 @@ class PredictorScore(LegacyBaseModel):
             
             if score > best_score:
                 best_score = score
+                print("SCORE", best_score)
                 optimal_clusters = i
         
         return optimal_clusters
@@ -198,18 +199,32 @@ class PredictorScore(LegacyBaseModel):
         # Apply scaling and PCA to the data
         scaler = StandardScaler()
         scaled_shap_values = scaler.fit_transform(standardized_shap_values)
-        pca = PCA(n_components=0.95)  # Adjust the number of components as needed
+        pca = PCA()
+        pca.fit(scaled_shap_values)
+
+        # Calculate the cumulative explained variance ratio
+        cumulative_variance_ratio = np.cumsum(pca.explained_variance_ratio_)
+
+        # Find the number of components that capture the desired threshold of variance
+        threshold = 0.95  # Adjust this value based on your desired threshold
+        n_components = np.argmax(cumulative_variance_ratio >= threshold) + 1
+
+        # Print the number of components and the cumulative explained variance ratio
+        print(f"Number of components: {n_components}")
+        print(f"Cumulative explained variance ratio: {cumulative_variance_ratio[n_components - 1]:.2f}")
+
+        # Apply PCA with the determined number of components
+        pca = PCA(n_components=n_components)
         transformed_shap_values = pca.fit_transform(scaled_shap_values)
         
         # Find the optimal number of clusters based on transformed SHAP values
-        optimal_clusters = self.find_optimal_clusters(transformed_shap_values)
+        c = self.find_optimal_clusters(transformed_shap_values)
         
         # Define clustering algorithm (KMeans)
-        # kmeans = KMeans(n_clusters=optimal_clusters, init='k-means++', max_iter=1000, n_init=100, random_state=0)
+        kmeans = KMeans(n_clusters=c, init='k-means++', max_iter=2000, n_init=200, random_state=0)
         # temp try gaussian mixture
-        kmeans = GaussianMixture(n_components=optimal_clusters, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
+        # kmeans = GaussianMixture(n_components=optimal_clusters, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
         clusters = kmeans.fit_predict(transformed_shap_values)
-        
         # Pair each feature name with its cluster label
         feature_cluster_pairs = list(zip(feature_names, clusters))
         
