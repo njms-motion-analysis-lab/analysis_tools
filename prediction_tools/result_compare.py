@@ -849,3 +849,7 @@ class SigCheck():
         pprint.pp("BLOCK")
         pprint.pp(axis_2)
         return self.display_overlap_grid(axis_1, axis_2, total_possible_features)
+
+#  python3 prediction_tools/result_compare.py in your terminal will create an instance of the object below
+# but you can also try calling this from other files
+SigCheck().compare_obj()

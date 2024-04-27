@@ -407,7 +407,8 @@ rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
 
 import pprint
 
-# SigCheck().compare_obj(rc, bc)
+# Does the same thing as in your console. See top of page for importing 
+SigCheck().compare_obj(rc, bc)
 import pdb;pdb.set_trace()
 pprint.pp(bc.get_new_axis(abs_val=False, non_norm=False))
 import pdb;pdb.set_trace()
