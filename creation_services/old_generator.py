@@ -33,7 +33,8 @@ class OldGenerator:
         self.conn = None
         self.cursor = None
         self.dynamic = False
-        self.set_analysis_me_attributes()
+        self.set_attributes() # do this for normal/cp dataset
+        # self.set_analysis_me_attributes() # do this for PD/ET dataset
         self.generate_models()
         
     def set_analysis_me_attributes(self):
@@ -109,14 +110,14 @@ class OldGenerator:
             self.gradients = {'gradients': gradient_data}
             tr.generate_sets(self.gradients, skip_pos=True)
 
-            # for key, value in self.data.items():
-            #     print(key, value)
+            for key, value in self.data.items():
+                print(key, value)
                 
                 
 
-                # if not self.dynamic:
-                #     tr.generate_sets(data=value)
-                #     counts += 1
+                if not self.dynamic:
+                    tr.generate_sets(data=value)
+                    counts += 1
     
     def calculate_velocity_from_acceleration_with_timestamps(self, data):
         """
