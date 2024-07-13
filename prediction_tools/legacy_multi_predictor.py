@@ -33,12 +33,12 @@ SENSOR_CODES = [
     'relbm_x',
     'rupa_x',
     'rsho_x',
-    # 'rbhd_x',
-    # 'rfhd_x',
+    'rbhd_x',
+    'rfhd_x',
 ]
 
 # TOP_TREE_MODELS = ['RandomForest', 'ExtraTrees', 'XGBoost']
-TOP_TREE_MODELS = ['CatBoost']
+TOP_TREE_MODELS = ['XGBoost']
 
 NUM_TOP = 1000
 class MultiPredictor(LegacyBaseModel):
@@ -61,7 +61,7 @@ class MultiPredictor(LegacyBaseModel):
 
     def gen_items_for_sensors(self, sensors=None, ntaf=False):
         if sensors is None:
-            sensors = self.sensors
+            sensors = self.get_sensors()
 
         for sen in sensors:
             self.gen_items_for_sensor(sen, ntaf)
@@ -238,7 +238,7 @@ class MultiPredictor(LegacyBaseModel):
                 legend_handles.append(plt.Line2D([0], [0], color=color, lw=4))
                 color_map[color] = mcolors.to_hex(color)
 
-        plt.legend(legend_handles, [f"Cluster {i}" for i in range(len(legend_handles))], loc='upper right')
+        plt.legend(legend_handles, [f"Cluster {i + 1}" for i in range(len(legend_handles))], loc='upper right')
 
         if view is True:
             plt.show()
@@ -428,7 +428,7 @@ class MultiPredictor(LegacyBaseModel):
                 # normalized_shap_values = aggregate_shap_values
                 
                 current_shap_scores = normalized_shap_values
-            import pdb;pdb.set_trace()
+
             shap_scores.append(current_shap_scores)
             top_scores.append(current_shap_scores)
             sensors.append(snr.human_name())
@@ -436,27 +436,20 @@ class MultiPredictor(LegacyBaseModel):
 
 
     def plot_shap_changes(self, shap_scores, top_scores, sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=False, axis=False):
-
-        # Gather all unique feature categories from the shap_scores
-        unique_features = set().union(*[score.keys() for score in shap_scores if score])
-        if include_accuracy and "ave_accuracy" in unique_features:
-            unique_features.remove("ave_accuracy")  # Remove 'ave_accuracy' if included separately
-        
-        color_map = plt.cm.get_cmap('viridis', len(unique_features) + (1 if include_accuracy else 0))
-        feature_to_color = {feature: color_map(i) for i, feature in enumerate(unique_features)}
-
         plt.figure(figsize=(12, 8))
 
         for feature, color in self.unique_colors.items():
+            print("FEATURE", feature, "COLOR", color)
             shap_values = [score.get(feature, 0) for score in shap_scores]
-            if percentage_of_average:
+            if percentage_of_average is True:
+                import pdb;pd
                 averages = [sum(score.values()) / len(score) for score in shap_scores]
                 shap_values = [100 * val / avg if avg != 0 else 0 for val, avg in zip(shap_values, averages)]
             
             plt.plot(sensors, shap_values, label=feature, color=color, marker='o', linestyle='-')
 
         # Optionally plot 'ave_accuracy' if requested
-        if include_accuracy:
+        if include_accuracy is True:
             accuracy_values = [score.get("ave_accuracy", 0) for score in shap_scores]
             plt.plot(sensors, accuracy_values, label='ave_accuracy', color='red', marker='x', linestyle='--', linewidth=2)
 
@@ -470,8 +463,8 @@ class MultiPredictor(LegacyBaseModel):
         task_title = category + " " + desc[0]
         plt.title(task_title + " Categories' SHAP Values Across Sensors" + (" (Average Accuracy) " if include_accuracy else ""))
         plt.xlabel("Sensor Location")
-        plt.ylabel("SHAP Value (Average Accuracy)" + (" (% of Average)" if percentage_of_average else ""))
-        plt.xticks(rotation=45)
+        plt.ylabel("SHAP Value (Average Accurax`cy)" + (" (% of Average)" if percentage_of_average else ""))
+        # plt.xticks(rotation=45)
         plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
         plt.ylim(0, 1.4)
         plt.tight_layout()

@@ -18,3 +18,4 @@ NPYViewer/
 __pycache__/
 control_reader.py
 new_data.py
+*.json

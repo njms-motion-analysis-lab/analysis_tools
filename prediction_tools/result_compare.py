@@ -1,6 +1,8 @@
 from scipy.stats import hypergeom
 from tabulate import tabulate
+from sklearn.metrics import adjusted_mutual_info_score, adjusted_rand_score
 import pprint
+import matplotlib.pyplot as plt
 
 RING = {'C1': ['grad_data__cwt_coefficients_34_x',
         'grad_data__fft_coefficient_101_z',
@@ -784,71 +786,68 @@ total_possible_features = 2300
  # SigCheck().compare_obj()
 
 class SigCheck():
-    def calculate_significance(self, overlap, cluster1_size, cluster2_size, total_features, total_possible_features):
-        p_value = hypergeom.sf(overlap - 1, total_possible_features, cluster1_size, cluster2_size)
-        return p_value
+    def prepare_cluster_labels(self, features, clusters):
+        label_map = {}
+        for label, feats in clusters.items():
+            for feat in feats:
+                label_map[feat] = label
+        return [label_map.get(feat, -1) for feat in features]  # -1 for features not in any cluster
 
-    def display_overlap_grid(self, ring_clusters, block_clusters, total_possible_features):
-        # Get unique features from both tasks
-        ring_features = set(feature for cluster in ring_clusters.values() for feature in cluster)
-        block_features = set(feature for cluster in block_clusters.values() for feature in cluster)
-        total_features = len(ring_features.union(block_features))
+    def jaccard_similarity(self, set1, set2):
+        intersection = len(set1.intersection(set2))
+        union = len(set1.union(set2))
+        if union == 0:
+            return 0
+        return intersection / union
+
+    def display_overlap_grid(self, ring_clusters, block_clusters):
+        all_features = set()
+        for cluster in ring_clusters.values():
+            all_features.update(cluster)
+        for cluster in block_clusters.values():
+            all_features.update(cluster)
+        all_features = list(all_features)
+
+        ring_labels = self.prepare_cluster_labels(all_features, ring_clusters)
+        block_labels = self.prepare_cluster_labels(all_features, block_clusters)
+
+        # Calculate scores
+        rand_index = adjusted_rand_score(ring_labels, block_labels)
+        mutual_info_score = adjusted_mutual_info_score(ring_labels, block_labels)
 
         # Create the grid
         grid = []
         headers = [""] + [f"Block Cluster {i} ({len(block_clusters[cluster])})" for i, cluster in enumerate(block_clusters)]
 
-        for ring_cluster, ring_features in ring_clusters.items():
-            row = [f"Ring Cluster {ring_cluster[-1]} ({len(ring_features)})"]
-            for block_cluster, block_features in block_clusters.items():
-                overlap = len(set(ring_features) & set(block_features))
-                significance = self.calculate_significance(overlap, len(ring_features), len(block_features), total_features, total_possible_features)
-                cell_value = f"{overlap} ({significance:.4e})"
+        for ring_label, ring_features in ring_clusters.items():
+            row = [f"Ring Cluster {ring_label[-1]} ({len(ring_features)})"]
+            for block_label, block_features in block_clusters.items():
+                jaccard_index = self.jaccard_similarity(set(ring_features), set(block_features))
+                cell_value = f"{jaccard_index:.3f}"
                 row.append(cell_value)
             grid.append(row)
 
-        # Color-code the grid based on significance levels
-        colored_grid = []
-        for row in grid:
-            colored_row = []
-            for cell in row:
-                if isinstance(cell, str) and "(" in cell:
-                    significance = float(cell.split("(")[1].split(")")[0])
-                    if significance < 0.001:
-                        colored_cell = f"\033[1;32m{cell}\033[0m"  # Green (highly significant)
-                    elif significance < 0.05:
-                        colored_cell = f"\033[1;34m{cell}\033[0m"  # Blue (significant)
-                    else:
-                        colored_cell = cell
-                else:
-                    colored_cell = cell
-                colored_row.append(colored_cell)
-            colored_grid.append(colored_row)
+        # Print tabulated grid with ARI and AMI scores in the title
+        title = f"Grid Comparison (ARI: {rand_index:.3f}, AMI: {mutual_info_score:.3f})"
+        print(title)
+        print(tabulate(grid, headers, tablefmt="grid"))
 
-        # Display the grid
-        print(tabulate(colored_grid, headers, tablefmt="grid"))
-
-    # Call the function with your data structures
-
-
-    # We can use the code above instead of setting up the db to start!
-    # SigCheck().compare_obj()
-    def compare_obj(self, obj1=None, obj2=None, num_features=2300):
-        if obj1 != None:
+    def compare_obj(self, obj1=None, obj2=None):
+        if obj1 is not None:
             axis_1 = obj1.get_new_axis(abs_val=False, non_norm=False)
         else:
             axis_1 = RING
 
-        if obj2 != None:
+        if obj2 is not None:
             axis_2 = obj2.get_new_axis(abs_val=False, non_norm=False)
         else:
             axis_2 = BLOCK
-            
-        pprint.pp("RING")
-        pprint.pp(axis_1)
-        pprint.pp("BLOCK")
-        pprint.pp(axis_2)
-        return self.display_overlap_grid(axis_1, axis_2, total_possible_features)
+
+        print("RING")
+        print(axis_1)
+        print("BLOCK")
+        print(axis_2)
+        return self.display_overlap_grid(axis_1, axis_2)
 
 #  python3 prediction_tools/result_compare.py in your terminal will create an instance of the object below
 # but you can also try calling this from other files

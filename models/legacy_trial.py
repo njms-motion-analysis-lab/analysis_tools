@@ -36,7 +36,6 @@ class Trial(LegacyBaseModel):
         if len(gss) == MAX_GRADIENT_SET_NUM:
             print("already finished name:", self.name, "id:", self.id, "pt_id", self.patient_task_id)
             return
-
         
         gradient_data = data['gradients']
 
@@ -76,7 +75,7 @@ class Trial(LegacyBaseModel):
                 grad_set.create_subgradients()
                 grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
                 print(f"Done with {sensor.name}!!!")
-            #print("IM HERE RN:",GradientSet.where(trial_id=self.id)[0].get_aggregate_stats())
+            
     
     # TODO: [Stephen] combine the dynamic and, uh, static models/methods/logic.
     def extract_sensor_name(self, header):

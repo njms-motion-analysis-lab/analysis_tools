@@ -345,14 +345,11 @@ def fetch_new_tasks():
         
         print("done")
 
-        
+
     
     for balance_task in balance_tasks:
         # print("Creating/Finding MP for:", balance_task.description, cohort.name)
-        mp = MultiPredictor.find_or_create(
-            task_id = balance_task.id,
-            cohort_id = hc_cohort.id,
-        )
+        mp = MultiPredictor.find_or_create(task_id = balance_task.id,cohort_id = hc_cohort.id)
         import pdb;pdb.set_trace()
         mp.sensors = sensors
         # mp.gen_scores_for_sensor(skip_default_sensors=True, force_load=True, add_other=True)
@@ -380,7 +377,7 @@ bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 # feature_cluster_map = mpc.feature_cluster_map(non_norm=False)
 
 
-    
+import pdb;pdb.set_trace()
 # fetch_new_tasks()
 
 pr = Predictor.where(multi_predictor_id=6)
@@ -405,18 +402,21 @@ bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 # ring combo
 rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
 
-import pprint
+
+
+import pdb;pdb.set_trace()
+SigCheck().compare_obj(rc, bc)
 
 # Does the same thing as in your console. See top of page for importing 
-SigCheck().compare_obj(rc, bc)
-import pdb;pdb.set_trace()
-pprint.pp(bc.get_new_axis(abs_val=False, non_norm=False))
-import pdb;pdb.set_trace()
+# rc.show_norm_scores(axis=True, include_accuracy=True)
+
 
 bc.show_norm_scores(axis=True, include_accuracy=True)
 
 
-import pdb;pdb.set_trace()
+
+# pprint.pp(bc.get_new_axis(abs_val=False, non_norm=False))
+
 
 # MatrixPlotter.show(mpa.get_acc(), rpa.get_acc(), alt=True, h_one="Block", h_two="Ring")
 

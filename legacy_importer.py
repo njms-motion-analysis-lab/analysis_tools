@@ -9,10 +9,17 @@ import pdb
 
 RAW_DATA_FOLDER = "raw_data/CP_alignedcoords_2023.10.03"
 
+
+
+
+
 if __name__ == '__main__':
     freeze_support()
     exp = {}
     root_dir = "controls_alignedCoordinateSystem"
+    Table.create_tables()
+    Table.update_tables()
+    Table.create_and_set_cohort()
 
     def create_sensor_from_string(sensor_string):
         side_map = {"l": "left", "r": "right"}
@@ -107,7 +114,7 @@ if __name__ == '__main__':
         for s_string in sensors:
             create_sensor_from_string(s_string)
 
-    # generate_sensors()
+    generate_sensors()
     files = []
     for subdir, _, filenames in os.walk(RAW_DATA_FOLDER):
         for filename in filenames:
@@ -122,9 +129,9 @@ if __name__ == '__main__':
         if "alignedcoordsbystart" in file.lower():
             if "cp" in file.lower():
                 cohort = Cohort.find_or_create(name="cp_before", is_control=False, is_treated=False)
-
-            
-            if "block" in file.lower() and "dynamic" not in file.lower():
+            else:
+                cohort = Cohort.find_or_create(name="heathy_controls", is_control=True, is_treated=False)
+            if "dynamic" not in file.lower():
                 print(file)
                 OldGenerator(file, cohort)
                 n += 1

@@ -411,28 +411,34 @@ class Table:
     @classmethod
     def drop_all_tables(cls):
         tables = ['trial', 'patient_task', 'sensor', 'task', 'patient', 'position_set','dynamic_position_set', 'gradient_set', 'dynamic_gradient_set', 'dynamic_sub_gradient', 'motion', 'patient_motion', "sub_gradient"]
+        print("Hey")
+
         for table in tables:
             try:
-                BaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
-                BaseModel._conn.commit()
+                LegacyBaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
+                LegacyBaseModel._conn.commit()
+                print("dropped", table)
             except sqlite3.OperationalError as e:
                 print(f"Error dropping table: {e}")
-                BaseModel._conn.rollback()
+                LegacyBaseModel._conn.rollback()
 
 
     @classmethod
     def clear_tables(cls):
-        cls.cursor.execute("DELETE FROM patient")
-        cls.cursor.execute("DELETE FROM task")
-        cls.cursor.execute("DELETE FROM patient_task")
-        cls.cursor.execute("DELETE FROM trial")
-        cls.cursor.execute("DELETE FROM sensor")
-        cls.cursor.execute("DELETE FROM position_set")
-        cls.cursor.execute("DELETE FROM dynamic_position_set")
-        cls.cursor.execute("DELETE FROM sub_gradient")
-        cls.cursor.execute("DELETE FROM dynamic_sub_gradient")
-        cls.cursor.execute("DELETE FROM gradient_set")
+        
+        # cls.cursor.execute("DELETE FROM patient")
+        # cls.cursor.execute("DELETE FROM task")
+        # cls.cursor.execute("DELETE FROM patient_task")
+        # cls.cursor.execute("DELETE FROM trial")
+        # cls.cursor.execute("DELETE FROM sensor")
+        # cls.cursor.execute("DELETE FROM position_set")
+        # cls.cursor.execute("DELETE FROM dynamic_position_set")
+        # cls.cursor.execute("DELETE FROM sub_gradient")
+        # cls.cursor.execute("DELETE FROM dynamic_sub_gradient")
+        # cls.cursor.execute("DELETE FROM gradient_set")
         cls.cursor.execute("DELETE FROM dynamic_gradient_set")
         cls.conn.commit()
+
+
 
     

@@ -85,9 +85,11 @@ class OldGenerator:
 
         if exp_task.endswith('_'):
             exp_task = exp_task[:-1]
-        
+
         self.task = exp_task
         self.patient = patient
+        # try calling self.task or self.patient here.
+        import pdb;pdb.set_trace()
     
 
     def generate_models(self):

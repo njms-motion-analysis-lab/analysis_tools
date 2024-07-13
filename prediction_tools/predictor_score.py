@@ -179,7 +179,7 @@ class PredictorScore(LegacyBaseModel):
         
         for i in range(2, 5):  # Increased range of clusters to consider
             if quick is True:
-                c_alg = KMeans(n_clusters=i, init='k-means++', max_iter=2000, n_init=200, random_state=0)
+                c_alg = KMeans(n_clusters=i, init='k-means++', max_iter=2500, n_init=500, random_state=3)
             else:
                 c_alg = GaussianMixture(n_components=i, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
             labels = c_alg.fit_predict(standardized_shap_values)
@@ -187,9 +187,9 @@ class PredictorScore(LegacyBaseModel):
             
             if score > best_score:
                 best_score = score
-                print("SCORE", best_score)
+                
                 optimal_clusters = i
-        
+        print("BEST SCORE", best_score)
         return optimal_clusters
 
     def cluster_features_shap(self):
@@ -221,7 +221,7 @@ class PredictorScore(LegacyBaseModel):
         c = self.find_optimal_clusters(transformed_shap_values)
         
         # Define clustering algorithm (KMeans)
-        kmeans = KMeans(n_clusters=c, init='k-means++', max_iter=2000, n_init=200, random_state=0)
+        kmeans = KMeans(n_clusters=c, init='k-means++', max_iter=5000, n_init=500, random_state=0)
         # temp try gaussian mixture
         # kmeans = GaussianMixture(n_components=optimal_clusters, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
         clusters = kmeans.fit_predict(transformed_shap_values)

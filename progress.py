@@ -91,7 +91,6 @@ class Progress:
                         else:
                             print("      ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
                     else:
-                        print("Deleting")
                         print("    ", trial.name,   "num gradients:", len(gss), "num aggregate stats:", agg_stats)
                         # trial.delete_self_and_children()
                     seen[trial.name] = trial

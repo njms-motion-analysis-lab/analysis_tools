@@ -37,7 +37,6 @@ class LegacyGenerator:
         # If the experimental task description ends with an underscore, remove it.
         # Set the `patient` and `task` attributes of the instance to the extracted values.
         sub_dir = self.name.split('_')
-        print("hello")
         root, patient, exp_task, variant = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
         if root != 'alignedCoordsByStart':
             self.dynamic = True
@@ -67,6 +66,7 @@ class LegacyGenerator:
         else:
             counts = 0
             for key, value in self.data.items():
+                import pdb;pdb.set_trace()
                 tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
 
                 if not self.dynamic:
