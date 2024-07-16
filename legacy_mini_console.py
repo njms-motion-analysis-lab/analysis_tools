@@ -9,6 +9,7 @@ import os
 from models.legacy_patient_task import PatientTask
 from models.legacy_patient import Patient
 from models.legacy_gradient_set import GradientSet
+from models.legacy_position_set import PositionSet
 import numpy as np
 from models.legacy_sub_gradient import SubGradient
 from collections import defaultdict
@@ -349,7 +350,7 @@ def fetch_new_tasks():
     
     for balance_task in balance_tasks:
         # print("Creating/Finding MP for:", balance_task.description, cohort.name)
-        mp = MultiPredictor.find_or_create(task_id = balance_task.id,cohort_id = hc_cohort.id)
+        mp = MultiPredictor.find_or_create(task_id = balance_task.id, cohort_id = hc_cohort.id)
         import pdb;pdb.set_trace()
         mp.sensors = sensors
         # mp.gen_scores_for_sensor(skip_default_sensors=True, force_load=True, add_other=True)
@@ -372,12 +373,43 @@ def fetch_new_tasks():
     pdb.set_trace()
     print("done")
 
+
+
+def generate_current_cp_scores():
+    COHORT_NAME = "cp_before"
+    TASK_NAME = "Block_dominant"
+
+    cp_cohort = Cohort.where(name=COHORT_NAME)[0]
+    block_task = Task.find_by("description", TASK_NAME)
+    mp = MultiPredictor.find_or_create(task_id = block_task.id, cohort_id = cp_cohort.id)
+    mp.gen_scores_for_sensor(force_load=True)
+    mp.gen_scores_for_sensor(abs_val=True, force_load=True)
+    mp.gen_scores_for_sensor(non_norm=False, force_load=True)
+    norm_pred =  mp.get_norm_predictors()
+
+    # mpa.gen_scores_for_sensor(non_norm=True, abs_val=True)
+
+    mp.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
+    print("done")
+
+
+ShapeRotator.plot_by_pt(Patient.get(56))
+
+import pdb;pdb.set_trace()
+generate_current_cp_scores()
+
+
+
+
+
+import pdb;pdb.set_trace()
+
 bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 # mpc.aggregate_shap_values(non_norm=False)
 # feature_cluster_map = mpc.feature_cluster_map(non_norm=False)
 
 
-import pdb;pdb.set_trace()
+
 # fetch_new_tasks()
 
 pr = Predictor.where(multi_predictor_id=6)
@@ -401,6 +433,60 @@ bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 
 # ring combo
 rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
+
+def fix_pd_et_cohort_ids():
+    g1 = ['amg__S008','amg__S009','amg__S011','amg__S015','amg__S016','amg__S019','amg__S022','amg__S027','amg__S028','amg__S029','amg__S030','amg__S031',]
+    c1 = 'group_1_analysis_me'
+    pc1 = Cohort.where(name=c1)[0]
+    pg1 = Patient.where(name=g1)
+    for pt in pg1:
+        pt.update(cohort_id=pc1.id)
+        ptts = PatientTask.where(patient_id=pt.id)
+        for ptt in ptts:
+            ptt.update(cohort_id=pc1.id)
+            ptt.save()
+        pt.save()
+
+    g2 = ['amg__S010','amg__S013','amg__S014','amg__S017','amg__S018','amg__S021','amg__S023','amg__S024','amg__S025','amg__S026',]
+    c2 = 'group_2_analysis_me'
+    pc2 = Cohort.where(name=c2)[0]
+    pg2 = Patient.where(name=g2)
+    for pt in pg2:
+        pt.update(cohort_id=pc2.id)
+        ptts = PatientTask.where(patient_id=pt.id)
+        for ptt in ptts:
+            ptt.update(cohort_id=pc2.id)
+            ptt.save()
+        pt.save()
+    g3 = ['amg__S003','amg__S007','amg__S012','amg__S020',]
+    c3 = 'group_3_analysis_me'
+    pc3 = Cohort.where(name=c3)[0]
+    pg3 = Patient.where(name=g3)
+    for pt in pg3:
+        pt.update(cohort_id=pc3.id)
+        ptts = PatientTask.where(patient_id=pt.id)
+        for ptt in ptts:
+            ptt.update(cohort_id=pc3.id)
+            ptt.save()
+        pt.save()
+
+
+
+def fix_cp_cohort_ids():
+    g1 = ['S008_cp', 'S002_cp', 'S001_cp', 'S006_cp', 'S003_cp']
+    c1 = 'cp_before'
+    pc1 = Cohort.where(name=c1)[0]
+    pg1 = Patient.where(name=g1)
+    for pt in pg1:
+        pt.update(cohort_id=pc1.id)
+        ptts = PatientTask.where(patient_id=pt.id)
+        for ptt in ptts:
+            print(pc1.id)
+            ptt.update(cohort_id=pc1.id)
+
+
+
+
 
 
 

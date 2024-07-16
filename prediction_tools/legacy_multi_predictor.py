@@ -33,12 +33,12 @@ SENSOR_CODES = [
     'relbm_x',
     'rupa_x',
     'rsho_x',
-    'rbhd_x',
-    'rfhd_x',
+    # 'rbhd_x', # skip these for cp
+    # 'rfhd_x',
 ]
 
-# TOP_TREE_MODELS = ['RandomForest', 'ExtraTrees', 'XGBoost']
-TOP_TREE_MODELS = ['XGBoost']
+TOP_TREE_MODELS = ['RandomForest', 'ExtraTrees', 'XGBoost']
+# TOP_TREE_MODELS = ['XGBoost']
 
 NUM_TOP = 1000
 class MultiPredictor(LegacyBaseModel):
@@ -491,7 +491,7 @@ class MultiPredictor(LegacyBaseModel):
 
     def gen_scores_for_sensor(self, non_norm=True, abs_val=False, force_load=False, skip_default_sensors=False, add_other=False):
         preds = Predictor.where(task_id=self.task_id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-        # print(len(preds), " existing predictors found.")
+        print(len(preds), " existing predictors found.")
         prs = Predictor.where(task_id=self.task_id, multi_predictor_id=self.id, cohort_id=self.cohort_id)
         for el in prs:
             el.update(accuracies=None)

@@ -1,6 +1,8 @@
+from importlib import import_module
 import re
 from models.legacy_patient import Patient
 from models.legacy_patient_task import PatientTask
+from models.legacy_position_set import PositionSet
 from models.legacy_sensor import Sensor
 from models.legacy_task import Task
 from mpl_toolkits.mplot3d import Axes3D
@@ -10,6 +12,7 @@ import pandas as pd
 from PIL import Image
 from matplotlib import pyplot as plt
 from models.legacy_gradient_set import GradientSet
+from models.legacy_trial import Trial
 
 
 class ShapeRotator:
@@ -47,29 +50,44 @@ class ShapeRotator:
         plt.show()
 
 
-    def plot_3d(set_instance):
-        sensor_id = set_instance.sensor_id
-        # Determine the table name based on the class of the instance
-        table = re.sub(r'(?<!^)(?=[A-Z])', '_', set_instance.__class__.__name__).lower()
-        print(1)
-        # find all sensor_ids with the same part, side, and placement
-        sensor = Sensor.find_by('id', sensor_id)
-        same_sensor_ids = Sensor.where(part=sensor.part, side=sensor.side, placement=sensor.placement)
+    def plot_3d(set_instances, title=None):
+        if not isinstance(set_instances, list):
+            set_instances = [set_instances]
 
-        sensor_ids = [sensor.id for sensor in same_sensor_ids]
-        cls = type(set_instance)
-        # get instances for each sensor_id
-        set_instances = cls.where(sensor_id=sensor_ids, trial_id=set_instance.trial_id)
-        
-        # get matrix data from each set_instance
-        coords = [instance.mat() for instance in set_instances]
-
-        # plot in 3D
+        # Plot in 3D
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.plot(coords[0], coords[1], coords[2])
+        
+        for set_instance in set_instances:
+            sensor_id = set_instance.sensor_id
+            # Determine the table name based on the class of the instance
+            table = re.sub(r'(?<!^)(?=[A-Z])', '_', set_instance.__class__.__name__).lower()
+            
+            # Find all sensor_ids with the same part, side, and placement
+            sensor = Sensor.find_by('id', sensor_id)
+            same_sensor_ids = Sensor.where(part=sensor.part, side=sensor.side, placement=sensor.placement)
+
+            sensor_ids = [sensor.id for sensor in same_sensor_ids]
+            cls = type(set_instance)
+            # Get instances for each sensor_id
+            sensor_set_instances = cls.where(sensor_id=sensor_ids, trial_id=set_instance.trial_id)
+            
+            # Get matrix data from each set_instance
+            coords = [instance.mat() for instance in sensor_set_instances]
+            
+            # Plot coordinates
+            ax.plot(coords[0], coords[1], coords[2], label=f'{sensor.side} Hand')
+        
+        # Labels and legend
+        ax.set_xlabel('X Coordinate')
+        ax.set_ylabel('Y Coordinate')
+        ax.set_zlabel('Z Coordinate')
+        if title is not None:
+            ax.set_title(title)
+        ax.legend()
+        
         plt.show()
-    
+        
     def get_other_set(set_instance):
         sensor_id = set_instance.sensor_id
         
@@ -130,6 +148,24 @@ class ShapeRotator:
         
         plt.show()
 
+    def plot_by_pt(patient):
+        trials = patient.trials()
+        try:
+            selected_trial = Trial.select(trials, name="BlockDominant01")[0]
+        except IndexError:
+            # in case we had a bad trial
+            selected_trial = Trial.select(trials, name="BlockDominant02")[0]
+
+        # Fetch sensors for right and left hand coordinates
+        sensor_right = Sensor.where(name="rwra_x")[0]
+        sensor_left = Sensor.where(name="lwra_x")[0]
+        
+        # Fetch position sets for the selected trial and both sensors
+        position_set_right = PositionSet.where(trial_id=selected_trial.id, sensor_id=sensor_right.id)[0]
+        position_set_left = PositionSet.where(trial_id=selected_trial.id, sensor_id=sensor_left.id)[0]
+        
+        # Plot both right and left hand coordinates
+        ShapeRotator.plot_3d([position_set_right, position_set_left], title=patient.name)
 
 
 # num = 1

@@ -74,11 +74,10 @@ class OldGenerator:
         # Set the `patient` and `task` attributes of the instance to the extracted values.
         sub_dir = self.name.split('_')
         print("hello")
+
         root, patient, exp_task, variant = sub_dir[0], sub_dir[1], sub_dir[2], sub_dir[-1]
         if self.cohort is not None:
             patient = patient + "_cp"
-        if root != 'alignedCoordsByStart':
-            self.dynamic = True
 
         if variant != exp_task:
             exp_task = exp_task + '_' + variant
@@ -89,15 +88,12 @@ class OldGenerator:
         self.task = exp_task
         self.patient = patient
         # try calling self.task or self.patient here.
-        import pdb;pdb.set_trace()
     
-
     def generate_models(self):
         # Find or create a `Patient` object with the `name` attribute equal to the `patient` attribute of the instance.
         # Find or create a `Task` object with the `description` attribute equal to the `task` attribute of the instance.
         # Add the `Task` object to the list of tasks associated with the `Patient` object.
         # Generates columns corresponding to x,y, and z values.
-        print("YOLO")
         c_patient = Patient.find_or_create(name=self.patient, cohort_id=self.cohort.id)
         c_task = Task.find_or_create(description=self.task)
         
@@ -107,20 +103,15 @@ class OldGenerator:
             print("empty pt")
         else:    
             counts = 0
-            tr = Trial.find_or_create(name=self.task, patient_task_id=pm.id, trial_num=self.trial)
-            gradient_data = self.calculate_velocity_from_acceleration_with_timestamps(self.data)
-            self.gradients = {'gradients': gradient_data}
-            tr.generate_sets(self.gradients, skip_pos=True)
-
             for key, value in self.data.items():
-                print(key, value)
-                
-                
+                tr = Trial.find_or_create(name=key, patient_task_id=pm.id, trial_num=counts)
 
                 if not self.dynamic:
+                    print("yoo")
                     tr.generate_sets(data=value)
                     counts += 1
     
+    # Add this if using ET/PD/data
     def calculate_velocity_from_acceleration_with_timestamps(self, data):
         """
         Calculate velocity from acceleration data using variable time intervals

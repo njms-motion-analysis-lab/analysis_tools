@@ -1,7 +1,12 @@
+
+from importlib import import_module
 import sqlite3
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 import pdb
 from datetime import datetime
+
+from models.legacy_position_set import PositionSet
+from models.legacy_sensor import Sensor
 class Patient(LegacyBaseModel):
     table_name = "patient"
     _conn = LegacyBaseModel._conn
@@ -70,7 +75,7 @@ class Patient(LegacyBaseModel):
 
         return [Task.get(row[0]) for row in self._cursor.fetchall()]
 
-    def trials(self):
+    def trials(self, *attributes):
         from importlib import import_module
         Trial = import_module("models.legacy_trial").Trial
         self._cursor.execute("""
@@ -78,8 +83,15 @@ class Patient(LegacyBaseModel):
             JOIN patient_task ON trial.patient_task_id = patient_task.id
             WHERE patient_task.patient_id = ?
         """, (self.id,))
-
-        return [Trial(*row) for row in self._cursor.fetchall()]
+        
+        trials_list = [Trial(*row) for row in self._cursor.fetchall()]
+        
+        if attributes:
+            return [
+                tuple(getattr(trial, attribute) for attribute in attributes)
+                for trial in trials_list
+            ]
+        return trials_list
     
     @classmethod
     def delete_all(cls):
@@ -88,6 +100,7 @@ class Patient(LegacyBaseModel):
 
         # Delete records from the current class table
         cls._cursor.execute(f"DELETE FROM {cls.table_name}")
+    
 
     @classmethod
     def delete_all(cls):

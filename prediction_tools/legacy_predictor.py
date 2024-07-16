@@ -348,7 +348,7 @@ class Predictor(LegacyBaseModel):
             counterpart_pt = counterpart_pts[0]
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
             self_temp, counter_temp = self.get_temp_sub_gradients_count(self_pt, counterpart_pt, sensor, counterpart_sensor, curr_patient, features_dom, features_non_dom)
-            if self_pt.patient_id == 21 or self_pt.patient_id == 26 or self_pt.patient_id == 27 or self_pt.patient_id == 28:
+            if self.is_lefty_patient(self_pt.patient_id):
                 print("switching places for lefty pt....")
                 dom_dataframes.append(counter_temp)
                 nondom_dataframes.append(self_temp)
@@ -418,7 +418,7 @@ class Predictor(LegacyBaseModel):
         return compare_cohort, counterpart_sensor
 
     def is_lefty_patient(self, patient_id):
-        return patient_id in [21, 26, 27, 28]
+        return patient_id in [21, 26, 27, 28, 56, 57]
     
     # an alternative method of processing PT where we are not pairing individual PTs on the basis of a patient
 
@@ -656,7 +656,6 @@ class Predictor(LegacyBaseModel):
     def train_from(self, obj=None, use_shap=True, force_load=False, get_sg_count=False, add_other=False):
         if obj is None:
             obj = self
-
         bdf, y = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
 
         bdf = Predictor.trim_bdf_with_boruta(bdf, y)
@@ -859,6 +858,7 @@ class Predictor(LegacyBaseModel):
         return LabelEncoder().fit_transform(bdf['is_dominant'])
     
     def extract_last_two_columns(self, bdf):
+        print(bdf)
         # Define a mapping from cohort names to floats
         cohort_mapping = {
             "group_1_analysis_me": 0,
@@ -917,6 +917,7 @@ class Predictor(LegacyBaseModel):
 
         if bdf.isna().any().any():
             print("NaN values found in DataFrame after processing")
+        
         bdf, removed_columns = self.extract_last_two_columns(bdf)
 
         return bdf

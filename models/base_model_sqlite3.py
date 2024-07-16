@@ -12,6 +12,12 @@ class BaseModel:
     _cursor = db.cursor
 
 
+    def select(objects, **kwargs):
+        def match(obj):
+            return all(getattr(obj, key) == value for key, value in kwargs.items())
+        
+        return [obj for obj in objects if match(obj)]
+
     @classmethod
     def class_sort_by(cls, attribute):
         if not cls.table_exists():
@@ -75,8 +81,13 @@ class BaseModel:
 
         now = datetime.now()
         self.updated_at = now
+
+        sql_query = f"UPDATE {self.table_name} SET {updates} WHERE id=?"
+        sql_params = tuple(kwargs.values()) + (self.updated_at, self.id)
+
         try:
-            self.__class__._cursor.execute(f"UPDATE {self.table_name} SET {updates} WHERE id=?", tuple(kwargs.values()) + (self.updated_at, self.id,))
+            print(f"Executing SQL Query: {sql_query} with params: {sql_params}")
+            self.__class__._cursor.execute(sql_query, sql_params)
             self.__class__._conn.commit()
             
             # Update the in-memory instance attributes

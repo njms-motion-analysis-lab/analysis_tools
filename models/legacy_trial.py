@@ -96,47 +96,6 @@ class Trial(LegacyBaseModel):
         sensor_name = sensor_name_with_unit.split('(')[0].strip()
         
         return sensor_name
-    def generate_dynamic_gradient_sets(self, data):
-        from importlib import import_module
-        DynamicGradientSet = import_module("models.dynamic_gradient_set").DynamicGradientSet
-        DynamicPositionSet = import_module("models.dynamic_position_set").DynamicPositionSet
-        Sensor = import_module("models.legacy_sensor").Sensor
-
-        dynamic_position_data = data['positional']
-        dynamic_gradient_data = data['gradients']
-        
-
-        # Remove array slicing to include all sensors
-        for key in dynamic_position_data.keys():
-            col = dynamic_position_data[key]
-            sensor = Sensor.find_by('name', key)
-            if not sensor:
-                print("sensor not found, next...")
-                continue
-            DynamicPositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-
-        for key in dynamic_gradient_data.keys():
-            col = dynamic_gradient_data[key]
-            sensor = Sensor.find_by('name', key)
-
-            if not sensor:
-                print("sensor not found for dynamic, next...")
-                continue
-            else:
-                if len(DynamicPositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)) == 0:
-                    DynamicPositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-                print(f"Generating dynamic data for sensor {sensor.name}!!!")
-                dgs = DynamicGradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-                if len(dgs.dynamic_sub_gradients()) == 0:
-                    dgs.create_dynamic_subgradients()
-                    dgs.update(aggregated_stats=dgs.calc_aggregate_stats())
-                else:
-                    print("next...")
-                    continue
-                
-                print(f"Done with dynamic data for {sensor.name}!!!")
-
-
 
     def patient(self):
         from importlib import import_module
@@ -153,6 +112,13 @@ class Trial(LegacyBaseModel):
         if patient_task:
             return Task.get(id=patient_task.task_id)
         return None
+    
+    @classmethod
+    def select(cls, trials, **kwargs):
+        def match(trial):
+            return all(getattr(trial, key) == value for key, value in kwargs.items())
+        
+        return [trial for trial in trials if match(trial)]
 
 
     def create_sensor_from_string(self, sensor_string):

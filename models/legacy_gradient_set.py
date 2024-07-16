@@ -1,9 +1,9 @@
+from importlib import import_module
 from models.legacy_position_set import PositionSet
 import pickle
 from typing import Any, List
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.legacy_task import Task
-from models.legacy_patient import Patient
+
 from datetime import datetime
 from models.legacy_sub_gradient import SubGradient
 from models.legacy_position_set import PositionSet
@@ -13,7 +13,6 @@ import numpy as np
 import pdb
 
 
-from models.legacy_patient_task import PatientTask
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
 
@@ -58,6 +57,7 @@ class GradientSet(LegacyBaseModel):
         MotionFilter.get_valid_motions(self)
 
     def get_task(self):
+        Task = import_module("models.legacy_task").Task
         self._cursor.execute("""
             SELECT task.* FROM task
             JOIN patient_task ON task.id = patient_task.task_id
@@ -69,6 +69,7 @@ class GradientSet(LegacyBaseModel):
         return Task(*row) if row else None
 
     def get_patient(self):
+        Patient = import_module("models.legacy_patient").Patient
         self._cursor.execute("""
             SELECT patient.* FROM patient
             JOIN patient_task ON patient.id = patient_task.patient_id
@@ -111,6 +112,7 @@ class GradientSet(LegacyBaseModel):
         return self._cursor.fetchone()[0]
 
     def get_patient_task(self):
+        PatientTask = import_module("models.legacy_patient_task").PatientTask
         patient_task_id = self.get_patient_task_id()
         return PatientTask.get(patient_task_id)
 

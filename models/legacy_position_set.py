@@ -1,11 +1,10 @@
 import pickle
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
-from models.legacy_task import Task
-from models.legacy_patient import Patient
+from importlib import import_module
 from datetime import datetime
 import pandas as pd
 
-from models.legacy_patient_task import PatientTask
+
 
 class PositionSet(LegacyBaseModel):
     table_name = "position_set"
@@ -25,6 +24,7 @@ class PositionSet(LegacyBaseModel):
 
 
     def get_task(self):
+        Task = import_module("models.legacy_task").Task
         self._cursor.execute("""
             SELECT task.* FROM task
             JOIN patient_task ON task.id = patient_task.task_id
@@ -36,6 +36,7 @@ class PositionSet(LegacyBaseModel):
         return Task(*row) if row else None
 
     def get_patient(self):
+        Patient = import_module("models.legacy_patient").Patient
         self._cursor.execute("""
             SELECT patient.* FROM patient
             JOIN patient_task ON patient.id = patient_task.patient_id
@@ -62,6 +63,7 @@ class PositionSet(LegacyBaseModel):
         return self._cursor.fetchone()[0]
 
     def get_patient_task(self):
+        PatientTask = import_module("models.legacy_patient_task").PatientTask
         patient_task_id = self.get_patient_task_id()
         return PatientTask.get(patient_task_id)
 
@@ -72,3 +74,8 @@ class PositionSet(LegacyBaseModel):
     def deserialize_matrix(self):
         # Deserialize the 'matrix' value from the binary format using pickle
         return pickle.loads(self.matrix)
+
+    def view_3d(self):
+        from importlib import import_module
+        ShapeRotator = import_module("viewers.shape_rotator").ShapeRotator
+        return ShapeRotator.plot_3d(self)
