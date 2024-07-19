@@ -70,7 +70,7 @@ COMPATIBLE_MODELS = [
 ]
 
 DEFAULT_FEATURES = ['grad_data__sum_values','grad_data__abs_energy','grad_data__mean_abs_change', 'grad_data__mean_change', 'grad_data__mean_second_derivative_central', 'grad_data__variation_coefficient','grad_data__standard_deviation','grad_data__skewness','grad_data__kurtosis','grad_data__variance','grad_data__root_mean_square','grad_data__mean', 'grad_data__length']
-MINIMUM_SAMPLE_SIZE = 8
+MINIMUM_SAMPLE_SIZE = 10
 MINI_PARAMS = {
     'RandomForest': {
         'classifier': RandomForestClassifier(),
@@ -348,7 +348,14 @@ class Predictor(LegacyBaseModel):
             counterpart_pt = counterpart_pts[0]
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
             self_temp, counter_temp = self.get_temp_sub_gradients_count(self_pt, counterpart_pt, sensor, counterpart_sensor, curr_patient, features_dom, features_non_dom)
-            if self.is_lefty_patient(self_pt.patient_id):
+            ##
+            if self_pt.patient_id == 57 and (sensor.name == "lelbm_z" or sensor.name == "lelbm_y" or sensor.name == "lelbm_x"):
+                print("SKIPPING")
+                continue
+            if self_pt.patient_id == 57 and (nondom_sensor.name == "lelbm_z" or nondom_sensor.name == "lelbm_y" or nondom_sensor.name == "lelbm_x"):
+                print("SKIPPING")
+                continue
+            if self_pt.patient_id == 21 or self_pt.patient_id == 26 or self_pt.patient_id == 27 or self_pt.patient_id == 28:
                 print("switching places for lefty pt....")
                 dom_dataframes.append(counter_temp)
                 nondom_dataframes.append(self_temp)
@@ -356,7 +363,6 @@ class Predictor(LegacyBaseModel):
             else:
                 dom_dataframes.append(self_temp)
                 nondom_dataframes.append(counter_temp)
-        
         dom_df = pd.concat(dom_dataframes)
         nondom_df = pd.concat(nondom_dataframes)
 
@@ -418,7 +424,7 @@ class Predictor(LegacyBaseModel):
         return compare_cohort, counterpart_sensor
 
     def is_lefty_patient(self, patient_id):
-        return patient_id in [21, 26, 27, 28, 56, 57]
+        return patient_id in [21, 26, 27, 28]
     
     # an alternative method of processing PT where we are not pairing individual PTs on the basis of a patient
 
@@ -472,6 +478,12 @@ class Predictor(LegacyBaseModel):
 
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
             self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient, features_dom, features_non_dom)
+            if self_pt.patient_id == 57 and (sensor.name == "lelbm_z" or sensor.name == "lelbm_y" or sensor.name == "lelbm_x"):
+                print("SKIPPING")
+                continue
+            if self_pt.patient_id == 57 and (nondom_sensor.name == "lelbm_z" or nondom_sensor.name == "lelbm_y" or nondom_sensor.name == "lelbm_x"):
+                print("SKIPPING")
+                continue
 
             if self.is_lefty_patient(self_pt.patient_id):
                 print("Switching places for lefty patient...")
@@ -532,12 +544,14 @@ class Predictor(LegacyBaseModel):
         other_pts = PatientTask.where(task_id=dom_task.id, cohort_id=compare_cohort.id) if self.cohort().is_alt_compare() else []
         dom_dataframes, nondom_dataframes = self.process_patient_tasks(self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor, force_old=True)
 
-
         print(dom_dataframes)
         print(nondom_dataframes)
 
-        dom_dataframes = [df.reset_index(drop=True) for df in dom_dataframes if not df.empty]
-        nondom_dataframes = [df.reset_index(drop=True) for df in nondom_dataframes if not df.empty]
+        if not dom_dataframes or not any(df is not None and not df.empty for df in dom_dataframes):
+            return None
+
+        if not nondom_dataframes or not any(df is not None and not df.empty for df in nondom_dataframes):
+            return None
 
         # Check if there are any DataFrames to concatenate, to avoid errors when lists are empty
         if dom_dataframes:
@@ -574,6 +588,8 @@ class Predictor(LegacyBaseModel):
         print(patient_sensor.attrs())
         stats_method = abs if self.abs_val == 1 else lambda x: x
         gradient_stats = patient_pt.combined_gradient_set_stats_list(patient_sensor,abs_val=self.abs_val,non_normed=self.non_norm,loc=features_loc)
+        if gradient_stats is None:
+            return None
         # Check if 'mean' is in the gradient stats and process accordingly
         if 'mean' in gradient_stats:
             temp_df = pd.DataFrame(
@@ -656,32 +672,45 @@ class Predictor(LegacyBaseModel):
     def train_from(self, obj=None, use_shap=True, force_load=False, get_sg_count=False, add_other=False):
         if obj is None:
             obj = self
-        bdf, y = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
 
+        result = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
+        
+        if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
+            print("EMPTY DF SKIPPING")
+            return None
+
+        bdf, y = result 
         bdf = Predictor.trim_bdf_with_boruta(bdf, y)
         if len(bdf.columns) <= 2:
             print("Skipping boruta!")
             self.skip_boruta == len(bdf.columns)
-
             bdf, y = self.get_final_bdf(force_load=False, get_sg_count=get_sg_count, add_other=add_other)
+        
+        if bdf is None:
+            print("NO DF found...skipping")
+            return
         self.fit_multi_models(bdf, y, use_shap)
+        # return "SKIP" if self.patient_id == 57 && "lelbm_z" or "lelbm_x", "lelbm_y"
+        # return patient_id in [21, 26, 27, 28]
         print("Done training!")
     
     def retrain_from(self, use_shap=False, force_load=False, get_sg_count=False):
         # only use if best dataframe saved on predictor
-        bdf = self.get_df(force_load=force_load)
-        
-        y = self.get_y(bdf)
+        bdf = self.get_final_bdf()
 
         self.fit_multi_models(bdf, y, use_shap)
 
-    def get_final_bdf(self, force_load=False, force_abs_x=False, untrimmed=False, get_sg_count=False, add_other=False):
+    def get_final_bdf(self, force_load=False, force_abs_x=False, untrimmed=False, get_sg_count=False, add_other=False):        
         bdf = self.get_df(force_load=force_load, add_other=False)
+        if bdf is None:
+            print("BDF EMPTY, skipping")
+            return None
+    
         if get_sg_count is True:
             other = self.generate_sub_gradient_count()
             bdf = pd.merge(other, bdf, on=['is_dominant', 'patient'], how='inner')
         y = self.get_y(bdf)
-        
+
 
         if force_abs_x == True:
             columns_to_drop = [col for col in bdf.columns if col.endswith('_x')]
@@ -783,7 +812,7 @@ class Predictor(LegacyBaseModel):
         return optimal_num_features
 
 # Remove this after new data (add_other)
-    def get_df(self, force_load=True, add_other=False):
+    def get_df(self, force_load=True, add_other=False, compare_across_cohort = False):
         def gen_df():
             sensor = Sensor.get(self.sensor_id)
             same_sensor_objs = Sensor.where(part=sensor.part, side=sensor.side, placement=sensor.placement)
@@ -799,42 +828,87 @@ class Predictor(LegacyBaseModel):
             y.columns = [str(col) + '_y' for col in y.columns]
             z = self.generate_dataframes(sensor=same_sensor_objs[2], add_other=add_other) # Z
             z.columns = [str(col) + '_z' for col in z.columns]
-            columns_to_drop = ['is_dominant_x', 'is_dominant_y', 'is_dominant_z','patient_x', 'patient_y','patient_z', 'cohort_x', 'cohort_y', 'cohort_z']
+
+            
 
             # Step 1: Normalize the cohort, is_dominant, and patient columns in original x, y, z before renaming
             bdf = pd.concat([x, y, z], axis=1)
 
-            x_normalized = x[['cohort_x', 'is_dominant_x', 'patient_x']].rename(columns={'cohort_x': 'cohort', 'is_dominant_x': 'is_dominant', 'patient_x': 'patient'}).drop_duplicates()
-            y_normalized = y[['cohort_y', 'is_dominant_y', 'patient_y']].rename(columns={'cohort_y': 'cohort', 'is_dominant_y': 'is_dominant', 'patient_y': 'patient'}).drop_duplicates()
-            z_normalized = z[['cohort_z', 'is_dominant_z', 'patient_z']].rename(columns={'cohort_z': 'cohort', 'is_dominant_z': 'is_dominant', 'patient_z': 'patient'}).drop_duplicates()
-            master_info = pd.concat([x_normalized, y_normalized, z_normalized]).drop_duplicates()
-            
-            is_dom = bdf['is_dominant_z']
-            pt = bdf['patient_z']
-            cohort = bdf['cohort_z']
+            if compare_across_cohort == True:
+                columns_to_drop = ['is_dominant_x', 'is_dominant_y', 'is_dominant_z','patient_x', 'patient_y','patient_z', 'cohort_x', 'cohort_y', 'cohort_z']
+                x_normalized = x[['cohort_x', 'is_dominant_x', 'patient_x']].rename(columns={'cohort_x': 'cohort', 'is_dominant_x': 'is_dominant', 'patient_x': 'patient'}).drop_duplicates()
+                y_normalized = y[['cohort_y', 'is_dominant_y', 'patient_y']].rename(columns={'cohort_y': 'cohort', 'is_dominant_y': 'is_dominant', 'patient_y': 'patient'}).drop_duplicates()
+                z_normalized = z[['cohort_z', 'is_dominant_z', 'patient_z']].rename(columns={'cohort_z': 'cohort', 'is_dominant_z': 'is_dominant', 'patient_z': 'patient'}).drop_duplicates()
+                master_info = pd.concat([x_normalized, y_normalized, z_normalized]).drop_duplicates()
+                
+                is_dom = bdf['is_dominant_z']
+                pt = bdf['patient_z']
+                cohort = bdf['cohort_z']
 
-            bdf['is_dominant'] = is_dom
-            bdf['patient'] = pt
-            bdf['cohort'] = cohort
-
+                bdf['is_dominant'] = is_dom
+                bdf['patient'] = pt
+                bdf['cohort'] = cohort
+                bdf = bdf.drop(columns=columns_to_drop)
             bdf = bdf.merge(master_info, on=['is_dominant','patient','cohort'], how='left')
-            bdf = bdf.drop(columns=columns_to_drop)
-
+            
             return bdf
 
+        def gen_old_df():
+            sensor = Sensor.get(self.sensor_id)
+            same_sensor_objs = Sensor.where(part=sensor.part, side=sensor.side, placement=sensor.placement)
+            
+            # Generate dataframes and handle None gracefully
+            x = self.generate_dataframes(sensor=same_sensor_objs[0])  # X
+            y = self.generate_dataframes(sensor=same_sensor_objs[1])  # Y
+            z = self.generate_dataframes(sensor=same_sensor_objs[2])  # Z
+
+            valid_dfs = []
+            is_dom = None
+            pt = None
+
+            if x is not None:
+                is_dom = x['is_dominant']
+                pt = x['patient']
+                x.columns = [str(col) + '_x' for col in x.columns]
+                valid_dfs.append(x)
+            if y is not None:
+                y.columns = [str(col) + '_y' for col in y.columns]
+                valid_dfs.append(y)
+            if z is not None:
+                z.columns = [str(col) + '_z' for col in z.columns]
+                valid_dfs.append(z)
+
+            # If no valid dataframes, return None
+            if not valid_dfs:
+                return None
+            
+            bdf = pd.concat(valid_dfs, axis=1)
+
+            # Drop the specified columns if they exist in the DataFrame
+            columns_to_drop = [col for col in ['is_dominant_x', 'is_dominant_y', 'is_dominant_z', 'patient_x', 'patient_y', 'patient_z', 'cohort_x', 'cohort_y', 'cohort_z'] if col in bdf.columns]
+            bdf = bdf.drop(columns=columns_to_drop, errors='ignore')
+
+            # Add is_dominant and patient columns if they were extracted from x
+            if is_dom is not None and pt is not None:
+                bdf['is_dominant'] = is_dom
+                bdf['patient'] = pt
+
+            return bdf
         if self.non_norm == 1:
             # self.update(aggregated_stats_non_normed = self.aggregated_stats)
             if force_load == True:
                 self.save()
-            if self.aggregated_stats_non_normed is None or force_load == True:
+            if self.aggregated_stats_non_normed is None or force_load == True or compare_across_cohort == False:
                 print("generating non normed agg df...")
-                stats = memoryview(pickle.dumps(gen_df()))
+                
+                stats = memoryview(pickle.dumps(gen_old_df()))
+
                 self.update(aggregated_stats_non_normed = stats)
             return pickle.loads(self.aggregated_stats_non_normed)
         
-        if self.aggregated_stats is None or force_load == True:
+        if self.aggregated_stats is None or force_load == True or compare_across_cohort == False:
             print("generating agg df...")
-            stats = memoryview(pickle.dumps(gen_df()))
+            stats = memoryview(pickle.dumps(gen_old_df()))
             self.update(aggregated_stats = stats)
 
         return pickle.loads(self.aggregated_stats)
@@ -855,19 +929,22 @@ class Predictor(LegacyBaseModel):
 
 
     def get_y(self, bdf):
+        if bdf is None:
+            print("EMPTY BDF")
+            return None
         return LabelEncoder().fit_transform(bdf['is_dominant'])
     
-    def extract_last_two_columns(self, bdf):
-        print(bdf)
+    def extract_last_two_columns(self, bdf, compare_across_cohort = False):
         # Define a mapping from cohort names to floats
-        cohort_mapping = {
-            "group_1_analysis_me": 0,
-            "group_2_analysis_me": 1.0,
-            "group_3_analysis_me": -1.0
-        }
+        if compare_across_cohort is True:
+            cohort_mapping = {
+                "group_1_analysis_me": 0,
+                "group_2_analysis_me": 1.0,
+                "group_3_analysis_me": -1.0
+            }
 
-        # Replace cohort column values based on the defined mapping
-        bdf['cohort'] = bdf['cohort'].replace(cohort_mapping)
+            # Replace cohort column values based on the defined mapping
+            bdf['cohort'] = bdf['cohort'].replace(cohort_mapping)
 
         # Extract specified columns
         columns_to_extract = ['cohort', 'str_patient']
@@ -884,17 +961,24 @@ class Predictor(LegacyBaseModel):
     def clean_bdf(self, bdf):
         def get_patient_id(p_name):
             # Fetch the patient object; if not found, returns None
-            patient = Patient.where(name=p_name)[0]
-            return patient.id if patient else None
+            patient = Patient.where(name=p_name)
+            print(patient)
+            if len(patient) != 0:
+                return patient[0].id
+            else:
+                print('!!!!!!!!!!!')
+                print("MISSING PATIENT ID")
+                print('!!!!!!!!!!!')
+                return None
 
         # Drop columns where all values are NaN
         bdf.dropna(axis=1, how='all', inplace=True)
-
         # Store original patient names in a new column for record-keeping
         bdf['str_patient'] = bdf['patient'].astype(str)
 
         # Convert 'patient' column to patient IDs
         # Ensure 'patient' names are treated as strings for uniform processing
+
         bdf['patient'] = bdf['patient'].astype(str).apply(get_patient_id)
 
         # Fill NaN for any patient IDs not found with a placeholder, e.g., 0 or -1
@@ -917,9 +1001,9 @@ class Predictor(LegacyBaseModel):
 
         if bdf.isna().any().any():
             print("NaN values found in DataFrame after processing")
-        
-        bdf, removed_columns = self.extract_last_two_columns(bdf)
 
+        # bdf, removed_columns = self.extract_last_two_columns(bdf)
+        bdf = bdf.drop(columns=['str_patient'])
         return bdf
     # The method starts considering feature sets from the minimum number of features.
     # It updates the best number of features as long as the silhouette score is improving and above the minimum threshold.
@@ -1449,20 +1533,31 @@ class Predictor(LegacyBaseModel):
             y_pred = best_classifier.predict(X_test)
             y_pred_proba = best_classifier.predict_proba(X_test)[:, 1] if hasattr(best_classifier, "predict_proba") else None
     
+            # Define compatible models for SHAP TreeExplainer
+            COMPATIBLE_MODELS = ['GradientBoostingClassifier', 'RandomForestClassifier', 'ExtraTreesClassifier']
+
+            # Function to check if a model is binary classification
+            def is_binary_classification(y):
+                return len(set(y)) == 2
+
+            # Your code
             # Check if the model is compatible with SHAP TreeExplainer
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
-                print("Using SHAP!")
-                explainer = shap.TreeExplainer(best_classifier)
-                shap_values = explainer.shap_values(X_test)
-                if isinstance(shap_values, list):  # If there are multiple classes
-                    # Taking only the SHAP values for class 1 in case of binary classification.
-                    # Adjust for multi-class problems as necessary.
-                    shap_values = shap_values[1]
-                combined_shap_values.append(shap_values)
-                all_X.append(X_test)
+                if is_binary_classification(y_train):
+                    print("Using SHAP!")
+                    explainer = shap.TreeExplainer(best_classifier)
+                    shap_values = explainer.shap_values(X_test)
+                    if isinstance(shap_values, list):  # If there are multiple classes
+                        # Taking only the SHAP values for class 1 in case of binary classification.
+                        # Adjust for multi-class problems as necessary.
+                        shap_values = shap_values[1]
+                    combined_shap_values.append(shap_values)
+                    all_X.append(X_test)
+                else:
+                    print(f"SHAP not supported for multi-class classification with {best_classifier.__class__.__name__}")
 
-            if hasattr(classifier, 'feature_importances_'):
-                feature_importances = grid_search.best_estimator_.named_steps['classifier'].feature_importances_
+            if hasattr(best_classifier, 'feature_importances_'):
+                feature_importances = best_classifier.feature_importances_
                 importance_df = pd.DataFrame({
                     'Feature': X_train.columns,
                     'Importance': feature_importances
@@ -1471,7 +1566,7 @@ class Predictor(LegacyBaseModel):
                 # Append this dataframe to the list
                 all_importance_dfs.append(importance_df)
             else:
-                print(f"{type(classifier).__name__} doesn't have feature_importances_ attribute.")
+                print(f"{type(best_classifier).__name__} doesn't have feature_importances_ attribute.")
 
             accuracy_scores.append(metrics.accuracy_score(y_test, y_pred))
             precision_scores.append(metrics.precision_score(y_test, y_pred, average='weighted', zero_division=0))
@@ -1652,8 +1747,6 @@ class Predictor(LegacyBaseModel):
     def get_classifier_accuracies(self, alt=None):
         new_acc_dict = {}
         metrics = self.get_accuracies()['classifier_metrics']
-        print(metrics)
-        print(alt)
         for model_type in self.get_accuracies()['classifier_accuracies'].keys():
             # Check if "Accuracy:" is in the metrics, otherwise fall back to "Accuracy"
             
@@ -1666,9 +1759,6 @@ class Predictor(LegacyBaseModel):
                 accuracy_key = "Training Score"
             
             # Use the correct key to get the accuracy
-            print(metrics[model_type])
-            print()
-            print(self.attrs())
             new_acc_dict[model_type] = metrics[model_type][accuracy_key]
 
         return new_acc_dict
@@ -1716,7 +1806,7 @@ class Predictor(LegacyBaseModel):
 
 
     @classmethod
-    def _train_from_mp(cls, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps, use_shap=True):
+    def _train_from_mp(cls, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps, use_shap=True, new_pred=None):
         # Training of a specific classifier
         classifier = classifier_data['classifier']
         pipe = Pipeline(steps=[('classifier', classifier)])
@@ -1773,16 +1863,28 @@ class Predictor(LegacyBaseModel):
             y_pred = best_classifier.predict(X_test)
             y_pred_proba = best_classifier.predict_proba(X_test)[:, 1] if hasattr(best_classifier, "predict_proba") else None
 
+            # Define compatible models for SHAP TreeExplainer
+            COMPATIBLE_MODELS = ['GradientBoostingClassifier', 'RandomForestClassifier', 'ExtraTreesClassifier']
+
+            # Function to check if a model is binary classification
+            def is_binary_classification(y):
+                return len(set(y)) == 2
+
+            # Your code
             # Check if the model is compatible with SHAP TreeExplainer
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
-                explainer = shap.TreeExplainer(best_classifier)
-                shap_values = explainer.shap_values(X_test)
-                if isinstance(shap_values, list):  # If there are multiple classes
-                    # Taking only the SHAP values for class 1 in case of binary classification.
-                    # Adjust for multi-class problems as necessary.
-                    shap_values = shap_values[1]
-                combined_shap_values.append(shap_values)
-                all_X.append(X_test)
+                if is_binary_classification(y_train):
+                    print("Using SHAP!")
+                    explainer = shap.TreeExplainer(best_classifier)
+                    shap_values = explainer.shap_values(X_test)
+                    if isinstance(shap_values, list):  # If there are multiple classes
+                        # Taking only the SHAP values for class 1 in case of binary classification.
+                        # Adjust for multi-class problems as necessary.
+                        shap_values = shap_values[1]
+                    combined_shap_values.append(shap_values)
+                    all_X.append(X_test)
+                else:
+                    print(f"SHAP not supported for multi-class classification with {best_classifier.__class__.__name__}")
 
 
             if hasattr(classifier, 'feature_importances_'):
@@ -1812,11 +1914,16 @@ class Predictor(LegacyBaseModel):
             cross_val_scores.append(current_best_score)
 
 
-        if use_shap is True and (classifier_name in SHAP_CLASSIFIERS):
-            aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
+        if use_shap is True and (classifier_name in SHAP_CLASSIFIERS) and len(combined_shap_values) != 0:
+            try:
+                aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
+            except:
+                import pdb;pdb.set_trace()
             combined_X = pd.concat(all_X, axis=0).reset_index(drop=True)
-
-            cpc = PredictorScore.find_or_create(classifier_name=classifier_name,score_type="MultiShapleySummary", multi_predictor_id=mps.id)
+            print()
+            print("GENERATING PREDICTOR SCORE!!!", "ID", mps.id)
+            cpc = PredictorScore.find_or_create(classifier_name=classifier_name,score_type="MultiShapleySummary", predictor_id=new_pred.id, multi_predictor_id=mps.id)
+            print()
             
             cpc.set_shap_matrix(aggregated_shap_values=aggregated_shap_values, combined_X=combined_X)
 

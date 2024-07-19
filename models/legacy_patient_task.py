@@ -187,7 +187,8 @@ class PatientTask(LegacyBaseModel):
             combined_df = pd.concat(dataframes)
             mean_df = combined_df.groupby(combined_df.index).mean()
         except ValueError as e:
-            import pdb;pdb.set_trace()
+            print("ERROR", e)
+            return None
 
             
         return mean_df

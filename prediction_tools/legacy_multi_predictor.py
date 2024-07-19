@@ -27,10 +27,10 @@ import matplotlib.colors as mcolors
 SENSOR_CODES = [
     'rfin_x',
     'rwra_x',
-    'rwrb_x',
+    # 'rwrb_x',
     'rfrm_x',
     'relb_x',
-    'relbm_x',
+    # 'relbm_x',
     'rupa_x',
     'rsho_x',
     # 'rbhd_x', # skip these for cp
@@ -502,7 +502,6 @@ class MultiPredictor(LegacyBaseModel):
             curr_sensors = self.sensors
         else:
             curr_sensors = self.get_sensors()
-
         for sensor in curr_sensors:
             predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
             predictor = predictor.train_from(force_load=force_load, add_other=add_other)
@@ -510,8 +509,12 @@ class MultiPredictor(LegacyBaseModel):
             pickle.dump(self.items, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("Done training Predictors for MP:", self.id)
     
-    def get_all_preds(self):
-        return Predictor.where(multi_predictor_id=self.id)
+    def get_all_preds(self, same_cohort=False):
+        if same_cohort:
+            return Predictor.where(multi_predictor_id=self.id, cohort_id=self.cohort_id)
+        else:
+            return Predictor.where(multi_predictor_id=self.id)
+            
 
     def get_norm_acc(self, alt=False):
         pr = self.get_norm_predictors()
@@ -567,7 +570,7 @@ class MultiPredictor(LegacyBaseModel):
         # Iterate through the mpss list
         for mp in predictors:
             # Extracting the classifier accuracies
-            if mp.get_accuracies() != {}:
+            if mp.get_accuracies() != {} and mp.get_accuracies() != None:
                 if alt is None:
                     accuracies = mp.get_accuracies()['classifier_accuracies']
                 else:
@@ -589,6 +592,70 @@ class MultiPredictor(LegacyBaseModel):
     
     def cohort_name(self):
         return Cohort.get(id=self.cohort_id).name
+    
+    def view_progress(self, fix=False, multi=False):
+        if multi == True:
+            mp = MultiPredictor.where(cohort_id=2, model='norm_non_abs_combo')[0]
+            # all_preds = mp.get_all_preds(same_cohort=True)
+            all_preds = Predictor.where(multi_predictor_id=mp.id)
+        else:
+            all_preds = self.get_all_preds(same_cohort=True)
+        print("COHORT", Cohort.get(self.cohort_id).name)
+        print(self.attrs())
+        print("TOTAL number of predictors", len(all_preds))
+        
+        default = []
+        abs_val = []
+        norm = []
+        others = []
+        
+        for pred in all_preds:
+            if pred.non_norm == True and pred.abs_val == False:
+                default.append(pred)
+            elif pred.abs_val == True and pred.non_norm == True:
+                abs_val.append(pred)
+            elif pred.non_norm == False:
+                norm.append(pred)
+            else:
+                print("OTHER", norm.attrs())
+        
+        
+        all_pred_types = reversed([default, abs_val, norm, others])
+        for pred_type in all_pred_types:
+            print()
+            print("NEW PRED TYPE")
+            print()
+            bad_snr = ["rbhd_x", "rfhd_x"]
+            for pred in pred_type:
+                sensor_name = Sensor.get(pred.sensor_id).name
+                if pred.accuracies is not None:
+                    acc = pred.get_classifier_accuracies()
+                else:
+                    if sensor_name not in bad_snr:
+                        if fix == True:
+                            try:
+                                pred.train_from(use_shap=True)
+                            except:
+                                print("FUUuck")
+                                continue
+                        else:
+                            print("YOLO")
+
+                    acc = "N/A"
+                    
+                print("ID:", pred.id,"SENSOR:", sensor_name, "ACCURACIES:", acc, "UPDATED AT", pred.updated_at)
+            
+            print()
+            print("END PRED TYPE")
+            print()
+
+
+        print("DONEEEE")
+        import pdb;pdb.set_trace()
+        print("ok")
+            
+        
+
 
     def view_result_heatmap(self):
         results = self.get_acc()
@@ -626,7 +693,13 @@ class MultiPredictor(LegacyBaseModel):
         else:
             pr = preds
 
-        title = self.cohort_name() + "/" + title
+        #TODO stephen, change this back
+        # title = self.cohort_name() + "/" + title
+        if title is not None:
+            title = "CP2 multi" + "/" + title
+        else:
+            title = "CP2 multi" + "/"
+
         
         for pred in pr:
             scores = pred.get_predictor_scores()
@@ -687,13 +760,25 @@ class MultiPredictor(LegacyBaseModel):
 
     def combo_train(self, default_pred, abs_pred, new_pred, norm_pred=None, classifier_name=None, remove_lateral=True, get_sg_count=False):
         # non abs non norm
-        df1, y1 = default_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
-
+        
+        result = default_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
+            print("EMPTY DF SKIPPING")
+            return None
+        df1, y1 = result
         # abs non norm
-        df2, _ = abs_pred.get_final_bdf(untrimmed=True, get_sg_count=get_sg_count)
+        result = abs_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
+            print("EMPTY DF SKIPPING")
+            return None
+        df2, _ = result
 
         # norm (abs)
-        df3, _ = norm_pred.get_final_bdf(untrimmed=True, get_sg_count=get_sg_count) if norm_pred else (None, None)
+        df3, _ = norm_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
+            print("EMPTY DF SKIPPING")
+            return None
+        df3, _ = result
 
         comp_df = MultiPredictor.create_composite_dataframe(df1, df2, df3=df3)
         combo_df = Predictor.trim_bdf_with_boruta(comp_df, y1)    
@@ -712,7 +797,7 @@ class MultiPredictor(LegacyBaseModel):
         acc_metrics = {}
         for classifier_name, classifier_data in classifiers.items():
             print(f"Training {classifier_name}...")
-            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = Predictor._train_from_mp(combo_df, y1, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps=self, use_shap=True)
+            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = Predictor._train_from_mp(combo_df, y1, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps=self, use_shap=True, new_pred=new_pred)
             classifier_accuracies[classifier_name] = np.mean(classifier_scores)
             classifier_params[classifier_name] = best_params
             classifier_metrics[classifier_name] = extra_metrics

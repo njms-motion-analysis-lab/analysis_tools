@@ -374,37 +374,89 @@ def fetch_new_tasks():
     print("done")
 
 
+def generate_current_cp_scores(mp):
+    
+    import pdb;pdb.set_trace()
+    # mp.view_progress(fix=False, multi=True)
+    # mp.gen_scores_for_sensor()
+    print("done with default")
 
-def generate_current_cp_scores():
-    COHORT_NAME = "cp_before"
-    TASK_NAME = "Block_dominant"
-
-    cp_cohort = Cohort.where(name=COHORT_NAME)[0]
-    block_task = Task.find_by("description", TASK_NAME)
-    mp = MultiPredictor.find_or_create(task_id = block_task.id, cohort_id = cp_cohort.id)
-    mp.gen_scores_for_sensor(force_load=True)
-    mp.gen_scores_for_sensor(abs_val=True, force_load=True)
-    mp.gen_scores_for_sensor(non_norm=False, force_load=True)
-    norm_pred =  mp.get_norm_predictors()
+    # mp.gen_scores_for_sensor(abs_val=True, force_load=True)
+    # mp.gen_scores_for_sensor(non_norm=False, force_load=True)
+    
 
     # mpa.gen_scores_for_sensor(non_norm=True, abs_val=True)
-
+    norm_pred =  mp.get_norm_predictors()
+    
     mp.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
-    print("done")
+    
+    print("really done")
 
 
-ShapeRotator.plot_by_pt(Patient.get(56))
+
+def save_mp_shap_vals(mp):
+    bdp = mp.get_preds()
+
+    mp.save_shap()
+    mp.save_abs_shap()
+    mp.save_norm_shap()
+
+    # bc.save_combo_shap()
+    # rc.save_combo_shap()
+
+    bap = mp.get_abs_preds()
+
+    mp.save_shap_values(preds=bap)
+
+    bnp = mp.get_norm_preds()
+
+    mp.save_shap_values(preds=bnp)
+
+    # bc.save_shap_values(non_norm=False, title="combo")
+    # rc.save_shap_values(non_norm=False, title="combo")
+    print("DONE!")
+
+
+COHORT_NAME = "cp_before"
+TASK_NAME = "Block_dominant"
+
+cp_cohort = Cohort.where(name=COHORT_NAME)[0]
+block_task = Task.find_by("description", TASK_NAME)
+mp = MultiPredictor.where(task_id = block_task.id, cohort_id = cp_cohort.id)[0]
+
+
+
+
+
+sp = MultiPredictor.get(15)
+sp.show_norm_scores(axis=True, include_accuracy=True)
+import pdb;pdb.set_trace()
+save_mp_shap_vals(mp)
+# generate_current_cp_scores(mp)
+
 
 import pdb;pdb.set_trace()
-generate_current_cp_scores()
+print("Done!! Yolo")
 
 
-
-
-
-import pdb;pdb.set_trace()
 
 bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+mp = MultiPredictor.get(15)
+
+
+pss = PredictorScore.where(multi_predictor_id=15)
+
+for ps in pss:
+    ps.view_shap_plot(title="CP")
+
+
+
+import pdb;pdb.set_trace()
+MatrixPlotter.show(bc.get_norm_acc(), mp.get_norm_acc(), h_one="Block Combo (n = 24)", h_two="CP Block Combo (n=6)")
+
+
+# mp.show_
+import pdb;pdb.set_trace()
 # mpc.aggregate_shap_values(non_norm=False)
 # feature_cluster_map = mpc.feature_cluster_map(non_norm=False)
 
@@ -433,6 +485,8 @@ bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 
 # ring combo
 rc = MultiPredictor.where(model="norm_non_abs_combo")[1]
+
+import pdb;pdb.set_trace()
 
 def fix_pd_et_cohort_ids():
     g1 = ['amg__S008','amg__S009','amg__S011','amg__S015','amg__S016','amg__S019','amg__S022','amg__S027','amg__S028','amg__S029','amg__S030','amg__S031',]
@@ -491,13 +545,13 @@ def fix_cp_cohort_ids():
 
 
 import pdb;pdb.set_trace()
-SigCheck().compare_obj(rc, bc)
+# SigCheck().compare_obj(rc, bc)
 
 # Does the same thing as in your console. See top of page for importing 
 # rc.show_norm_scores(axis=True, include_accuracy=True)
 
 
-bc.show_norm_scores(axis=True, include_accuracy=True)
+# bc.show_norm_scores(axis=True, include_accuracy=True)
 
 
 
@@ -510,28 +564,28 @@ bc.show_norm_scores(axis=True, include_accuracy=True)
 
 # MatrixPlotter.show(mpa.get_norm_acc(), rpa.get_norm_acc(), alt=True, h_one="Block Normalized", h_two="Ring Normalized")
 # mpa.get_all_preds()[-1].train_from(get_sg_count=True)
-bc = MultiPredictor.get(7)
-rc = MultiPredictor.get(8)
+# bc = MultiPredictor.get(7)
+# rc = MultiPredictor.get(8)
 
-test_list = []
+# test_list = []
 
-for pr in bc.get_norm_preds():
-    num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
-    test_list.append(num_features)
-    print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
+# for pr in bc.get_norm_preds():
+#     num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
+#     test_list.append(num_features)
+#     print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
 
 # printing list 
-print("The original list : " + str(test_list)) 
+# print("The original list : " + str(test_list)) 
  
 # Standard deviation of list 
 # Using sum() + list comprehension 
 
 
-test_list = []
-for pr in rc.get_norm_preds():
-    num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
-    test_list.append(num_features)
-    print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
+# test_list = []
+# for pr in rc.get_norm_preds():
+#     num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
+#     test_list.append(num_features)
+#     print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
 
 
 def show_shap_stats(multi_preds, combo=False):
@@ -580,8 +634,11 @@ def show_shap_stats(multi_preds, combo=False):
                 tl = print_data(pr, test_list)
             test_list = display_sd(test_list)
 
-show_shap_stats([mpa, rpa])
-show_shap_stats([rc, bc], combo=True)
+import pdb;pdb.set_trace()
+# show_shap_stats([mpa, rpa])
+# show_shap_stats([rc, bc], combo=True)
+
+
 
 # Standard deviation of list 
 # Using sum() + list comprehension 
@@ -600,10 +657,10 @@ rc.show_predictor_scores(['RandomForest', 'XGBoost'], reverse_order=False, non_n
 
 import pdb;pdb.set_trace()
 
-mpa.show_predictor_scores(['CatBoost', 'XGBoost'], reverse_order=True, non_norm=False, abs_val=True, use_cat=True, include_accuracy=True, axis=False)
-rpa.show_norm_scores(['RandomForest', 'CatBoost', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
-mpa.show_abs_scores(['RandomForest', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
-rpa.show_abs_scores(['RandomForest', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
+# mpa.show_predictor_scores(['CatBoost', 'XGBoost'], reverse_order=True, non_norm=False, abs_val=True, use_cat=True, include_accuracy=True, axis=False)
+# rpa.show_norm_scores(['RandomForest', 'CatBoost', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
+# mpa.show_abs_scores(['RandomForest', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
+# rpa.show_abs_scores(['RandomForest', 'XGBoost'], reverse_order=True, use_cat=True, include_accuracy=True, axis=False)
 
 
 def save_all_shap_vals(mpa, rpa, bc, rc):
@@ -639,9 +696,10 @@ def save_all_shap_vals(mpa, rpa, bc, rc):
 
 # save_all_shap_vals(mpa, rpa, bc, rc)
 
+# def save_cp_shap(mp
 
 
-MatrixPlotter.show(bc.get_all_acc(), rc.get_all_acc(), alt=True, h_one="Block Combo", h_two="Ring Combo")
+MatrixPlotter.show(bc.get_all_acc(), rc.get_all_acc(), h_one="Block Combo", h_two="Ring Combo")
 
 
 import pdb;pdb.set_trace()

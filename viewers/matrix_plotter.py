@@ -12,11 +12,11 @@ SENSOR_CODES = [
     'rwrb_x',
     'rfrm_x',
     'relb_x',
-    'relbm_x',
+    # 'relbm_x',
     'rupa_x',
     'rsho_x',
-    'rbhd_x',
-    'rfhd_x',
+    # 'rbhd_x',
+    # 'rfhd_x',
 ]
 
 
@@ -47,15 +47,14 @@ class MatrixPlotter(LegacyBaseModel):
     def view_and_save_results(results, results_two=None, task=None, h_one=None, h_two=None, alt=False):
         # For single heatmap plotting or subplots, set vmin and vmax directly
         
-        
         sensor_names = {
             'rfin': 'Hand',
-            'rbhd': 'Back of Head',
+            # 'rbhd': 'Back of Head',
             'rfrm': 'Forearm',
             'rwra': 'Wrist A',
             'rwrb': 'Wrist B',
-            'relbm': 'Medial Elbow',
-            'rfhd': 'Front of Head',
+            # 'relbm': 'Medial Elbow',
+            # 'rfhd': 'Front of Head',
             'relb': 'Elbow',
             'rsho': 'Shoulder',
             'rupa': 'Upper Arm',
@@ -70,14 +69,16 @@ class MatrixPlotter(LegacyBaseModel):
 
         # Create an ordered list of keys from results that are also in results_two
         ordered_keys = [key for key, _ in results if key in results_two_dict]
-        # Create an ordered list of keys from results that are also in results_two
+        
         if alt:
             ordered_keys = SENSOR_CODES
 
-        # Reorder results_two based on the order of keys in results
-        reordered_results_two = sorted(results_two, key=lambda x: ordered_keys.index(x[0]))
-        # Convert the reordered list to a dictionary
-        results_two_dict = {sensor: accuracies for sensor, accuracies in reordered_results_two}
+        # Reorder results_two based on the order of keys in results, log missing values
+        reordered_results_two = []
+        for item in results_two:
+            sensor_code = item[0]
+            if sensor_code in ordered_keys:
+                reordered_results_two.append(item)
 
         # Synchronizing keys in both dictionaries
         keys_in_results_one = set(results_dict.keys())

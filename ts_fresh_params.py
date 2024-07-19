@@ -842,37 +842,37 @@ PARAMS = {
 }
 
 def get_params_for_column(column_name):
-    # Remove 'grad_data__' prefix and then extract feature name and index
+    # Define expected prefix and suffixes
     prefix = "grad_data__"
+    suffixes = ["_abs", "_default", "_norm"]
+
+    # Check and remove prefix
     if column_name.startswith(prefix):
         column_name = column_name[len(prefix):]
     else:
         return None  # Column name does not start with the expected prefix
-    
-    suffix = "_abs"
-    if column_name.endswith(suffix):
-        column_name = column_name[:-len(suffix)]
-    
-    suffix = "_default"
-    if column_name.endswith(suffix):
-        column_name = column_name[:-len(suffix)]
 
-    suffix = "_norm"
-    if column_name.endswith(suffix):
-        column_name = column_name[:-len(suffix)]
-    
-    
-    print(column_name)
+    # Check and remove suffixes
+    for suffix in suffixes:
+        if column_name.endswith(suffix):
+            column_name = column_name[:-len(suffix)]
+
+    # Split column name into parts
     parts = column_name.split('_')
     if len(parts) < 3:
         return None  # Invalid column name format
 
-    feature_name = '_'.join(parts[:-2])  # Join all parts except the last two
-    feature_index = int(parts[-2])       # The second last part is the index
+    # Extract feature name and feature index
+    try:
+        feature_index = int(parts[-2])  # The second last part is the index
+        feature_name = '_'.join(parts[:-2])  # Join all parts except the last two
+    except ValueError as e:
+        print(f"Error parsing column name: {column_name}. Details: {e}")
+        return None  # Handle the error gracefully
 
     # Get the parameters for the extracted feature name
     feature_params = PARAMS.get(feature_name, None)
-    if feature_params is None or feature_params == None:
+    if feature_params is None:
         return None  # Feature not found or no parameters defined
 
     # If the parameters are a list, select the set based on the index

@@ -176,19 +176,25 @@ class PredictorScore(LegacyBaseModel):
     def find_optimal_clusters(self, standardized_shap_values, quick=True):
         best_score = -1
         optimal_clusters = 2
-        
+
         for i in range(2, 5):  # Increased range of clusters to consider
-            if quick is True:
+            if quick:
                 c_alg = KMeans(n_clusters=i, init='k-means++', max_iter=2500, n_init=500, random_state=3)
             else:
                 c_alg = GaussianMixture(n_components=i, covariance_type='full', max_iter=1500, n_init=100, random_state=0)
-            labels = c_alg.fit_predict(standardized_shap_values)
-            score = silhouette_score(standardized_shap_values, labels)
             
-            if score > best_score:
-                best_score = score
-                
-                optimal_clusters = i
+            labels = c_alg.fit_predict(standardized_shap_values)
+            
+            # Check if the number of unique labels is sufficient
+            if len(set(labels)) > 1:
+                score = silhouette_score(standardized_shap_values, labels)
+                if score > best_score:
+                    best_score = score
+                    optimal_clusters = i
+
+        if best_score == -1:
+            raise ValueError("Could not find a valid clustering configuration with more than 1 unique label.")
+        
         print("BEST SCORE", best_score)
         return optimal_clusters
 
