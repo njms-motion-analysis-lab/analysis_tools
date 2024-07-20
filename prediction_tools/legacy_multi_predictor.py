@@ -37,7 +37,7 @@ SENSOR_CODES = [
     # 'rfhd_x',
 ]
 
-TOP_TREE_MODELS = ['RandomForest', 'ExtraTrees', 'XGBoost']
+TOP_TREE_MODELS = ['GradientBoosting']
 # TOP_TREE_MODELS = ['XGBoost']
 
 NUM_TOP = 1000
@@ -82,6 +82,9 @@ class MultiPredictor(LegacyBaseModel):
         ntaf = Predictor.find_or_create(task_id=self.task_id, sensor_id=snr.id, non_norm=True, abs_val=True, cohort_id=self.cohort_id, multi_predictor_id=self.id)
         ntaf.train_from(use_shap=True)
         return ntaf
+    
+    def gen_predictors_for_sensor(self, snr):
+        Predictor.find_or_create(task_id=self.task_id, sensor_id=snr.id, non_norm=False, abs_val=False, cohort_id=self.cohort_id, multi_predictor_id=self.id)
     
 
     def get_sensors(self):
@@ -304,23 +307,25 @@ class MultiPredictor(LegacyBaseModel):
         pred_kit = {}
         pred_sensor_kit = {}
         for m in models:
-            pred_kit[m] = self.get_predictor_scores_for_model(
-                m, sort_by_sensor=True, reverse_sensor_order=reverse_order, abs_val=abs_val, non_norm=non_norm,
-            )
+            pred_kit[m] = self.get_predictor_scores_for_model(m, sort_by_sensor=True, reverse_sensor_order=reverse_order, abs_val=abs_val, non_norm=non_norm)
             # Ensure pred_sensor_kit[m] is initialized as a dictionary for the model
             pred_sensor_kit[m] = {}
             for predictor_score in pred_kit[m]:
                 # Perform clustering for each sensor and model
-
-                cluster_assignments = predictor_score[0][0].cluster_features_shap()
+                try:
+                    cluster_assignments = predictor_score[0][0].cluster_features_shap()
+                except IndexError:
+                    import pdb;pdb.set_trace()
                 # Assuming sensor_object has a unique identifier, such as an ID or a name
                 sensor_id = predictor_score[-1].id
                 # Adjust the structure of pred_sensor_kit to include sensor information
-                for feature, cluster in cluster_assignments:
-                    if feature not in pred_sensor_kit[m]:
-                        pred_sensor_kit[m][feature] = []
-                    pred_sensor_kit[m][feature].append((sensor_id, cluster))
-        # import pdb;pdb.set_trace()
+                try:
+                    for feature, cluster in cluster_assignments:
+                        if feature not in pred_sensor_kit[m]:
+                            pred_sensor_kit[m][feature] = []
+                        pred_sensor_kit[m][feature].append((sensor_id, cluster))
+                except UnboundLocalError:
+                    import pdb;pdb.set_trace()
         return pred_sensor_kit
 
         
@@ -371,6 +376,7 @@ class MultiPredictor(LegacyBaseModel):
 
         
         if include_accuracy:
+
             average_vals = list(items.values())
             i = 0
             while i < len(average_vals):
@@ -696,9 +702,9 @@ class MultiPredictor(LegacyBaseModel):
         #TODO stephen, change this back
         # title = self.cohort_name() + "/" + title
         if title is not None:
-            title = "CP2 multi" + "/" + title
+            title = "CP3 multi" + "/" + title
         else:
-            title = "CP2 multi" + "/"
+            title = "CP3 multi" + "/"
 
         
         for pred in pr:

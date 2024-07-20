@@ -12,11 +12,11 @@ SENSOR_CODES = [
     'rwrb_x',
     'rfrm_x',
     'relb_x',
-    # 'relbm_x',
+    'relbm_x',
     'rupa_x',
     'rsho_x',
-    # 'rbhd_x',
-    # 'rfhd_x',
+    'rbhd_x',
+    'rfhd_x',
 ]
 
 
@@ -49,19 +49,20 @@ class MatrixPlotter(LegacyBaseModel):
         
         sensor_names = {
             'rfin': 'Hand',
-            # 'rbhd': 'Back of Head',
+            'rbhd': 'Back of Head',
             'rfrm': 'Forearm',
             'rwra': 'Wrist A',
             'rwrb': 'Wrist B',
-            # 'relbm': 'Medial Elbow',
-            # 'rfhd': 'Front of Head',
+            'relbm': 'Medial Elbow',
+            'rfhd': 'Front of Head',
             'relb': 'Elbow',
             'rsho': 'Shoulder',
             'rupa': 'Upper Arm',
-            'mAccelerometerX': 'Accelerometer',
+            # 'mAccelerometerX': 'Accelerometer',
         }
         if alt:
             results = sorted(results, key=lambda x: SENSOR_CODES.index(x[0]))
+            results_two = sorted(results_two, key=lambda x: SENSOR_CODES.index(x[0]))
 
         # Convert the lists to dictionaries
         results_dict = {sensor: accuracies for sensor, accuracies in results}

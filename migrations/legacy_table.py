@@ -362,6 +362,10 @@ class Table:
         cls.add_column_if_not_exists('predictor', 'cohort_id', 'INTEGER')
         cls.add_column_if_not_exists('multi_predictor', 'cohort_id', 'INTEGER')
         cls.add_column_if_not_exists('predictor_score', "multi_predictor_id", "INTEGER")
+        cls.add_column_if_not_exists('gradient_set', "set_stats_norm", "TEXT")
+        cls.add_column_if_not_exists('gradient_set', "set_stats_non_norm", "TEXT")
+        cls.add_column_if_not_exists('gradient_set', "set_stats_abs", "TEXT")
+        cls.add_column_if_not_exists('gradient_set', "normalized", "TEXT")
         print("Done!!")
         
 
@@ -413,14 +417,14 @@ class Table:
         tables = ['trial', 'patient_task', 'sensor', 'task', 'patient', 'position_set','dynamic_position_set', 'gradient_set', 'dynamic_gradient_set', 'dynamic_sub_gradient', 'motion', 'patient_motion', "sub_gradient"]
         print("Hey")
 
-        for table in tables:
-            try:
-                LegacyBaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
-                LegacyBaseModel._conn.commit()
-                print("dropped", table)
-            except sqlite3.OperationalError as e:
-                print(f"Error dropping table: {e}")
-                LegacyBaseModel._conn.rollback()
+        # for table in tables:
+        #     try:
+        #         LegacyBaseModel._cursor.execute(f"DROP TABLE IF EXISTS {table}")
+        #         LegacyBaseModel._conn.commit()
+        #         print("dropped", table)
+        #     except sqlite3.OperationalError as e:
+        #         print(f"Error dropping table: {e}")
+        #         LegacyBaseModel._conn.rollback()
 
 
     @classmethod

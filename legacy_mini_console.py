@@ -394,19 +394,10 @@ def generate_current_cp_scores(mp):
 
 
 
-def save_mp_shap_vals(mp):
-    bdp = mp.get_preds()
+def save_sp_shap_vals(mp):
+    preds = sp.get_preds()
 
-    mp.save_shap()
-    mp.save_abs_shap()
-    mp.save_norm_shap()
-
-    # bc.save_combo_shap()
-    # rc.save_combo_shap()
-
-    bap = mp.get_abs_preds()
-
-    mp.save_shap_values(preds=bap)
+    sp.save_shap_values(preds=preds)
 
     bnp = mp.get_norm_preds()
 
@@ -419,19 +410,93 @@ def save_mp_shap_vals(mp):
 
 COHORT_NAME = "cp_before"
 TASK_NAME = "Block_dominant"
+def add_set_stats():
+    t1 = Task.where(description="Block_dominant")[0]
+    t2 = Task.where(description="Block_nondominant")[0]
+    tasks = [t1, t2]
+    num_task = 0
+    
+    for task in tasks:
+        curr_task = task.description
+        trials = task.trials()  # Call the method once and store the list
+        num_trial = 0
+        tot_trial = len(trials)
+        for trial in trials:  # Iterate over the list directly
+            print(trial.id)
+            num_gs = 0
+            len_gs = len(trial.get_gradient_sets())
+            total = len_gs * tot_trial
+            for gs in trial.get_gradient_sets():
+                print(gs.id, num_trial, tot_trial, num_gs, len_gs, total)
+                gs.gen_set_stats(force=True)
+                num_gs += 1
+            num_trial += 1
+
+
+add_set_stats()    
+
+import pdb;pdb.set_trace()
+
 
 cp_cohort = Cohort.where(name=COHORT_NAME)[0]
 block_task = Task.find_by("description", TASK_NAME)
-mp = MultiPredictor.where(task_id = block_task.id, cohort_id = cp_cohort.id)[0]
+# mp = MultiPredictor.where(task_id = block_task.id, cohort_id = cp_cohort.id)[0]
 
-
-
-
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
 
 sp = MultiPredictor.get(15)
-sp.show_norm_scores(axis=True, include_accuracy=True)
+# MatrixPlotter.show(bc.get_all_acc(), sp.get_all_acc(), h_one="Healthy Controls (n=25)", h_two="CP Patients (n=7)", alt=True)
+
+
+save_sp_shap_vals(sp)
+
+def calculate_statistics(values):
+    if not values:
+        print("No values to calculate statistics.")
+        return None, None, None
+    mean = sum(values) / len(values)
+    variance = sum((x - mean) ** 2 for x in values) / len(values)
+    std_dev = variance ** 0.5
+    return mean, variance, std_dev
+
+# First set of predictions
+test_list = []
+for pr in bc.get_all_preds():
+    num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
+    test_list.append(num_features)
+    print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
+
+# Calculate and print statistics for the first set
+mean, variance, std_dev = calculate_statistics(test_list)
+if mean is not None:
+    print("First Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
+
+# Second set of predictions
+test_list = []
+for pr in sp.get_all_preds():
+    ps = pr.get_predictor_scores()
+    if len(ps) != 0:
+        num_features = len(ps[0].get_top_n_features(500))
+        test_list.append(num_features)
+        print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
+    else:
+        print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "SKIPPED")
+
+# Calculate and print statistics for the second set
+mean, variance, std_dev = calculate_statistics(test_list)
+if mean is not None:
+    print("Second Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
+
+
 import pdb;pdb.set_trace()
-save_mp_shap_vals(mp)
+bc.show_norm_scores(axis=True, include_accuracy=True)
+import pdb;pdb.set_trace()
+# sp.show_norm_scores(axis=True, include_accuracy=True)
+
+
+
+import pdb;pdb.set_trace()
+
 # generate_current_cp_scores(mp)
 
 
@@ -567,25 +632,7 @@ import pdb;pdb.set_trace()
 # bc = MultiPredictor.get(7)
 # rc = MultiPredictor.get(8)
 
-# test_list = []
 
-# for pr in bc.get_norm_preds():
-#     num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
-#     test_list.append(num_features)
-#     print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
-
-# printing list 
-# print("The original list : " + str(test_list)) 
- 
-# Standard deviation of list 
-# Using sum() + list comprehension 
-
-
-# test_list = []
-# for pr in rc.get_norm_preds():
-#     num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
-#     test_list.append(num_features)
-#     print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
 
 
 def show_shap_stats(multi_preds, combo=False):
@@ -797,8 +844,6 @@ rpa.gen_train_combo_mp(use_norm_pred=True)
 
 print("Done with Ring!!")
 import pdb;pdb.set_trace()
-
-
 
 
 

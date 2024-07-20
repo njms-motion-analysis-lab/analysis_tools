@@ -10,6 +10,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
 from docx import Document
+
 # Ensure the necessary NLTK data is downloaded
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -20,10 +21,9 @@ nltk.download('words')
 # Default text if no input is provided
 DEFAULT_TEXT = "/Users/stephenmacneille/Desktop/20240616_Trial1.docx"
 
-
 # Custom stop words
 CUSTOM_STOP_WORDS = {
-    'yeah', 'oh', 'really', 'okay', 'know', 'gotcha', 'kind', 'right', 'feel', 'think', 'honestly', 
+    'yeah', 'oh', 'really', 'okay', 'know', 'gotcha', 'like', 'kind', 'right', 'feel', 'think', 'honestly', 
     'anything', 'want', "n't", "'s", "'m", "'ve", "'ll", "'d", 'ca', 'wo', 're', 'nt', 'na', 'gon'
 }
 
@@ -65,6 +65,10 @@ def tokenize(text):
     sns.barplot(x=list(counts), y=list(words))
     plt.title("Top 10 Most Common Words")
     plt.show()
+
+def top_words(text):
+    filtered_text = remove_stopwords(text)
+    return tokenize(filtered_text)
 
 def stem(text):
     words = word_tokenize(text)
@@ -116,7 +120,10 @@ def sentiment_analysis(text):
 
 def word_cloud(text):
     filtered_text = remove_stopwords(text)
-    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(filtered_text)
+    words = word_tokenize(filtered_text)
+    stemmer = PorterStemmer()
+    stemmed_words = [stemmer.stem(word) for word in words]
+    wordcloud = WordCloud(width=800, height=400, background_color='white').generate(' '.join(stemmed_words))
     plt.figure(figsize=(10, 5))
     plt.imshow(wordcloud, interpolation='bilinear')
     plt.axis('off')
@@ -125,7 +132,7 @@ def word_cloud(text):
 # Main function to parse arguments and call the appropriate function
 def main():
     parser = argparse.ArgumentParser(description="Word Analyzer Tool")
-    parser.add_argument("function", choices=["tokenize", "stem", "lemmatize", "pos_tagging", "ner", "sentiment", "wordcloud"], help="Function to execute")
+    parser.add_argument("function", choices=["tokenize", "stem", "lemmatize", "pos_tagging", "ner", "sentiment", "wordcloud", "top"], help="Function to execute")
     parser.add_argument("--text", type=str, help="Text to analyze or path to a text file", default=None)
     args = parser.parse_args()
 
@@ -159,6 +166,8 @@ def main():
         sentiment_analysis(text)
     elif args.function == "wordcloud":
         word_cloud(text)
+    elif args.function == "top":
+        top_words(text)
 
 if __name__ == "__main__":
     main()
