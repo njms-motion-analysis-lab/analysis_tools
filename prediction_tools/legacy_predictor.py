@@ -56,8 +56,7 @@ SHAP_CLASSIFIERS = [
     'GradientBoosting'
 ]
 
-NUMBER_OF_FEATURES = 10
-DEFAULT_K_FOLD_SPLITS = 4
+DEFAULT_K_FOLD_SPLITS = 5
 
 COMPATIBLE_MODELS = [
     "DecisionTreeClassifier", 
@@ -71,6 +70,10 @@ COMPATIBLE_MODELS = [
 
 DEFAULT_FEATURES = ['grad_data__sum_values','grad_data__abs_energy','grad_data__mean_abs_change', 'grad_data__mean_change', 'grad_data__mean_second_derivative_central', 'grad_data__variation_coefficient','grad_data__standard_deviation','grad_data__skewness','grad_data__kurtosis','grad_data__variance','grad_data__root_mean_square','grad_data__mean', 'grad_data__length']
 MINIMUM_SAMPLE_SIZE = 10
+
+
+
+
 MINI_PARAMS = {
     'RandomForest': {
         'classifier': RandomForestClassifier(),
@@ -159,38 +162,6 @@ MINI_PARAMS = {
     },
 }
 
-class CustomKerasClassifier(BaseEstimator, ClassifierMixin):
-    def __init__(self, batch_size=32, epochs=50, dropout_rate=0.2):
-        self.batch_size = batch_size
-        self.epochs = epochs
-        self.dropout_rate = dropout_rate
-
-    def fit(self, X, y):
-        self.model = self._build_model(X.shape[1])
-        self.model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-        self.model.fit(X, y, batch_size=self.batch_size, epochs=self.epochs, verbose=0)
-        return self
-
-    def _build_model(self, n_features):
-        model = Sequential()
-        model.add(Dense(64, activation='relu', input_shape=(n_features,)))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(64, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(1, activation='sigmoid'))
-        return model
-
-    def predict(self, X):
-        return (self.model.predict(X) > 0.5).astype("int32")
-
-    def score(self, X, y):
-        return accuracy_score(y, self.predict(X))
-    
-    def predict_proba(self, X):
-        # If your model outputs a single probability,
-        # you might need to shape the output like this:
-        probabilities = self.predict(X)
-        return np.hstack([1 - probabilities, probabilities])
 
 class Predictor(LegacyBaseModel):
     table_name = "predictor"
@@ -212,6 +183,21 @@ class Predictor(LegacyBaseModel):
         self.skip_boruta = False
         self.last_two_columns = None
     
+
+    def get_type(self):
+        from importlib import import_module
+        MultiPredictor = import_module("prediction_tools.legacy_multi_predictor").MultiPredictor
+
+        mp_model = MultiPredictor.get(self.multi_predictor_id).model
+        if mp_model is None:
+            return "DEFAULT"
+        elif mp_model == "norm_non_abs_combo":
+            return "COMBO"
+        elif mp_model == "grad_set":
+            return "GRAD_SET"
+        elif mp_model == "grad_set_combo":
+            return "GRAD_SET_COMBO"
+
     def sensor(self):
         return Sensor.get(self.sensor_id)
     
@@ -424,7 +410,7 @@ class Predictor(LegacyBaseModel):
         return compare_cohort, counterpart_sensor
 
     def is_lefty_patient(self, patient_id):
-        return patient_id in [21, 26, 27, 28]
+        return patient_id in [21, 26, 27, 28, 56, 57, 58]
     
     # an alternative method of processing PT where we are not pairing individual PTs on the basis of a patient
 
@@ -464,12 +450,12 @@ class Predictor(LegacyBaseModel):
 
 
     def process_patient_tasks(self, self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor, force_old=False):
-        if self.cohort().is_alt_compare() is True and force_old is False:
-            return self.process_alt_tasks(self_pts, other_pts, sensor, nondom_sensor)
-    
+        # Process alternate tasks if applicable
+        # if self.cohort().is_alt_compare() and not force_old:
+        #     return self.process_alt_tasks(self_pts, other_pts, sensor, nondom_sensor)
+        
         dom_dataframes = []
         nondom_dataframes = []
-        features_dom, features_non_dom = self.select_features()
 
         for self_pt in self_pts:
             counterpart_pts = self.get_counterpart_pts(other_pts, counterpart_task, self_pt, compare_cohort)
@@ -477,14 +463,19 @@ class Predictor(LegacyBaseModel):
                 continue
 
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
-            self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient, features_dom, features_non_dom)
-            if self_pt.patient_id == 57 and (sensor.name == "lelbm_z" or sensor.name == "lelbm_y" or sensor.name == "lelbm_x"):
-                print("SKIPPING")
-                continue
-            if self_pt.patient_id == 57 and (nondom_sensor.name == "lelbm_z" or nondom_sensor.name == "lelbm_y" or nondom_sensor.name == "lelbm_x"):
-                print("SKIPPING")
-                continue
+            try:
+                self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient)
+            except TypeError:
+                print("dfs not found for patient", curr_patient, "sensor", sensor.name)
+            
+            # Skip specific sensors for patient 57
+            if self_pt.patient_id == 57:
+                sensors_to_skip = ["lelbm_z", "lelbm_y", "lelbm_x"]
+                if sensor.name in sensors_to_skip or nondom_sensor.name in sensors_to_skip:
+                    print("SKIPPING")
+                    continue
 
+            # Switch dataframes for left-handed patients
             if self.is_lefty_patient(self_pt.patient_id):
                 print("Switching places for lefty patient...")
                 dom_dataframes.append(counter_temp)
@@ -540,12 +531,11 @@ class Predictor(LegacyBaseModel):
         
         dom_task, counterpart_task = self.get_tasks()
         self_pts = PatientTask.where(task_id=dom_task.id, cohort_id=self.cohort_id)
+        
         compare_cohort, nondom_sensor = self.get_cohorts_and_sensors(sensor)
+        
         other_pts = PatientTask.where(task_id=dom_task.id, cohort_id=compare_cohort.id) if self.cohort().is_alt_compare() else []
         dom_dataframes, nondom_dataframes = self.process_patient_tasks(self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor, force_old=True)
-
-        print(dom_dataframes)
-        print(nondom_dataframes)
 
         if not dom_dataframes or not any(df is not None and not df.empty for df in dom_dataframes):
             return None
@@ -584,10 +574,44 @@ class Predictor(LegacyBaseModel):
         return final_df
 
 
-    def get_temp_dataframe(self, patient_pt, patient_sensor, features_loc):
-        print(patient_sensor.attrs())
+    def get_temp_dataframes(self, self_pt, counterpart_pt, sensor, counterpart_sensor, curr_patient):
+        print("getting temp df abs" if self.abs_val == 1 else "getting temp df norm")
+
+        print("self...")
+        self_temp = self.get_temp_dataframe(self_pt, sensor, False)
+        print("counter...")
+        counter_temp = self.get_temp_dataframe(counterpart_pt, counterpart_sensor, False)
+
+        cohort = Cohort.get(self_pt.cohort_id)
+        counter_cohort = Cohort.get(counterpart_pt.cohort_id)
+        lefty = self.is_lefty_patient(self_pt.patient_id)
+        
+        if counter_temp is not None:
+            counter_temp['cohort'] = counter_cohort.name
+            counter_temp['is_dominant'] = lefty
+            counter_temp['patient'] = Patient.get(counterpart_pt.patient_id)
+    
+        if self_temp is not None:
+            self_temp['cohort'] = cohort.name
+            self_temp['is_dominant'] = not lefty
+            self_temp['patient'] = curr_patient
+
+        return self_temp, counter_temp
+    
+    def get_stats(self, pt, patient_sensor, features_loc):
+    
+        kind = self.get_type()
+        
+        if kind == "GRAD_SET" or kind == "GRAD_SET_COMBO":
+            return pt.combined_gradient_set_stats_list(patient_sensor, abs_val=self.abs_val, non_normed=self.non_norm, loc=features_loc)
+        else:
+            return pt.combined_sub_gradient_stats_list(patient_sensor, abs_val=self.abs_val, non_normed=self.non_norm, loc=features_loc)
+
+
+    def get_temp_dataframe(self, pt, patient_sensor, features_loc):
         stats_method = abs if self.abs_val == 1 else lambda x: x
-        gradient_stats = patient_pt.combined_gradient_set_stats_list(patient_sensor,abs_val=self.abs_val,non_normed=self.non_norm,loc=features_loc)
+        gradient_stats = self.get_stats(pt, patient_sensor, features_loc)
+
         if gradient_stats is None:
             return None
         # Check if 'mean' is in the gradient stats and process accordingly
@@ -598,7 +622,7 @@ class Predictor(LegacyBaseModel):
         else:
             # Initialize an empty DataFrame with an expected structure if 'mean' is not present
             sen = self.sensor()
-            gs = patient_pt.get_gradient_sets_for_sensor(sen)
+            gs = pt.get_gradient_sets_for_sensor(sen)
             temp_df = pd.DataFrame(columns=['grad_data__placeholder'])
             print("No 'mean' data available for the given gradient set.")
             return None
@@ -607,35 +631,7 @@ class Predictor(LegacyBaseModel):
         
         temp_df.columns = ['grad_data__' + col.split('__')[1] for col in temp_df.columns]
         return temp_df
-    
 
-    def get_temp_dataframes(self, self_pt, counterpart_pt, sensor, counterpart_sensor, curr_patient, features_dom=False, features_non_dom=False):
-        print("getting temp df abs" if self.abs_val == 1 else "getting temp df norm")
-
-        print("self...")
-        self_temp = self.get_temp_dataframe(self_pt, sensor, False)
-        print("counter...")
-        counter_temp = self.get_temp_dataframe(counterpart_pt, counterpart_sensor, False)
-
-        if not self.is_alt_compare():
-            is_dominant = curr_patient != 'S017'
-        else:
-            is_dominant = True
-        cohort = Cohort.get(self_pt.cohort_id)
-        counter_cohort = Cohort.get(counterpart_pt.cohort_id)
-        
-        if counter_temp is not None:
-            counter_temp['cohort'] = counter_cohort.name
-            counter_temp['is_dominant'] = not is_dominant
-            counter_temp['patient'] = Patient.get(counterpart_pt.patient_id)
-    
-        if self_temp is not None:
-            self_temp['cohort'] = cohort.name
-            self_temp['is_dominant'] = is_dominant    
-            self_temp['patient'] = curr_patient
-            
-
-        return self_temp, counter_temp
 
     def rename_duplicate_columns(self, df):
         cols = pd.Series(df.columns)
@@ -674,7 +670,6 @@ class Predictor(LegacyBaseModel):
             obj = self
 
         result = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
-        
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
@@ -690,8 +685,6 @@ class Predictor(LegacyBaseModel):
             print("NO DF found...skipping")
             return
         self.fit_multi_models(bdf, y, use_shap)
-        # return "SKIP" if self.patient_id == 57 && "lelbm_z" or "lelbm_x", "lelbm_y"
-        # return patient_id in [21, 26, 27, 28]
         print("Done training!")
     
     def retrain_from(self, use_shap=False, force_load=False, get_sg_count=False):
@@ -700,19 +693,20 @@ class Predictor(LegacyBaseModel):
 
         self.fit_multi_models(bdf, y, use_shap)
 
-    def get_final_bdf(self, force_load=False, force_abs_x=False, untrimmed=False, get_sg_count=False, add_other=False):        
+    def get_final_bdf(self, force_load=False, force_abs_x=False, untrimmed=False, get_sg_count=False, add_other=False):
         bdf = self.get_df(force_load=force_load, add_other=False)
         if bdf is None:
             print("BDF EMPTY, skipping")
             return None
-    
+
         if get_sg_count is True:
             other = self.generate_sub_gradient_count()
             bdf = pd.merge(other, bdf, on=['is_dominant', 'patient'], how='inner')
+
         y = self.get_y(bdf)
 
-
-        if force_abs_x == True:
+        # Convert abs val x in non norm pts to account for laterality
+        if force_abs_x == True or (self.non_norm == True and self.abs_val == False):
             columns_to_drop = [col for col in bdf.columns if col.endswith('_x')]
             bdf.drop(columns=columns_to_drop, inplace=True)
 
@@ -720,9 +714,13 @@ class Predictor(LegacyBaseModel):
         is_dominant = bdf['is_dominant'].copy()
 
         bdf = self.rename_columns_with_orientation(bdf)
-        bdf = self.clean_bdf(bdf) 
+        bdf = self.clean_bdf(bdf)
 
-        print("curr", bdf)
+        # Remove any rows where patient ID is -1 and corresponding rows from y
+        valid_indices = bdf['patient'] != -1
+        bdf = bdf[valid_indices]
+        y = y[valid_indices]
+
 
 
         # return early untrimmed bdf 
@@ -894,22 +892,23 @@ class Predictor(LegacyBaseModel):
                 bdf['patient'] = pt
 
             return bdf
-        if self.non_norm == 1:
-            # self.update(aggregated_stats_non_normed = self.aggregated_stats)
-            if force_load == True:
-                self.save()
-            if self.aggregated_stats_non_normed is None or force_load == True or compare_across_cohort == False:
-                print("generating non normed agg df...")
-                
-                stats = memoryview(pickle.dumps(gen_old_df()))
 
+        if self.non_norm == 1:
+            if self.aggregated_stats_non_normed is None or force_load:
+                print("generating non normed agg df...")
+                stats = memoryview(pickle.dumps(gen_old_df()))
                 self.update(aggregated_stats_non_normed = stats)
+                if force_load:
+                    self.save()
+            
             return pickle.loads(self.aggregated_stats_non_normed)
-        
-        if self.aggregated_stats is None or force_load == True or compare_across_cohort == False:
+
+        if self.aggregated_stats is None or force_load or compare_across_cohort == False:
             print("generating agg df...")
             stats = memoryview(pickle.dumps(gen_old_df()))
             self.update(aggregated_stats = stats)
+            if force_load:
+                self.save()
 
         return pickle.loads(self.aggregated_stats)
 
@@ -978,7 +977,6 @@ class Predictor(LegacyBaseModel):
 
         # Convert 'patient' column to patient IDs
         # Ensure 'patient' names are treated as strings for uniform processing
-
         bdf['patient'] = bdf['patient'].astype(str).apply(get_patient_id)
 
         # Fill NaN for any patient IDs not found with a placeholder, e.g., 0 or -1
@@ -1056,6 +1054,9 @@ class Predictor(LegacyBaseModel):
 
         # Columns to retain regardless of feature selection
         columns_to_retain = ['is_dominant', 'patient', 'str_patient', 'cohort']
+
+        # Ensure columns to retain are present in the DataFrame
+        columns_to_retain = [col for col in columns_to_retain if col in bdf.columns]
 
         # Separate features and target
         features = bdf.drop(columns=columns_to_retain)
@@ -1201,6 +1202,7 @@ class Predictor(LegacyBaseModel):
             print(classifier_name, classifier_data)
             print(f"Training {classifier_name}...")
             average_acc, best_params, extra_metrics, scores, params, acc_metrics = self._train_classifier(bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=use_shap)
+
             classifier_accuracies[classifier_name] = np.mean(average_acc)
             print(classifier_name, "Sensor ID:", self.sensor_id, "AVERAGE ACC", np.mean(average_acc))
             classifier_params[classifier_name] = best_params
@@ -1218,6 +1220,7 @@ class Predictor(LegacyBaseModel):
         for classifier_name, n_metrics in acc_metrics.items():
             print(f"{classifier_name}: {n_metrics}")
             classifier_metrics[classifier_name] = n_metrics 
+
 
         self._update_accuracies(classifier_accuracies, classifier_params, classifier_metrics)
         print("done......")
@@ -1237,7 +1240,7 @@ class Predictor(LegacyBaseModel):
             'KNN': {
                 'classifier': KNeighborsClassifier(),
                 'param_grid': {
-                    'classifier__n_neighbors': range(1, 11),  # Example range, adjust based on sqrt(n_samples)
+                    'classifier__n_neighbors': list(range(1, 4)),  # Example range, adjust based on sqrt(n_samples)
                     'classifier__weights': ['uniform', 'distance'],
                     'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
                 }
@@ -1245,14 +1248,10 @@ class Predictor(LegacyBaseModel):
             'RandomForest': {
                 'classifier': RandomForestClassifier(),
                 'param_grid': {
-                    # More trees for more complex models, but start lower for initial runs
                     'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
-                    # None allows trees to grow as much as needed, but we limit depth for smaller feature sets
                     'classifier__max_depth': [None, 10, 20, 30] if feature_count > 52 else [None, 2, 4, 8, 16],
-                    # Adjusting for the dataset's feature count
                     'classifier__min_samples_split': [2, 4, 6, 10, 15],
                     'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
-                    # 'auto' lets the model decide, but specifying can help with large feature sets
                     'classifier__max_features': ['sqrt', 'log2']
                 }
             },
@@ -1288,7 +1287,7 @@ class Predictor(LegacyBaseModel):
                 'param_grid': {
                     'classifier__C': np.logspace(-4, 4, 5).tolist(),
                     'classifier__penalty': ['l1', 'l2'],
-                    'classifier__solver': ['liblinear']  # Adjust if considering 'saga' for high-dimensionality
+                    'classifier__solver': ['liblinear']
                 }
             },
             'XGBoost': {
@@ -1312,9 +1311,9 @@ class Predictor(LegacyBaseModel):
             'SVM': {
                 'classifier': SVC(probability=True),
                 'param_grid': {
-                    'classifier__C': [0.01, 0.1],  # Reduced and focused range
-                    'classifier__gamma': [0.1, 'scale'],  # Reduced range, removed 'auto' and very low value
-                    'classifier__kernel': ['linear', 'rbf']  # Focusing on commonly used kernels
+                    'classifier__C': [0.01, 0.1],
+                    'classifier__gamma': [0.1, 'scale'],
+                    'classifier__kernel': ['linear', 'rbf']
                 }
             },
             'AdaBoost': {
@@ -1328,19 +1327,19 @@ class Predictor(LegacyBaseModel):
         
         if use_shap_compatible:
             classifiers = {k: v for k, v in classifiers.items() if self.is_supported_by_tree_explainer(k)}
-
+        
         return classifiers
 
     @classmethod
     def define_classifiers_cls(cls, use_shap_compatible, use_mini_params, classifier_name=None, feature_count=50):
         if use_mini_params:
             classifiers = cls.MINI_PARAMS
-        else:         
+        else:
             classifiers = {
                 'KNN': {
                     'classifier': KNeighborsClassifier(),
                     'param_grid': {
-                        'classifier__n_neighbors': range(1, 11),  # Example range, adjust based on sqrt(n_samples)
+                        'classifier__n_neighbors': list(range(1, 4)),
                         'classifier__weights': ['uniform', 'distance'],
                         'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
                     }
@@ -1348,14 +1347,10 @@ class Predictor(LegacyBaseModel):
                 'RandomForest': {
                     'classifier': RandomForestClassifier(),
                     'param_grid': {
-                        # More trees for more complex models, but start lower for initial runs
                         'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
-                        # None allows trees to grow as much as needed, but we limit depth for smaller feature sets
                         'classifier__max_depth': [None, 10, 20, 30] if feature_count > 52 else [None, 2, 4, 8, 16],
-                        # Adjusting for the dataset's feature count
                         'classifier__min_samples_split': [2, 4, 6, 10, 15],
                         'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
-                        # 'auto' lets the model decide, but specifying can help with large feature sets
                         'classifier__max_features': ['sqrt', 'log2']
                     }
                 },
@@ -1391,7 +1386,7 @@ class Predictor(LegacyBaseModel):
                     'param_grid': {
                         'classifier__C': np.logspace(-4, 4, 5).tolist(),
                         'classifier__penalty': ['l1', 'l2'],
-                        'classifier__solver': ['liblinear']  # Adjust if considering 'saga' for high-dimensionality
+                        'classifier__solver': ['liblinear']
                     }
                 },
                 'XGBoost': {
@@ -1415,9 +1410,9 @@ class Predictor(LegacyBaseModel):
                 'SVM': {
                     'classifier': SVC(probability=True),
                     'param_grid': {
-                        'classifier__C': [0.01, 0.1],  # Reduced and focused range
-                        'classifier__gamma': [0.1, 'scale'],  # Reduced range, removed 'auto' and very low value
-                        'classifier__kernel': ['linear', 'rbf']  # Focusing on commonly used kernels
+                        'classifier__C': [0.01, 0.1],
+                        'classifier__gamma': [0.1, 'scale'],
+                        'classifier__kernel': ['linear', 'rbf']
                     }
                 },
                 'AdaBoost': {
@@ -1428,15 +1423,13 @@ class Predictor(LegacyBaseModel):
                     }
                 },
             }
-        def in_te(classifier_name):
-            classifier_name in SHAP_CLASSIFIERS
 
         if use_shap_compatible:
-            classifiers = {k: v for k, v in classifiers.items() if in_te(k)}
+            classifiers = {k: v for k, v in classifiers.items() if cls.is_supported_by_tree_explainer(k)}
 
         if classifier_name is not None:
             return classifiers.get(classifier_name, None)
-        
+
         return classifiers
 
     @classmethod
@@ -1470,9 +1463,8 @@ class Predictor(LegacyBaseModel):
         return X_train, y_train, X_test, y_test
 
 
-    def _train_classifier(self, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=True):
+    def _train_classifier(self, bdf, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, use_shap=False):
         # Training of a specific classifier
-
         classifier = classifier_data['classifier']
         pipe = Pipeline(steps=[('classifier', classifier)])
         param_grid_classifier = classifier_data['param_grid']
@@ -1515,7 +1507,7 @@ class Predictor(LegacyBaseModel):
             X_train = X_train.drop('is_dominant', axis=1)
             X_test = X_test.drop('is_dominant', axis=1)
 
-            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, n_jobs=-1, scoring='accuracy')
+            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
             grid_search.fit(X_train, y_train)
                     # Store best parameters and score
             train_accuracy = grid_search.score(X_train, y_train)
@@ -1529,35 +1521,25 @@ class Predictor(LegacyBaseModel):
                 "Current best training params:", current_best_params,
                 "Current best training classifier", best_classifier
             )
-            # Predict on test set and calculate metrics
+            # Predict on test set and calculate metric
             y_pred = best_classifier.predict(X_test)
+
             y_pred_proba = best_classifier.predict_proba(X_test)[:, 1] if hasattr(best_classifier, "predict_proba") else None
     
-            # Define compatible models for SHAP TreeExplainer
-            COMPATIBLE_MODELS = ['GradientBoostingClassifier', 'RandomForestClassifier', 'ExtraTreesClassifier']
-
-            # Function to check if a model is binary classification
-            def is_binary_classification(y):
-                return len(set(y)) == 2
-
-            # Your code
             # Check if the model is compatible with SHAP TreeExplainer
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
-                if is_binary_classification(y_train):
-                    print("Using SHAP!")
-                    explainer = shap.TreeExplainer(best_classifier)
-                    shap_values = explainer.shap_values(X_test)
-                    if isinstance(shap_values, list):  # If there are multiple classes
-                        # Taking only the SHAP values for class 1 in case of binary classification.
-                        # Adjust for multi-class problems as necessary.
-                        shap_values = shap_values[1]
-                    combined_shap_values.append(shap_values)
-                    all_X.append(X_test)
-                else:
-                    print(f"SHAP not supported for multi-class classification with {best_classifier.__class__.__name__}")
+                print("Using SHAP!")
+                explainer = shap.TreeExplainer(best_classifier)
+                shap_values = explainer.shap_values(X_test)
+                if isinstance(shap_values, list):  # If there are multiple classes
+                    # Taking only the SHAP values for class 1 in case of binary classification.
+                    # Adjust for multi-class problems as necessary.
+                    shap_values = shap_values[1]
+                combined_shap_values.append(shap_values)
+                all_X.append(X_test)
 
-            if hasattr(best_classifier, 'feature_importances_'):
-                feature_importances = best_classifier.feature_importances_
+            if hasattr(classifier, 'feature_importances_'):
+                feature_importances = grid_search.best_estimator_.named_steps['classifier'].feature_importances_
                 importance_df = pd.DataFrame({
                     'Feature': X_train.columns,
                     'Importance': feature_importances
@@ -1566,7 +1548,7 @@ class Predictor(LegacyBaseModel):
                 # Append this dataframe to the list
                 all_importance_dfs.append(importance_df)
             else:
-                print(f"{type(best_classifier).__name__} doesn't have feature_importances_ attribute.")
+                print(f"{type(classifier).__name__} doesn't have feature_importances_ attribute.")
 
             accuracy_scores.append(metrics.accuracy_score(y_test, y_pred))
             precision_scores.append(metrics.precision_score(y_test, y_pred, average='weighted', zero_division=0))
@@ -1660,7 +1642,6 @@ class Predictor(LegacyBaseModel):
     # Prepare and return metrics and other information
         extra_metrics = {
             "Important Features": top_5_median_features,
-            "Training Score": average_training_score,
             "Accuracy": average_accuracy,
             "Precision": average_precision,
             "Recall": average_recall,
@@ -1668,7 +1649,7 @@ class Predictor(LegacyBaseModel):
             "AUC-ROC": average_auc_roc,
             "Log loss": average_log_loss,
             "Median Confusion Matrix": Predictor.median_confusion_matrix(confusion_matrices, accuracy_scores).tolist(),
-            "Skip Boruta": str(self.skip_boruta)
+            "Average Training Score": average_training_score,
         }
 
         scores[classifier_name] = average_accuracy
@@ -1918,7 +1899,9 @@ class Predictor(LegacyBaseModel):
             try:
                 aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
             except:
-                import pdb;pdb.set_trace()
+                print("ERROR")
+                return
+                
             combined_X = pd.concat(all_X, axis=0).reset_index(drop=True)
             print()
             print("GENERATING PREDICTOR SCORE!!!", "ID", mps.id)

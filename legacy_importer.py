@@ -10,7 +10,7 @@ from migrations.legacy_table import Table
 import pdb
 
 
-RAW_DATA_FOLDER = "raw_data/CP_filteredandtrimmed_2024.07.04/Block"
+RAW_DATA_FOLDER = "raw_data/CP_filteredandtrimmed_2024.07.21/Block"
 
 if __name__ == '__main__':
     freeze_support()
@@ -18,7 +18,7 @@ if __name__ == '__main__':
     root_dir = "controls_alignedCoordinateSystem"
     Table.create_tables()
     Table.update_tables()
-    Table.create_and_set_cohort()
+    # Table.create_and_set_cohort()
 
     def fix_pd_et_cohort_ids():
         g1 = ['amg__S008','amg__S009','amg__S011','amg__S015','amg__S016','amg__S019','amg__S022','amg__S027','amg__S028','amg__S029','amg__S030','amg__S031',]
@@ -54,7 +54,7 @@ if __name__ == '__main__':
         
 
     def fix_cp_cohort_ids():
-        g1 = ['S008_cp', 'S002_cp', 'S001_cp', 'S006_cp', 'S003_cp', 'S012_cp']
+        g1 = ['S008_cp', 'S002_cp', 'S001_cp', 'S006_cp', 'S003_cp', 'S012_cp', 'S004_cp', 'S018_cp']
         c1 = 'cp_before'
         pc1 = Cohort.where(name=c1)[0]
         pg1 = Patient.where(name=g1)
@@ -173,26 +173,27 @@ if __name__ == '__main__':
                 files.append(file_path)
 
     n = 0
+    import pdb;pdb.set_trace()
     for file in files:
         print(file.lower())
         # Modify this `if` statement to select the files of choice.
         # since we are using the cp file, go to the subdirectory with finished or close to finished trials (i.e. skip s009)
-        if "filteredandtrimmed_s002_block_nondominant" in file.lower() or "filteredandtrimmed_s002_block_dominant" in file.lower():
-            if "cp" in file.lower():
-                cohort = Cohort.find_or_create(name="cp_before", is_control=False, is_treated=False)
-            else:
-                cohort = Cohort.find_or_create(name="heathy_controls", is_control=True, is_treated=False)
-            print(cohort.name)
-            if "dynamic" not in file.lower():
-                print(file)
-                import pdb;pdb.set_trace()
-                OldGenerator(file, cohort)
-                n += 1
-                print(file,"finished", n, "features complete")
-            else:
-                print("skipping", file)
+        if "cp" in file.lower():
+            cohort = Cohort.find_or_create(name="cp_before", is_control=False, is_treated=False)
         else:
-            print("nope", file.lower())
+            cohort = Cohort.find_or_create(name="heathy_controls", is_control=True, is_treated=False)
+        print(cohort.name)
+        if "dynamic" not in file.lower():
+            print(file)
+            gen = OldGenerator(file, cohort)
+            gen.generate_models()
+            
+            n += 1
+            print(file,"finished", n, "features complete")
+        else:
+            print("skipping", file)
+    else:
+        print("nope", file.lower())
         
 
 print("Done!")

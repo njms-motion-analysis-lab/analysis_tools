@@ -176,7 +176,7 @@ class ShapeRotator:
 # min = 10000
 # sum = 0
 # while num < 26:
-#     amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+#     amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_sub_gradient_stats_list(snr, loc='grad_data__sum_values')['mean']
 #     print(amt, num)
     
 #     if amt > max:
@@ -197,7 +197,7 @@ class ShapeRotator:
 # num = 1
 # sum = 0
 # while num < 26:
-#     amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_gradient_set_stats_list(lnr, loc='grad_data__sum_values')['mean']
+#     amt = PatientTask.where(patient_id=num, task_id=4)[0].combined_sub_gradient_stats_list(lnr, loc='grad_data__sum_values')['mean']
 #     print(amt, num)
     
 #     if amt > max:
@@ -220,7 +220,7 @@ class ShapeRotator:
 # sum = 0
 # num = 1
 # # while num < 26:
-# #     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+# #     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_sub_gradient_stats_list(snr, loc='grad_data__sum_values')['mean']
 # #     print(amt, num)
     
 # #     if amt > max:
@@ -241,7 +241,7 @@ class ShapeRotator:
 # # num = 1
 # # sum = 0
 # # while num < 26:
-# #     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_gradient_set_stats_list(snr, loc='grad_data__sum_values')['mean']
+# #     amt = PatientTask.where(patient_id=num, task_id=3)[0].combined_sub_gradient_stats_list(snr, loc='grad_data__sum_values')['mean']
 # #     print(amt, num)
     
 # #     if amt > max:

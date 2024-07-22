@@ -35,7 +35,6 @@ class OldGenerator:
         self.dynamic = False
         self.set_attributes() # do this for normal/cp dataset
         # self.set_analysis_me_attributes() # do this for PD/ET dataset
-        self.generate_models()
         
     def set_analysis_me_attributes(self):
         print(self.filename)
@@ -94,10 +93,16 @@ class OldGenerator:
         # Find or create a `Task` object with the `description` attribute equal to the `task` attribute of the instance.
         # Add the `Task` object to the list of tasks associated with the `Patient` object.
         # Generates columns corresponding to x,y, and z values.
-        c_patient = Patient.find_or_create(name=self.patient, cohort_id=self.cohort.id)
+
+        maybe_pt = Patient.where(name=self.patient, cohort_id=self.cohort.id)
+        if len(maybe_pt) == 0:
+            c_patient = Patient.find_or_create(name=self.patient, cohort_id=self.cohort.id)
+        else:
+            c_patient = maybe_pt[0]
+
         c_task = Task.find_or_create(description=self.task)
-        
         c_patient.add_task(c_task)
+        
         pm = c_patient.patient_task_by_task(c_task)
         if pm == None:
             print("empty pt")

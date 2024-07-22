@@ -185,6 +185,7 @@ class BaseModel:
                 raise ValueError(f"Failed to create instance of {cls.__name__} with parameters: {kwargs}")
             
             return cls_instance
+
     @classmethod
     def all(cls):
         cls._cursor.execute(f"SELECT * FROM {cls.table_name}")

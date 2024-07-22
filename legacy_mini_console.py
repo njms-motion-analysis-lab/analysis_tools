@@ -374,24 +374,20 @@ def fetch_new_tasks():
     print("done")
 
 
-def generate_current_cp_scores(mp):
-    
-    import pdb;pdb.set_trace()
+def gen_scores_for_mp(mp):
     # mp.view_progress(fix=False, multi=True)
     # mp.gen_scores_for_sensor()
     print("done with default")
 
-    # mp.gen_scores_for_sensor(abs_val=True, force_load=True)
-    # mp.gen_scores_for_sensor(non_norm=False, force_load=True)
-    
+    mp.gen_scores_for_sensor()
+    mp.gen_scores_for_sensor(abs_val=True)
+    mp.gen_scores_for_sensor(non_norm=False)
 
-    # mpa.gen_scores_for_sensor(non_norm=True, abs_val=True)
     norm_pred =  mp.get_norm_predictors()
     
     mp.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
     
     print("really done")
-
 
 
 def save_sp_shap_vals(mp):
@@ -408,13 +404,34 @@ def save_sp_shap_vals(mp):
     print("DONE!")
 
 
+def fix_preds():
+    t1 = Task.where(description="Block_dominant")[0]
+    t2 = Task.where(description="Block_nondominant")[0]
+    tasks = [t1, t2]
+    
+    for task in tasks:
+        mps = MultiPredictor.where(task_id=task.id)
+        print(task.description)
+        for mp in mps:
+            preds = mp.get_all_preds()
+            for pred in preds:
+                ext = "good"
+                if pred.cohort_id != mp.cohort_id:
+                    ext = "fixed..."
+                    pred.update(cohort_id=mp.cohort_id)
+                print("IDS", mp.id, pred.id, "COHORT IDS (MD, PRED)", mp.cohort_id, pred.cohort_id, ext)
+            print()
+        
+    print("OK THEN")
+
+
 COHORT_NAME = "cp_before"
 TASK_NAME = "Block_dominant"
+
 def add_set_stats():
     t1 = Task.where(description="Block_dominant")[0]
     t2 = Task.where(description="Block_nondominant")[0]
     tasks = [t1, t2]
-    num_task = 0
     
     for task in tasks:
         curr_task = task.description
@@ -426,16 +443,64 @@ def add_set_stats():
             num_gs = 0
             len_gs = len(trial.get_gradient_sets())
             total = len_gs * tot_trial
+            to_update = 0
+            updated = 0
             for gs in trial.get_gradient_sets():
-                print(gs.id, num_trial, tot_trial, num_gs, len_gs, total)
-                gs.gen_set_stats(force=True)
+                # print(gs.id, num_trial, tot_trial, num_gs, len_gs, total)
+                
+                # Check if the gradient set already has its statistics
+                
+                if not (gs.set_stats_non_norm and gs.set_stats_norm and gs.set_stats_abs):
+                    # print("UPDATE", gs.id, num_trial, tot_trial, num_gs, len_gs, total)
+                    to_update += 1
+                    # gs.gen_set_stats(force=False)  # Only force update if not already set
+                
+                if not (gs.set_stats_non_norm and gs.set_stats_norm and gs.set_stats_abs):
+                    print("UPDATE", gs.id, num_trial, tot_trial, num_gs, len_gs, total, "UPDATED", updated, "TO_UPDATE", to_update)
+                    gs.gen_set_stats(force=True)  # Only force update if not already set
+                    updated += 1
+                
                 num_gs += 1
             num_trial += 1
 
 
-add_set_stats()    
+cpgsmp = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")
+hcgsmp = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")
+
 
 import pdb;pdb.set_trace()
+add_set_stats()
+print("are you sure, done ok")
+import pdb;pdb.set_trace()
+print("are you sure")
+import pdb;pdb.set_trace()
+gen_scores_for_mp(cpgsmp)
+
+
+hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
+# add_set_stats()    
+mp = MultiPredictor.where(cohort_id=2)[0]
+sp = MultiPredictor.get(15)
+mp.view_progress()
+
+
+
+
+import pdb;pdb.set_trace()
+
+print("OK DONE")
+sp = MultiPredictor.get(15)
+pred = sp.get_all_preds()[2]
+df = pred.get_df()
+
+
+
+
+rpa = MultiPredictor.where(cohort_id=1, task_id=2)[0]
+pred = rpa.get_preds()[1]
+pred.get_df()
+
+
 
 
 cp_cohort = Cohort.where(name=COHORT_NAME)[0]
@@ -486,6 +551,7 @@ for pr in sp.get_all_preds():
 mean, variance, std_dev = calculate_statistics(test_list)
 if mean is not None:
     print("Second Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
+
 
 
 import pdb;pdb.set_trace()

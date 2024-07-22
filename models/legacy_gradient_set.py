@@ -183,87 +183,93 @@ class GradientSet(LegacyBaseModel):
     
 
     def mat(self):
-        # Deserialize the 'matrix' value from the binary format using pickle
         return pd.Series(pickle.loads(self.matrix))
     
     def gen_set_stats(self, force=False):
-        if self.set_stats_non_norm is None or force is True:
-            self.gen_non_norm_set_stats(force=force)
+        stats_to_update = {}
+
+        if self.set_stats_non_norm is None or force:
+            stats_to_update['set_stats_non_norm'] = self.gen_non_norm_set_stats(force=force, collect_only=True)
         
-        if self.set_stats_norm is None or force is True:
-            self.gen_norm_set_stats(force=force)
+        if self.set_stats_norm is None or force:
+            stats_to_update['set_stats_norm'] = self.gen_norm_set_stats(force=force, collect_only=True)
         
-        if self.set_stats_abs is None or force is True:
-            self.gen_abs_set_stats(force=force)
+        if self.set_stats_abs is None or force:
+            stats_to_update['set_stats_abs'] = self.gen_abs_set_stats(force=force, collect_only=True)
+        
+        if stats_to_update:
+            self.update(**stats_to_update)
         
         print("DONE")
+    
+    def get_non_norm_set_stats(self):
+        return pickle.loads(self.set_stats_non_norm)
+    
+    def get_abs_set_stats(self):
+        return pickle.loads(self.set_stats_abs)
 
+    def get_norm_set_stats(self):
+        return pickle.loads(self.set_stats_norm)
 
-    def gen_non_norm_set_stats(self, force=False):
-        if force is True or self.set_stats_non_norm is None:
+    def gen_non_norm_set_stats(self, force=False, collect_only=False):
+        if force or self.set_stats_non_norm is None:
             movement = pd.DataFrame(self.mat())
             movement["id"] = self.id
-            movement["samplepoint"] = range(len(movement))  # Ensure the samplepoint column is included
+            movement["samplepoint"] = range(len(movement))
             set_stats_non_norm = self.extract_features_from_movement(movement)
+            if collect_only:
+                return set_stats_non_norm
             self.update(set_stats_non_norm=set_stats_non_norm)
             print("done non_norm")
             print("Updated set_stats_non_norm:", set_stats_non_norm)
         else:
             print("set_stats_non_norm already set")
-        # print("Current set_stats_non_norm:", self.set_stats_non_norm)
-        # return pickle.loads(self.set_stats_non_norm)
     
-    def gen_abs_set_stats(self, force=False):
-        if force is True or self.set_stats_abs is None:
+    def gen_abs_set_stats(self, force=False, collect_only=False):
+        if force or self.set_stats_abs is None:
             movement = abs(pd.DataFrame(self.mat()))
             movement["id"] = self.id
-            movement["samplepoint"] = range(len(movement))  # Ensure the samplepoint column is included
+            movement["samplepoint"] = range(len(movement))
             set_stats_abs = self.extract_features_from_movement(movement)
+            if collect_only:
+                return set_stats_abs
             self.update(set_stats_abs=set_stats_abs)
             print("done abs")
             print("Updated set_stats_abs:", set_stats_abs)
         else:
             print("set_stats_abs already set")
-        # print("Current set_stats_abs:", self.set_stats_abs)
-        # return pickle.loads(self.set_stats_abs)
 
-    def gen_norm_set_stats(self, force=False):
+    def gen_norm_set_stats(self, force=False, collect_only=False):
         if force or self.set_stats_norm is None:
             if self.normalized is None:
                 movement = pickle.loads(self.normalize_to_length_3000())
             else:
                 movement = pd.DataFrame(self.normalized)
             movement["id"] = self.id
-            movement["samplepoint"] = range(len(movement))  # Ensure the samplepoint column is included
+            movement["samplepoint"] = range(len(movement))
             set_stats_norm = self.extract_features_from_movement(movement)
+            if collect_only:
+                return set_stats_norm
             self.update(set_stats_norm=set_stats_norm)
             print("done norm")
             print("Updated set_stats_norm:", set_stats_norm)
         else:
             print("set_stats_norm already set")
-        # print("Current set_stats_norm:", self.set_stats_norm)
-        # return pickle.loads(self.set_stats_norm)
     
     def normalize_to_length_3000(self):
-        # Fetch the data using the mat method
         data = self.mat()
-
-        # Normalize amplitude of submovement
         normed_amplitude = abs(data / np.max(np.abs(data)))
         start, end = normed_amplitude.index[0], normed_amplitude.index[-1]
 
         if end != start:
             x_vals = np.linspace(start, end, 3000)
         else:
-            # Handle the case when end equals start
-            x_vals = [start] * 6000
+            x_vals = [start] * 3000
         normed_temporally = np.interp(x_vals, normed_amplitude.index.tolist(), normed_amplitude)
         normed_temporally = pd.DataFrame({"grad_data": normed_temporally}, index=x_vals)
         normed_temporally["samplepoint"] = x_vals
-        # print(normed_temporally)
 
         return pickle.dumps(normed_temporally)
-
 
     @staticmethod
     def extract_features_from_movement(movement, params=ComprehensiveFCParameters()):

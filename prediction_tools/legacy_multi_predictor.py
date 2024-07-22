@@ -27,14 +27,14 @@ import matplotlib.colors as mcolors
 SENSOR_CODES = [
     'rfin_x',
     'rwra_x',
-    # 'rwrb_x',
+    'rwrb_x',
     'rfrm_x',
     'relb_x',
     # 'relbm_x',
     'rupa_x',
     'rsho_x',
-    # 'rbhd_x', # skip these for cp
-    # 'rfhd_x',
+    'rbhd_x', # skip these for cp
+    'rfhd_x',
 ]
 
 TOP_TREE_MODELS = ['GradientBoosting']
@@ -62,9 +62,8 @@ class MultiPredictor(LegacyBaseModel):
     def gen_items_for_sensors(self, sensors=None, ntaf=False):
         if sensors is None:
             sensors = self.get_sensors()
-
-        for sen in sensors:
-            self.gen_items_for_sensor(sen, ntaf)
+        # for sen in sensors:
+        #     self.gen_items_for_sensor(sen, ntaf)
 
     def task(self):
         return Task.get(self.task_id)
@@ -495,22 +494,21 @@ class MultiPredictor(LegacyBaseModel):
         self.gen_items_for_sensors()
 
 
-    def gen_scores_for_sensor(self, non_norm=True, abs_val=False, force_load=False, skip_default_sensors=False, add_other=False):
+    def gen_scores_for_sensor(self, non_norm=True, abs_val=False, force_load=False, skip_default_sensors=False, add_other=False, rand_skip=False, abs_skip=True):
         preds = Predictor.where(task_id=self.task_id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
         print(len(preds), " existing predictors found.")
-        prs = Predictor.where(task_id=self.task_id, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-        for el in prs:
-            el.update(accuracies=None)
-        
-        self.gen_items_for_sensors()
 
         if skip_default_sensors is True:
             curr_sensors = self.sensors
         else:
             curr_sensors = self.get_sensors()
+
         for sensor in curr_sensors:
-            predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-            predictor = predictor.train_from(force_load=force_load, add_other=add_other)
+            if sensor.name is not "relbm_x":
+                predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
+                # TODO: remove this, just skipping the one I did in the console...
+                if predictor.id is not 269:
+                    predictor = predictor.train_from(force_load=force_load, add_other=add_other)
         with open('items.pickle', 'wb') as handle:
             pickle.dump(self.items, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("Done training Predictors for MP:", self.id)
@@ -623,41 +621,34 @@ class MultiPredictor(LegacyBaseModel):
             elif pred.non_norm == False:
                 norm.append(pred)
             else:
-                print("OTHER", norm.attrs())
+                print("OTHER", pred.attrs())
         
-        
-        all_pred_types = reversed([default, abs_val, norm, others])
-        for pred_type in all_pred_types:
-            print()
-            print("NEW PRED TYPE")
-            print()
-            bad_snr = ["rbhd_x", "rfhd_x"]
-            for pred in pred_type:
-                sensor_name = Sensor.get(pred.sensor_id).name
-                if pred.accuracies is not None:
-                    acc = pred.get_classifier_accuracies()
-                else:
-                    if sensor_name not in bad_snr:
-                        if fix == True:
-                            try:
-                                pred.train_from(use_shap=True)
-                            except:
-                                print("FUUuck")
-                                continue
-                        else:
-                            print("YOLO")
-
-                    acc = "N/A"
-                    
-                print("ID:", pred.id,"SENSOR:", sensor_name, "ACCURACIES:", acc, "UPDATED AT", pred.updated_at)
-            
-            print()
-            print("END PRED TYPE")
-            print()
+        try:
+            all_pred_types = reversed([default, abs_val, norm, others])
+            for pred_type in all_pred_types:
+                print()
+                print("NEW PRED TYPE")
+                print()
+                # bad_snr = ["rbhd_x", "rfhd_x"]
+                for pred in pred_type:
+                    sensor_name = Sensor.get(pred.sensor_id).name
+                    if pred.accuracies is not None:
+                        acc = pred.get_classifier_accuracies()
+                    else:
+                        acc = "N/A"
+                        
+                    print("ID:", pred.id,"SENSOR:", sensor_name, "ACCURACIES:", acc, "UPDATED AT", pred.updated_at)
+                
+                print()
+                print("END PRED TYPE")
+                print()
 
 
-        print("DONEEEE")
-        import pdb;pdb.set_trace()
+            print("DONEEEE")
+        except TypeError:
+
+
+            import pdb;pdb.set_trace()
         print("ok")
             
         
@@ -753,7 +744,7 @@ class MultiPredictor(LegacyBaseModel):
         for combo_sensor_id, preds in reversed(combos.items()):
             print(preds)
             print("Training for sensor:", Sensor.get(combo_sensor_id).name)
-            new_pred = Predictor.find_or_create(task_id=self.task_id, sensor_id=combo_sensor_id, multi_predictor_id=new_mp.id)
+            new_pred = Predictor.find_or_create(task_id=self.task_id, sensor_id=combo_sensor_id, multi_predictor_id=new_mp.id, cohort_id=self.cohort_id)
             # Pass the predictors from 'preds' list and 'new_pred' separately
             if norm_predictors:
                 new_mp.combo_train(preds[0], preds[1], new_pred, norm_pred=preds[2], get_sg_count=get_sg_count)
@@ -773,14 +764,14 @@ class MultiPredictor(LegacyBaseModel):
             return None
         df1, y1 = result
         # abs non norm
-        result = abs_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        result = abs_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count)
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
         df2, _ = result
 
         # norm (abs)
-        df3, _ = norm_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        df3, _ = norm_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count)
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None

@@ -48,4 +48,4 @@ class Cohort(LegacyBaseModel):
         return trials
 
 
-
+g1 = ['amg__S008','amg__S009','amg__S011','amg__S015','amg__S016','amg__S019','amg__S022','amg__S027','amg__S028','amg__S029','amg__S030','amg__S031',]

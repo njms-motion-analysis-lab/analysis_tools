@@ -153,36 +153,22 @@ class PatientTask(LegacyBaseModel):
         return result_df
 
 
-    def combined_gradient_set_stats_list(self, sensor, abs_val=False, non_normed=False, dynamic=False, all=False, loc=['grad_data__sum_values']):
-        sensors = sensor.get_set()
-        if all is True:
-            gradient_sets = []
-            for sen in sensors:
-                gradient_sets += self.get_gradient_sets_for_sensor(sen, all=False)
-        else:
-            gradient_sets = self.get_gradient_sets_for_sensor(sensor, all=False)
-        if len(gradient_sets) == 0:
-            print("empty", sensor.name, "patient_id:", self.patient_id, "task_id:", self.task_id)
-            return []
-    
+    def combined_sub_gradient_stats_list(self, sensor, abs_val=False, non_normed=False, all=False, loc=['grad_data__sum_values']):
+        gradient_sets = self.get_gradient_sets_for_combo(sensor, all)    
         dataframes = []
-        print("GETTING STATS FOR GRAD SETS")
+
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
                 if not non_normed:
                     aggregated_stats = gradient_set.get_aggregate_stats()
-                    if loc:
-                        aggregated_stats = aggregated_stats.loc[loc]
-                    dataframes.append(aggregated_stats)
                 else:
                     aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val, non_normed=non_normed)
-                    if loc:
-                        aggregated_stats = aggregated_stats.loc[loc]
-                    dataframes.append(aggregated_stats)
 
-        # Concatenate the list of dataframes vertically
-        
-        # Group by index and calculate the mean for each key
+                if loc:
+                    aggregated_stats = aggregated_stats.loc[loc]
+
+                dataframes.append(aggregated_stats)
+
         try:
             combined_df = pd.concat(dataframes)
             mean_df = combined_df.groupby(combined_df.index).mean()
@@ -190,8 +176,62 @@ class PatientTask(LegacyBaseModel):
             print("ERROR", e)
             return None
 
-            
         return mean_df
+
+
+    def combined_gradient_set_stats_list(self, sensor, abs_val=False, non_normed=False, all=False, loc=['grad_data__sum_values']):
+        gradient_sets = self.get_gradient_sets_for_combo(sensor, all)
+        dataframes = []
+
+        for gradient_set in gradient_sets:
+            if not non_normed:
+                aggregated_stats = gradient_set.get_norm_set_stats()
+            elif abs_val is True:
+                aggregated_stats = gradient_set.get_abs_set_stats()
+            else:
+                aggregated_stats = gradient_set.get_non_norm_set_stats()
+            if loc:
+                aggregated_stats = aggregated_stats.loc[loc]
+            
+            dataframes.append(aggregated_stats)
+
+        try:
+            combined_df = pd.concat(dataframes)
+            mean_df = combined_df.groupby(combined_df.index).mean()
+            mean_df = self.format_df(mean_df)
+        except ValueError as e:
+            print("ERROR", e)
+            return None
+        
+        return mean_df
+    
+    def format_df(self, df):
+        # Calculate the mean for each column
+        mean_series = df.mean()
+
+        # Create a new DataFrame from the mean_series
+        mean_df = mean_series.to_frame(name='mean')
+
+
+        return mean_df
+
+
+
+    def get_gradient_sets_for_combo(self, sensor, all=False):
+        sensors = sensor.get_set()
+        if all is True:
+            gradient_sets = []
+            for sen in sensors:
+                gradient_sets += self.get_gradient_sets_for_sensor(sen, all=False)
+        else:
+            gradient_sets = self.get_gradient_sets_for_sensor(sensor, all=False)
+
+        if len(gradient_sets) == 0:
+            print("empty", sensor.name, "patient_id:", self.patient_id, "task_id:", self.task_id)
+            return []
+        
+        return gradient_sets
+    
 
     def get_patient(self):
         self._cursor.execute(f"SELECT * FROM patient WHERE id=?", (self.patient_id,))
