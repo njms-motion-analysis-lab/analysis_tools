@@ -17,6 +17,7 @@ import matplotlib.colors as mcolors
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
+from datetime import datetime, timedelta
 from prediction_tools.predictor_score import PredictorScore
 from viewers.matrix_plotter import MatrixPlotter
 from viewers.multi_plotter import MultiPlotter
@@ -37,7 +38,9 @@ SENSOR_CODES = [
     'rfhd_x',
 ]
 
-TOP_TREE_MODELS = ['GradientBoosting']
+TOP_TREE_MODELS = ['RandomForest']
+
+
 # TOP_TREE_MODELS = ['XGBoost']
 
 NUM_TOP = 1000
@@ -503,16 +506,26 @@ class MultiPredictor(LegacyBaseModel):
         else:
             curr_sensors = self.get_sensors()
 
+        time_threshold = datetime.now() - timedelta(hours=36)
+
         for sensor in curr_sensors:
-            if sensor.name is not "relbm_x":
+            if sensor.name != "relbm_x":
                 predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-                # TODO: remove this, just skipping the one I did in the console...
-                if predictor.id is not 269:
-                    predictor = predictor.train_from(force_load=force_load, add_other=add_other)
+                
+                if predictor.updated_at is not None:
+                    predictor_updated_at = datetime.strptime(predictor.updated_at, '%Y-%m-%dT%H:%M:%S')  # Adjust the format string if necessary
+                else:
+                    predictor_updated_at = None
+
+                if predictor.accuracies is None or force_load is True or predictor_updated_at < time_threshold:
+                    predictor = predictor.train_from(force_load=True, add_other=add_other)
+                else:
+                    print("Skipping for now because acc or bad id", predictor.accuracies)
+                    
         with open('items.pickle', 'wb') as handle:
             pickle.dump(self.items, handle, protocol=pickle.HIGHEST_PROTOCOL)
         print("Done training Predictors for MP:", self.id)
-    
+        
     def get_all_preds(self, same_cohort=False):
         if same_cohort:
             return Predictor.where(multi_predictor_id=self.id, cohort_id=self.cohort_id)
@@ -596,14 +609,35 @@ class MultiPredictor(LegacyBaseModel):
     
     def cohort_name(self):
         return Cohort.get(id=self.cohort_id).name
+
+    def gen_scores_for_mp(self, force_load=False):
+        # self.view_progress(fix=False, multi=True)
+        # self.gen_scores_for_sensor()
+        print("done with default")
+
+        self.gen_scores_for_sensor(force_load=force_load)
+        self.gen_scores_for_sensor(abs_val=True, force_load=force_load)
+        self.gen_scores_for_sensor(non_norm=False, force_load=force_load)
+
+        norm_pred =  self.get_norm_predictors()
+
+        #TODO REMOVE THIS STEPHEN
+        if self.model == "grad_set":
+            self.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred, model="grad_set_combo")
+        else:
+            self.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
+
+        print("really done")
     
-    def view_progress(self, fix=False, multi=False):
-        if multi == True:
+    
+    def view_progress(self, fix_missing_acc=False, multi=False):
+        if multi:
             mp = MultiPredictor.where(cohort_id=2, model='norm_non_abs_combo')[0]
             # all_preds = mp.get_all_preds(same_cohort=True)
             all_preds = Predictor.where(multi_predictor_id=mp.id)
         else:
             all_preds = self.get_all_preds(same_cohort=True)
+        
         print("COHORT", Cohort.get(self.cohort_id).name)
         print(self.attrs())
         print("TOTAL number of predictors", len(all_preds))
@@ -614,43 +648,43 @@ class MultiPredictor(LegacyBaseModel):
         others = []
         
         for pred in all_preds:
-            if pred.non_norm == True and pred.abs_val == False:
+            if pred.non_norm and not pred.abs_val:
                 default.append(pred)
-            elif pred.abs_val == True and pred.non_norm == True:
+            elif pred.abs_val and pred.non_norm:
                 abs_val.append(pred)
-            elif pred.non_norm == False:
+            elif not pred.non_norm:
                 norm.append(pred)
             else:
                 print("OTHER", pred.attrs())
         
         try:
-            all_pred_types = reversed([default, abs_val, norm, others])
+            all_pred_types = list(reversed([default, abs_val, norm, others]))  # Convert reversed iterator to list
             for pred_type in all_pred_types:
-                print()
-                print("NEW PRED TYPE")
-                print()
-                # bad_snr = ["rbhd_x", "rfhd_x"]
+                print("\nNEW PRED TYPE\n")
+                if not pred_type:
+                    print("Empty pred_type, skipping.")
+                    continue
                 for pred in pred_type:
-                    sensor_name = Sensor.get(pred.sensor_id).name
-                    if pred.accuracies is not None:
-                        acc = pred.get_classifier_accuracies()
-                    else:
-                        acc = "N/A"
-                        
-                    print("ID:", pred.id,"SENSOR:", sensor_name, "ACCURACIES:", acc, "UPDATED AT", pred.updated_at)
-                
-                print()
-                print("END PRED TYPE")
-                print()
+                    sensor = pred.sensor()
+                    acc = pred.get_classifier_accuracies()
+                    print(f"Classifier accuracies for ID {pred.id}, SENSOR {sensor.name}, SENSOR ID {sensor.id}: {acc}, updated: {pred.updated_at}, non_norm {pred.non_norm}, abs {pred.abs_val}")
 
-
+                    if fix_missing_acc and acc == None:
+                        print("FIXING")
+                        print("    ID:", pred.id,"SENSOR:", sensor.name, "ACCURACIES:", acc, "UPDATED AT", pred.updated_at)
+                        pred.train_from(force_load=True)
+                print("\nEND PRED TYPE\n")
+        
             print("DONEEEE")
-        except TypeError:
+        
+        except Exception as e:
+            print("An error occurred:", e)
+            import traceback
+            traceback.print_exc()
 
+# Add the line that starts the pdb debugger again, if needed:
+# import pdb; pdb.set_trace()
 
-            import pdb;pdb.set_trace()
-        print("ok")
-            
         
 
 
@@ -693,9 +727,9 @@ class MultiPredictor(LegacyBaseModel):
         #TODO stephen, change this back
         # title = self.cohort_name() + "/" + title
         if title is not None:
-            title = "CP3 multi" + "/" + title
+            title = "CP4" + "/" + title
         else:
-            title = "CP3 multi" + "/"
+            title = "CP4" + "/"
 
         
         for pred in pr:
@@ -717,7 +751,7 @@ class MultiPredictor(LegacyBaseModel):
                     score.view_shap_plot()
 
     
-    def gen_train_combo_mp(self, model="non_abs_combo", use_norm_pred=False, norm_pred=None, get_sg_count=False):
+    def gen_train_combo_mp(self, model="non_abs_combo", use_norm_pred=False, norm_pred=None, get_sg_count=False, custom_mp=None, force_load=False):
         default_predictors = self.get_predictors()
         abs_predictors = self.get_abs_predictors()
 
@@ -728,11 +762,14 @@ class MultiPredictor(LegacyBaseModel):
             norm_predictors = self.get_norm_predictors() 
 
         norm_dict = {pred.sensor_id: pred for pred in norm_predictors} if norm_predictors else {}
+        keep_old = model == "non_abs_combo"
 
-        new_mp = MultiPredictor.find_or_create(
-            cohort_id=self.cohort_id, task_id=self.task_id, model=("norm_" + model) if use_norm_pred else model
-        )
-
+        if custom_mp is not None:
+            new_mp = custom_mp
+        else:
+            new_mp = MultiPredictor.find_or_create(
+                cohort_id=self.cohort_id, task_id=self.task_id, model=("norm_" + "non_abs_combo") if keep_old else model
+            )
         default_dict = {pred.sensor_id: pred for pred in default_predictors}
         abs_dict = {pred.sensor_id: pred for pred in abs_predictors}
         
@@ -745,47 +782,56 @@ class MultiPredictor(LegacyBaseModel):
             print(preds)
             print("Training for sensor:", Sensor.get(combo_sensor_id).name)
             new_pred = Predictor.find_or_create(task_id=self.task_id, sensor_id=combo_sensor_id, multi_predictor_id=new_mp.id, cohort_id=self.cohort_id)
-            # Pass the predictors from 'preds' list and 'new_pred' separately
+
             if norm_predictors:
-                new_mp.combo_train(preds[0], preds[1], new_pred, norm_pred=preds[2], get_sg_count=get_sg_count)
+                new_mp.combo_train(preds[0], preds[1], new_pred, norm_pred=preds[2], get_sg_count=get_sg_count, force_load=force_load)
             else:
-                new_mp.combo_train(preds[0], preds[1], new_pred, get_sg_count=get_sg_count)
+                new_mp.combo_train(preds[0], preds[1], new_pred, get_sg_count=get_sg_count, force_load=force_load)
 
         print("Done!")
 
 
+    def get_combo_df(self):
+        return pickle.loads(self.normalized)
 
-    def combo_train(self, default_pred, abs_pred, new_pred, norm_pred=None, classifier_name=None, remove_lateral=True, get_sg_count=False):
+
+    def combo_train(self, default_pred, abs_pred, new_pred, norm_pred=None, classifier_name=None, remove_lateral=True, force_load=False, get_sg_count=False):
         # non abs non norm
         
-        result = default_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count)
+        result = default_pred.get_final_bdf(untrimmed=True, force_abs_x=remove_lateral, get_sg_count=get_sg_count, force_load=force_load)
+
+
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
         df1, y1 = result
         # abs non norm
-        result = abs_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count)
+        result = abs_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count, force_load=force_load)
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
         df2, _ = result
 
         # norm (abs)
-        df3, _ = norm_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count)
+        df3, _ = norm_pred.get_final_bdf(untrimmed=True, force_abs_x=False, get_sg_count=get_sg_count, force_load=force_load)
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
         df3, _ = result
 
-        comp_df = MultiPredictor.create_composite_dataframe(df1, df2, df3=df3)
-        combo_df = Predictor.trim_bdf_with_boruta(comp_df, y1)    
 
+        comp_df = MultiPredictor.create_composite_dataframe(df1, df2, df3=df3)
+        combo_df = Predictor.trim_bdf_with_boruta(comp_df, y1)
+
+        pickled_df = pickle.dumps(combo_df)
+        new_pred.update(aggregated_stats=pickled_df)
         if len(combo_df.columns) <= 2:
-            combo_df = comp_df
+            combo_df = new_pred.trim_bdf(comp_df, custom_limit=48)
         
         classifiers = Predictor.define_classifiers_cls(False, False, classifier_name=classifier_name, feature_count=len(combo_df.columns))
         groups = combo_df['patient']
         
+        y = new_pred.get_y(combo_df)
 
         print("current combo", combo_df)
         classifier_accuracies, classifier_params, classifier_metrics = {}, {}, {}
@@ -794,7 +840,7 @@ class MultiPredictor(LegacyBaseModel):
         acc_metrics = {}
         for classifier_name, classifier_data in classifiers.items():
             print(f"Training {classifier_name}...")
-            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = Predictor._train_from_mp(combo_df, y1, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps=self, use_shap=True, new_pred=new_pred)
+            classifier_scores, best_params, extra_metrics, scores, params, acc_metrics = Predictor._train_from_mp(combo_df, y, groups, classifier_name, classifier_data, scores, params, acc_metrics, mps=self, use_shap=True, new_pred=new_pred)
             classifier_accuracies[classifier_name] = np.mean(classifier_scores)
             classifier_params[classifier_name] = best_params
             classifier_metrics[classifier_name] = extra_metrics
@@ -813,8 +859,7 @@ class MultiPredictor(LegacyBaseModel):
             classifier_metrics[classifier_name] = n_metrics 
         
         new_pred._update_accuracies(classifier_accuracies, classifier_params, classifier_metrics)
-        pickled_df = pickle.dumps(combo_df)
-        new_pred.update(aggregated_stats=pickled_df)
+        
         new_pred.save()
         print("done......")
 

@@ -1,6 +1,8 @@
 from importlib import import_module
+import io
 from models.legacy_position_set import PositionSet
 import pickle
+import dill
 from typing import Any, List
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 
@@ -12,16 +14,33 @@ import pandas as pd
 import numpy as np
 import pdb
 from tsfresh.feature_extraction import ComprehensiveFCParameters
+from new_pickle import CustomUnpickler, unpickle_file, pickle_data  # Import functions from custom_unpickler
+
 
 
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from motion_filter import MotionFilter
+# Define a dummy _unpickle_block function
+# Define the dummy _unpickle_block function
+# Define the dummy _unpickle_block function
+def _unpickle_block(*args, **kwargs):
+    import pandas as pd
+    from pandas.core.internals.blocks import Block
+    return Block(*args, **kwargs)
 
+# Custom Unpickler
+class CustomUnpickler(dill.Unpickler):
+    def find_class(self, module, name):
+        if name == '_unpickle_block':
+            return _unpickle_block
+        if module == 'pandas._libs.internals' and name == 'Block':
+            from pandas.core.internals.blocks import Block
+            return Block
+        return super().find_class(module, name)
 class GradientSet(LegacyBaseModel):
     table_name = "gradient_set"
 
-    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, aggregated_stats=None, created_at=None, updated_at=None, set_stats_non_norm=None, set_stats_norm=None, set_stats_abs=None, normalized=None):
-        super().__init__()
+    def __init__(self, id=None, name=None, sensor_id=None, trial_id=None, matrix=None, aggregated_stats=None, created_at=None, updated_at=None,  set_stats_norm=None, set_stats_non_norm=None, set_stats_abs=None, normalized=None):
         self.id = id
         self.name = name
         self.sensor_id = sensor_id
@@ -30,8 +49,8 @@ class GradientSet(LegacyBaseModel):
         self.aggregated_stats = aggregated_stats
         self.created_at = created_at
         self.updated_at = updated_at
-        self.set_stats_non_norm = set_stats_non_norm
         self.set_stats_norm = set_stats_norm
+        self.set_stats_non_norm = set_stats_non_norm
         self.set_stats_abs = set_stats_abs
         self.normalized = normalized
 
@@ -62,6 +81,19 @@ class GradientSet(LegacyBaseModel):
     def get_valid_tasks(self):
         self.sub_tasks = self.get_sub_tasks()
         MotionFilter.get_valid_motions(self)
+    
+    def get_sql_row(self):
+        self._cursor.execute("""
+            SELECT * FROM gradient_set WHERE id = ?
+        """, (self.id,))
+
+        row = self._cursor.fetchone()
+        if row:
+            print("SQL Row for object with id", self.id, ":")
+            for col, val in zip([column[0] for column in self._cursor.description], row):
+                print(f"{col}: {val}")
+        else:
+            print(f"No row found for object with id {self.id}")
 
     def get_task(self):
         Task = import_module("models.legacy_task").Task
@@ -203,13 +235,29 @@ class GradientSet(LegacyBaseModel):
         print("DONE")
     
     def get_non_norm_set_stats(self):
-        return pickle.loads(self.set_stats_non_norm)
+        obj = unpickle_file(self.set_stats_non_norm)
+        if obj is not None:
+            print("Pickle data loaded successfully with custom dill unpickler.")
+            return obj
+        else:
+            print("Failed to load pickle data with both pandas and custom dill unpickler.")
+            return None
+        
     
     def get_abs_set_stats(self):
-        return pickle.loads(self.set_stats_abs)
+        return unpickle_file(self.set_stats_abs)
+        if obj is not None:
+            print("Pickle data loaded successfully with custom dill unpickler.")
+            return obj
+        else:
+            print("Failed to load pickle data with both pandas and custom dill unpickler.")
+            return None
 
-    def get_norm_set_stats(self):
-        return pickle.loads(self.set_stats_norm)
+    def get_norm_set_stats(self, use_sql=False):
+        if use_sql:
+            return unpickle_file(self._cursor.execute("""SELECT set_stats_norm FROM gradient_set WHERE id = ?""", (self.id,)).fetchone()[0])
+        
+        return unpickle_file(self.set_stats_norm)
 
     def gen_non_norm_set_stats(self, force=False, collect_only=False):
         if force or self.set_stats_non_norm is None:
@@ -242,7 +290,7 @@ class GradientSet(LegacyBaseModel):
     def gen_norm_set_stats(self, force=False, collect_only=False):
         if force or self.set_stats_norm is None:
             if self.normalized is None:
-                movement = pickle.loads(self.normalize_to_length_3000())
+                movement = unpickle_file(self.normalize_to_length_3000())
             else:
                 movement = pd.DataFrame(self.normalized)
             movement["id"] = self.id
@@ -289,7 +337,7 @@ class GradientSet(LegacyBaseModel):
 
     def mat_df(self):
         # Deserialize the 'matrix' value from the binary format using pickle
-        series = pd.Series(pickle.loads(self.matrix))
+        series = pd.Series(unpickle_file(self.matrix))
         
         # Convert the pandas Series to a DataFrame
         dataframe = series.to_frame(name='value')
@@ -350,10 +398,10 @@ class GradientSet(LegacyBaseModel):
         return memoryview(pickle.dumps(stats))
 
     def get_aggregate_stats(self):
-        return pickle.loads(self.aggregated_stats)
+        return unpickle_file(self.aggregated_stats)
 
     def get_aggregate_non_norm_stats(self, abs_val=False, non_normed=True):
-        return pickle.loads(self.calc_aggregate_stats(abs_val=abs_val, non_normed=non_normed))
+        return unpickle_file(self.calc_aggregate_stats(abs_val=abs_val, non_normed=non_normed))
 
     def view_3d(self):
         from importlib import import_module

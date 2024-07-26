@@ -374,14 +374,15 @@ def fetch_new_tasks():
     print("done")
 
 
-def gen_scores_for_mp(mp):
+def gen_scores_for_mp(mp, force_load=False):
     # mp.view_progress(fix=False, multi=True)
     # mp.gen_scores_for_sensor()
     print("done with default")
 
-    mp.gen_scores_for_sensor()
-    mp.gen_scores_for_sensor(abs_val=True)
-    mp.gen_scores_for_sensor(non_norm=False)
+    mp.gen_scores_for_sensor(non_norm=False, force_load=force_load)
+    mp.gen_scores_for_sensor(force_load=force_load)
+    mp.gen_scores_for_sensor(abs_val=True, force_load=force_load)
+    
 
     norm_pred =  mp.get_norm_predictors()
     
@@ -391,13 +392,10 @@ def gen_scores_for_mp(mp):
 
 
 def save_sp_shap_vals(mp):
-    preds = sp.get_preds()
+    preds = mp.get_all_preds()
 
-    sp.save_shap_values(preds=preds)
+    mp.save_shap_values(preds=preds)
 
-    bnp = mp.get_norm_preds()
-
-    mp.save_shap_values(preds=bnp)
 
     # bc.save_shap_values(non_norm=False, title="combo")
     # rc.save_shap_values(non_norm=False, title="combo")
@@ -423,7 +421,6 @@ def fix_preds():
             print()
         
     print("OK THEN")
-
 
 COHORT_NAME = "cp_before"
 TASK_NAME = "Block_dominant"
@@ -464,23 +461,228 @@ def add_set_stats():
             num_trial += 1
 
 
-cpgsmp = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")
+def make_final_combo(mp):
+    norm_preds = mp.get_norm_preds()
+    mp.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_preds, model="grad_set_combo")
+    print("DONE")
+
+
+def display_for_paper(mpa, cp_mpa, hc_combo, cp_combo, hcgsmp, cpgsmp, hc_set_list, cp_set_list):
+    import pdb;pdb.set_trace()
+
+    MatrixPlotter.show(mpa.get_acc(), cp_mpa.get_acc(), h_one="Healthy Controls Default (n=25)", h_two="CP Patients Default (n=12)", alt=True)
+    MatrixPlotter.show(mpa.get_abs_acc(), cp_mpa.get_abs_acc(), h_one="Healthy Controls Absolute Value (n=25)", h_two="CP Patients Absolute Value(n=12)", alt=True)
+    MatrixPlotter.show(mpa.get_norm_acc(), cp_mpa.get_norm_acc(), h_one="Healthy Controls Normalized (n=25)", h_two="CP Patients Normalized (n=12)", alt=True)
+
+    print("DONE W INDIV, next combo")
+
+    import pdb;pdb.set_trace()
+    
+    MatrixPlotter.show(hc_combo.get_all_acc(), cp_combo.get_all_acc(), h_one="Healthy Controls Combination (n=25)", h_two="CP Patients Combination (n=12)", alt=True)
+
+    print("Done w matrices, on to shap")
+    hc_combo_preds = hc_combo.get_all_preds()
+    hc_combo.save_shap_values(preds=hc_combo_preds, title="hc_combo")
+
+    cp_combo_preds = cp_combo.get_all_preds()
+    cp_combo.save_shap_values(preds=cp_combo_preds, title="cp_combo")
+
+    print("DONE W COMBO, next gs")
+
+    import pdb;pdb.set_trace()
+
+    MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
+    MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value(n=12)", alt=True)
+    MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+
+    print("DONE W GS base cases, on to combo")
+
+    import pdb;pdb.set_trace()
+
+    MatrixPlotter.show(hc_set_list.get_all_acc(), cp_set_list.get_all_acc(), h_one="Healthy Controls GS Combination (n=25)", h_two="CP Patients GS Combination (n=12)", alt=True)
+    MatrixPlotter.show(hc_combo.get_all_acc(), hc_set_list.get_all_acc(), h_one="Healthy Controls Combination (n=25)", h_two="Healthy Controls GS Combination (n=25)", alt=True)
+    MatrixPlotter.show(cp_combo.get_all_acc(), cp_set_list.get_all_acc(), h_one="CP Patients Combination (n=12)", h_two="CP Patients GS Combination (n=12)", alt=True)
+
+    print("DONE W Matrices on to shap")
+
+    hc_set_list_preds = hc_set_list.get_all_preds()
+    hc_set_list.save_shap_values(preds=hc_set_list_preds, title="hc_set_list")
+
+    cp_set_list_preds = cp_set_list.get_all_preds()
+    cp_set_list.save_shap_values(preds=cp_set_list_preds, title="cp_set_list")
+
+    print("DONE W ALL MATRICES AND SHAP")
+
+    import pdb;pdb.set_trace()
+
+
+def display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list):
+    # hc_combo
+
+    # hc_combo.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+    # cp_combo.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+
+    # print("DONE W RF COMBO")
+    # import pdb;pdb.set_trace()
+
+    # hc_set_list.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+    # cp_set_list.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+
+    # print("DONE W ALL RF, on to ExtraTrees")
+    import pdb;pdb.set_trace()
+
+    hc_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    cp_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+
+    print("DONE W ET COMBO")
+    import pdb;pdb.set_trace()
+    
+    hc_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    cp_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+
+    print("DONE W ALL ET, finished!!")
+    import pdb;pdb.set_trace()
+
+import pdb;pdb.set_trace()
+# base case
+mpa = MultiPredictor.where(cohort_id=1, task_id=3)[0] # 30 preds, 30 acc
+cp_mpa = MultiPredictor.where(cohort_id=2, task_id=3)[0] # 27 preds, 27 acc
+
+# combos
+hc_combo = MultiPredictor.where(model="norm_non_abs_combo")[0] # 10 preds
+cp_combo = MultiPredictor.get(15) # 9 (norm) preds
+
+# grad sets base case
+hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0] # 27 preds, 27 acc
+
+import pdb;pdb.set_trace()
+gen_scores_for_mp(hcgsmp, force_load=True)
+
+
+
+cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0] # 27 preds. 27 acc
+
+# grad set combo
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0] # 9 preds, 9 acc
+cp_set_list = MultiPredictor.where(model="grad_set_combo", cohort_id=2)[0] # 9 preds, 9 acc
+
+
+
+
+# todo          
+display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list)
+
+# done 7.24
+# display_for_paper(mpa, cp_mpa, hc_combo, cp_combo, hcgsmp, cpgsmp, hc_set_list, cp_set_list)
+
+
+
+
+print("Done w paper display")
+
+
+
+
+
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+
+sp = MultiPredictor.get(15)
+# MatrixPlotter.show(bc.get_all_acc(), sp.get_all_acc(), h_one="Healthy Controls (n=25)", h_two="CP Patients (n=7)", alt=True)
+
+
+
+
+hc_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+hc_combo = MultiPredictor.get(15)
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
+
+
+cp_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+cp_combo = MultiPredictor.get(15)
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
+
+
+
+
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+mp = MultiPredictor.where(cohort_id=2)[0]
+
+combo_cp = MultiPredictor.get(15)
+
+
+hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0]
+cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
+
+
+
+
+## NON COMBO
+
+
+## COMBO
+
+
+
+
+# mp.view_progress(fix_missing_acc=True)
+
+# make_final_combo(cpgsmp)
+
+import pdb;pdb.set_trace()
+
+cpgsmp.gen_scores_for_mp()
+
+import pdb;pdb.set_trace()
+
+
+
+import pdb;pdb.set_trace()
+
+# started first
+mp.gen_scores_for_mp(force_load=True)
+
+# sp = MultiPredictor.get(15)
+
+import pdb;pdb.set_trace()
+
+
+
+mp.gen_scores_for_mp(force_load=True)
+
+
+# make_final_cp_combo(mp, sp)
+
+
+
+import pdb;pdb.set_trace()
+cpd = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="default")
+cpd.gen_scores_for_mp(force_load=True)
+
+
+print("DONE W NEW CP SCORES")
+import pdb;pdb.set_trace()
+
+
 hcgsmp = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")
 
 
+
+
+
+
+
+print("DONE W HEALTHY COHORT")
+
 import pdb;pdb.set_trace()
 add_set_stats()
-print("are you sure, done ok")
-import pdb;pdb.set_trace()
-print("are you sure")
-import pdb;pdb.set_trace()
-gen_scores_for_mp(cpgsmp)
-
 
 hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
+cpgsmp = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")
 # add_set_stats()    
 mp = MultiPredictor.where(cohort_id=2)[0]
 sp = MultiPredictor.get(15)
+import pdb;pdb.set_trace()
+
 mp.view_progress()
 
 
@@ -507,10 +709,6 @@ cp_cohort = Cohort.where(name=COHORT_NAME)[0]
 block_task = Task.find_by("description", TASK_NAME)
 # mp = MultiPredictor.where(task_id = block_task.id, cohort_id = cp_cohort.id)[0]
 
-bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
-
-sp = MultiPredictor.get(15)
-# MatrixPlotter.show(bc.get_all_acc(), sp.get_all_acc(), h_one="Healthy Controls (n=25)", h_two="CP Patients (n=7)", alt=True)
 
 
 save_sp_shap_vals(sp)

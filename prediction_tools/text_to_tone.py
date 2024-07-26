@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from collections import Counter
 from docx import Document
+import pandas as pd
+from transformers import pipeline
+import shap
 
 # Ensure the necessary NLTK data is downloaded
 nltk.download('punkt')
@@ -129,10 +132,49 @@ def word_cloud(text):
     plt.axis('off')
     plt.show()
 
+def bert_sentiment_analysis(texts):
+    sentiment_pipeline = pipeline('sentiment-analysis')
+    results = sentiment_pipeline(texts)
+    return results
+
+def explain_sentiment_analysis(texts):
+    sentiment_pipeline = pipeline('sentiment-analysis')
+    explainer = shap.Explainer(sentiment_pipeline)
+    shap_values = explainer(texts)
+    return shap_values
+
+def visualize_bert_results(sentiment_scores, shap_values, texts):
+    # Plot sentiment scores
+    plt.figure(figsize=(10, 5))
+    plt.hist([score['score'] for score in sentiment_scores], bins=20, color='blue', alpha=0.7)
+    plt.xlabel('Sentiment Score')
+    plt.ylabel('Frequency')
+    plt.title('Distribution of Sentiment Scores')
+    plt.show()
+
+    # Plot SHAP values
+    for i in range(len(texts)):
+        shap.plots.text(shap_values[i], display=True)
+        plt.title(f"Text: {texts[i][:100]}...")  # Display first 100 characters of the text
+        plt.show()
+
+def process_bert(text):
+    # Assuming text is a single string, split it into sentences or smaller chunks for analysis
+    sentences = sent_tokenize(text)
+    
+    # Perform sentiment analysis
+    sentiment_scores = bert_sentiment_analysis(sentences)
+
+    # Explain sentiment analysis with SHAP
+    shap_values = explain_sentiment_analysis(sentences)
+
+    # Visualize results
+    visualize_bert_results(sentiment_scores, shap_values, sentences)
+
 # Main function to parse arguments and call the appropriate function
 def main():
     parser = argparse.ArgumentParser(description="Word Analyzer Tool")
-    parser.add_argument("function", choices=["tokenize", "stem", "lemmatize", "pos_tagging", "ner", "sentiment", "wordcloud", "top"], help="Function to execute")
+    parser.add_argument("function", choices=["tokenize", "stem", "lemmatize", "pos_tagging", "ner", "sentiment", "wordcloud", "top", "bert"], help="Function to execute")
     parser.add_argument("--text", type=str, help="Text to analyze or path to a text file", default=None)
     args = parser.parse_args()
 
@@ -168,6 +210,8 @@ def main():
         word_cloud(text)
     elif args.function == "top":
         top_words(text)
+    elif args.function == "bert":
+        process_bert(text)
 
 if __name__ == "__main__":
     main()

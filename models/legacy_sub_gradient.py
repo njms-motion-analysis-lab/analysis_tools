@@ -36,6 +36,16 @@ FEATURE_EXTRACT_SETTINGS = {
     'root_mean_square': None,
 }
 
+class CustomUnpickler(pickle.Unpickler):
+    def find_class(self, module, name):
+        if module == 'pandas._libs.internals' and name == '_unpickle_block':
+            from pandas.core.internals.blocks import new_block
+            return new_block
+        return super().find_class(module, name)
+
+def custom_loads(pickled_object):
+    return CustomUnpickler(pickled_object).load()
+
 
 class SubGradient(LegacyBaseModel):
     table_name = "sub_gradient"

@@ -341,7 +341,7 @@ class Predictor(LegacyBaseModel):
             if self_pt.patient_id == 57 and (nondom_sensor.name == "lelbm_z" or nondom_sensor.name == "lelbm_y" or nondom_sensor.name == "lelbm_x"):
                 print("SKIPPING")
                 continue
-            if self_pt.patient_id == 21 or self_pt.patient_id == 26 or self_pt.patient_id == 27 or self_pt.patient_id == 28:
+            if self.is_lefty_patient(self_pt.patient_id):
                 print("switching places for lefty pt....")
                 dom_dataframes.append(counter_temp)
                 nondom_dataframes.append(self_temp)
@@ -410,7 +410,7 @@ class Predictor(LegacyBaseModel):
         return compare_cohort, counterpart_sensor
 
     def is_lefty_patient(self, patient_id):
-        return patient_id in [21, 26, 27, 28, 56, 57, 58]
+        return patient_id in [21, 26, 27, 28, 56, 57, 60, 61, 62, 63]
     
     # an alternative method of processing PT where we are not pairing individual PTs on the basis of a patient
 
@@ -445,7 +445,6 @@ class Predictor(LegacyBaseModel):
             if other_temp is not None:
                 nondom_dataframes.append(other_temp)
                 num+=1
-
         return dom_dataframes, nondom_dataframes
 
 
@@ -458,6 +457,7 @@ class Predictor(LegacyBaseModel):
         nondom_dataframes = []
 
         for self_pt in self_pts:
+            print("PTPTPT", self_pt.attrs())
             counterpart_pts = self.get_counterpart_pts(other_pts, counterpart_task, self_pt, compare_cohort)
             if not counterpart_pts:
                 continue
@@ -465,9 +465,10 @@ class Predictor(LegacyBaseModel):
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
             try:
                 self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient)
+
             except TypeError:
                 print("dfs not found for patient", curr_patient, "sensor", sensor.name)
-            
+
             # Skip specific sensors for patient 57
             if self_pt.patient_id == 57:
                 sensors_to_skip = ["lelbm_z", "lelbm_y", "lelbm_x"]
@@ -601,7 +602,6 @@ class Predictor(LegacyBaseModel):
     def get_stats(self, pt, patient_sensor, features_loc):
     
         kind = self.get_type()
-        
         if kind == "GRAD_SET" or kind == "GRAD_SET_COMBO":
             return pt.combined_gradient_set_stats_list(patient_sensor, abs_val=self.abs_val, non_normed=self.non_norm, loc=features_loc)
         else:
@@ -670,6 +670,7 @@ class Predictor(LegacyBaseModel):
             obj = self
 
         result = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
+
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
@@ -721,13 +722,11 @@ class Predictor(LegacyBaseModel):
         bdf = bdf[valid_indices]
         y = y[valid_indices]
 
-
-
-        # return early untrimmed bdf 
+        # Return early untrimmed bdf
         if untrimmed:
             print(bdf)
             return bdf, y
-        
+
         bdf_t = self.trim_bdf(bdf, custom_limit=50)
 
         bdf_t['is_dominant'] = is_dominant
@@ -738,22 +737,32 @@ class Predictor(LegacyBaseModel):
     def trim_bdf_with_boruta(cls, bdf, y, n_estimators=500, max_depth=5, random_state=42):
         # Assuming 'bdf' is your dataframe without the target variable 'is_dominant'
         # Columns to retain regardless of feature selection
-
         columns_to_retain = ['is_dominant', 'patient', 'cohort', 'str_patient']
         columns_to_retain = [col for col in columns_to_retain if col in bdf.columns]
 
-
         # Separate features and target
         X = bdf.drop(columns=columns_to_retain)
+
+        # Drop rows with NaNs in X to match rows in y
+        X = X.dropna()
+
+        # Ensure y is a pandas Series
+        if isinstance(y, np.ndarray):
+            y = pd.Series(y)
+
+        # Filter y to keep only the rows that are present in X
+        y = y.loc[X.index]
+        print(f"Shape of X after filtering: {X.shape}")
+        print(f"Length of y after filtering: {len(y)}")
 
         # Initialize Random Forest
         rf = RandomForestClassifier(n_estimators=n_estimators, max_depth=max_depth, random_state=random_state)
 
         # Initialize Boruta
-        boruta_selector = BorutaPy(rf, n_estimators=n_estimators,random_state=42,verbose=2,max_iter=n_estimators,alpha=0.05)
+        boruta_selector = BorutaPy(rf, n_estimators=n_estimators, random_state=42, verbose=2, max_iter=n_estimators, alpha=0.05)
         
         # Fit Boruta
-        boruta_selector.fit(X.values, y)
+        boruta_selector.fit(X.values, y.values)
 
         # Transform dataframe to include only selected features
         selected_features = X.columns[boruta_selector.support_].tolist()
@@ -1726,11 +1735,16 @@ class Predictor(LegacyBaseModel):
         return updated_rows > 0
     
     def get_classifier_accuracies(self, alt=None):
+        accuracies = self.get_accuracies()
+        
+        if accuracies is None or 'classifier_metrics' not in accuracies or 'classifier_accuracies' not in accuracies:
+            return None
+        
         new_acc_dict = {}
-        metrics = self.get_accuracies()['classifier_metrics']
-        for model_type in self.get_accuracies()['classifier_accuracies'].keys():
+        metrics = accuracies['classifier_metrics']
+        
+        for model_type in accuracies['classifier_accuracies'].keys():
             # Check if "Accuracy:" is in the metrics, otherwise fall back to "Accuracy"
-            
             if "Accuracy:" in metrics[model_type]:
                 accuracy_key = "Accuracy:" 
             else:
