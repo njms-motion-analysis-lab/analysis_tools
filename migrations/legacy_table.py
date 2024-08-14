@@ -366,6 +366,8 @@ class Table:
         cls.add_column_if_not_exists('gradient_set', "set_stats_non_norm", "TEXT")
         cls.add_column_if_not_exists('gradient_set', "set_stats_abs", "TEXT")
         cls.add_column_if_not_exists('gradient_set', "normalized", "TEXT")
+        cls.add_column_if_not_exists('sub_gradient', "submovement_stats_abs", "TEXT")
+        cls.add_column_if_not_exists('gradient_set', "abs_val", "TEXT")
         print("Done!!")
         
 

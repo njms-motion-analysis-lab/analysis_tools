@@ -100,17 +100,13 @@ class PatientTask(LegacyBaseModel):
         from importlib import import_module
         Task = import_module("models.legacy_task").Task
 
-        if dynamic is True:
-            gradient_sets = self.get_dynamic_gradient_sets_for_sensor(sensor)    
-        else:
-            gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
 
-    
         plotters = []
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
                 if (not non_normed) and (not abs_val):
-                    aggregated_stats = gradient_set.get_aggregate_stats()
+                    aggregated_stats = gradient_set.get_aggregate_normalized_stats()
                     if loc:
                         aggregated_stats = aggregated_stats.loc[loc]
                 else:
@@ -160,9 +156,9 @@ class PatientTask(LegacyBaseModel):
         for gradient_set in gradient_sets:
             if gradient_set.aggregated_stats is not None:
                 if not non_normed:
-                    aggregated_stats = gradient_set.get_aggregate_stats()
+                    aggregated_stats = gradient_set.get_aggregate_normalized_stats()
                 else:
-                    aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val, non_normed=non_normed)
+                    aggregated_stats = gradient_set.get_aggregate_non_norm_stats(abs_val=abs_val, non_normed=non_normed, mv=False)
 
                 if loc:
                     aggregated_stats = aggregated_stats.loc[loc]
@@ -185,13 +181,13 @@ class PatientTask(LegacyBaseModel):
 
         for gradient_set in gradient_sets:
             if not non_normed:
-                aggregated_stats = gradient_set.get_norm_set_stats()
+                aggregated_stats = gradient_set.get_set_stats_norm()
             elif abs_val is True:
-                aggregated_stats = gradient_set.get_abs_set_stats()
+                aggregated_stats = gradient_set.get_set_stats_abs()
             else:
-                aggregated_stats = gradient_set.get_non_norm_set_stats()
-            if loc:
-                aggregated_stats = aggregated_stats.loc[loc]
+                aggregated_stats = gradient_set.get_set_stats_non_norm()
+            # if loc:
+            #     aggregated_stats = aggregated_stats.loc[loc]
             
             dataframes.append(aggregated_stats)
 

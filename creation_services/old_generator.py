@@ -7,6 +7,7 @@ import numpy as np
 from models.legacy_task import Task
 from models.legacy_patient import Patient
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
+from new_pickle import CustomUnpickler, unpickle_file, pickle_data  # Import functions from custom_unpickler
 
 
 class OldGenerator:
@@ -88,7 +89,7 @@ class OldGenerator:
         self.patient = patient
         # try calling self.task or self.patient here.
     
-    def generate_models(self):
+    def generate_models(self, force_update=False):
         # Find or create a `Patient` object with the `name` attribute equal to the `patient` attribute of the instance.
         # Find or create a `Task` object with the `description` attribute equal to the `task` attribute of the instance.
         # Add the `Task` object to the list of tasks associated with the `Patient` object.
@@ -113,7 +114,7 @@ class OldGenerator:
 
                 if not self.dynamic:
                     print("yoo")
-                    tr.generate_sets(data=value)
+                    tr.generate_sets(data=value, force_update=force_update)
                     counts += 1
     
     # Add this if using ET/PD/data

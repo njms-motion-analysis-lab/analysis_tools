@@ -8,6 +8,7 @@ from typing import List
 import sqlite3
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.legacy_patient_task import PatientTask
+from models.legacy_sensor import Sensor
 from models.legacy_trial import Trial
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -68,20 +69,131 @@ class Task(LegacyBaseModel):
         return [Trial(*row) for row in self._cursor.fetchall()]
 
 
-    def get_gradient_sets_for_sensor(self, sensor):
+    def get_gradient_sets_for_sensor(self, sensor, cohort_id=None):
         from importlib import import_module
         GradientSet = import_module("models.legacy_gradient_set").GradientSet
-        query = f"""
+
+        if not cohort_id:
+            cohort_id = Cohort.where(name="healthy_controls")[0].id
+
+        query = """
             SELECT gradient_set.*
             FROM gradient_set
             INNER JOIN trial ON trial.id = gradient_set.trial_id
             INNER JOIN patient_task ON patient_task.id = trial.patient_task_id
-            WHERE patient_task.task_id = ? AND gradient_set.sensor_id = ?
+            WHERE patient_task.task_id = ? AND gradient_set.sensor_id = ? AND patient_task.cohort_id = ?
         """
 
-        self._cursor.execute(query, (self.id, sensor.id))
+        self._cursor.execute(query, (self.id, sensor.id, cohort_id))
         gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
+
         return gradient_sets
+
+
+    def get_opposite_side_stats(self, sensor, cohort_id=None):
+        from importlib import import_module
+        GradientSet = import_module("models.legacy_gradient_set").GradientSet
+
+        if not cohort_id:
+            cohort_id = Cohort.where(name="healthy_controls")[0].id
+
+        print(f"Using cohort_id: {cohort_id}")
+
+        # Query for the initial set of gradient sets
+        query = """
+            SELECT gradient_set.*
+            FROM gradient_set
+            INNER JOIN trial ON trial.id = gradient_set.trial_id
+            INNER JOIN patient_task ON patient_task.id = trial.patient_task_id
+            WHERE patient_task.task_id = ? AND gradient_set.sensor_id = ? AND patient_task.cohort_id = ?
+        """
+        self._cursor.execute(query, (self.id, sensor.id, cohort_id))
+        gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
+        print(f"Found {len(gradient_sets)} gradient sets for sensor {sensor.name}")
+
+        # Get the counterpart sensor (alternative side)
+        alt_sensor = Sensor.where(name=self.get_counterpart_sensor(sensor.name))[0]
+        print(f"Using counterpart sensor: {alt_sensor.name}")
+        self._cursor.execute(query, (self.id, alt_sensor.id, cohort_id))
+        alt_sided_gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
+        print(f"Found {len(alt_sided_gradient_sets)} gradient sets for counterpart sensor {alt_sensor.name}")
+
+        # Filter gradient sets based on patient's dominant side
+        filtered_gradient_sets = []
+
+        for gradient_set in gradient_sets:
+            patient = gradient_set.get_patient()
+            dominant_side = patient.dominant_side
+            print(f"Patient ID: {patient.id}, Dominant side: {dominant_side}")
+
+            if dominant_side == 'right':
+                # Return the alt set for right dominant patients (non-dominant side)
+                for alt_gradient_set in alt_sided_gradient_sets:
+                    if alt_gradient_set.get_patient().id == patient.id:
+                        print(f"Adding alt gradient set for patient {patient.id}, sensor: {alt_sensor.name} (right dominant, non-dominant set)")
+                        filtered_gradient_sets.append(alt_gradient_set)
+                        break
+            elif dominant_side == 'left':
+                # Return the original set for left dominant patients (non-dominant side)
+                print(f"Adding original gradient set for patient {patient.id}, sensor: {sensor.name} (left dominant, non-dominant set)")
+                filtered_gradient_sets.append(gradient_set)
+
+        print(f"Total filtered gradient sets: {len(filtered_gradient_sets)}")
+        return filtered_gradient_sets
+
+    def get_side_stats(self, sensor, cohort_id=None):
+        from importlib import import_module
+        GradientSet = import_module("models.legacy_gradient_set").GradientSet
+
+        if not cohort_id:
+            cohort_id = Cohort.where(name="healthy_controls")[0].id
+
+        print(f"Using cohort_id: {cohort_id}")
+
+        # Query for the initial set of gradient sets
+        query = """
+            SELECT gradient_set.*
+            FROM gradient_set
+            INNER JOIN trial ON trial.id = gradient_set.trial_id
+            INNER JOIN patient_task ON patient_task.id = trial.patient_task_id
+            WHERE patient_task.task_id = ? AND gradient_set.sensor_id = ? AND patient_task.cohort_id = ?
+        """
+        
+        self._cursor.execute(query, (self.id, sensor.id, cohort_id))
+        gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
+        print(f"Found {len(gradient_sets)} gradient sets for sensor {sensor.name}")
+
+        # Get the counterpart sensor (alternative side)
+        alt_sensor = Sensor.where(name=self.get_counterpart_sensor(sensor.name))[0]
+        print(f"Using counterpart sensor: {alt_sensor.name}")
+        self._cursor.execute(query, (self.id, alt_sensor.id, cohort_id))
+
+        alt_sided_gradient_sets = [GradientSet(*row) for row in self._cursor.fetchall()]
+
+        print(f"Found {len(alt_sided_gradient_sets)} gradient sets for counterpart sensor {alt_sensor.name}")
+
+        # Filter gradient sets based on patient's dominant side
+        filtered_gradient_sets = []
+
+        for gradient_set in gradient_sets:
+            patient = gradient_set.get_patient()
+            dominant_side = patient.dominant_side
+            print(f"Patient ID: {patient.id}, Dominant side: {dominant_side}")
+
+            if dominant_side == 'right':
+                # Return the original set for right dominant patients
+                print(f"Adding original gradient set for patient {patient.id}, sensor: {sensor.name}, (right dominant, dominant set)")
+                filtered_gradient_sets.append(gradient_set)
+            elif dominant_side == 'left':
+                # Return the alt set for left dominant patients
+                for alt_gradient_set in alt_sided_gradient_sets:
+                    if alt_gradient_set.get_patient().id == patient.id:
+                        print(f"Adding alt gradient set for patient {patient.id}, sensor: {alt_sensor.name}, (left dominant, dominant set)")
+                        filtered_gradient_sets.append(alt_gradient_set)
+                        break
+
+        print(f"Total filtered gradient sets: {len(filtered_gradient_sets)}")
+        return filtered_gradient_sets
 
 
     def get_position_sets_for_sensor(self, sensor):
@@ -140,11 +252,115 @@ class Task(LegacyBaseModel):
     def combined_gradient_set_stats_by_task(self, sensor, loc='grad_data__sum_values'):
         print("yolo 1")
         gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+
         plotters = []
         for gradient_set in gradient_sets:
-            if gradient_set.get_aggregate_stats() is not None:
+            if gradient_set.get_aggregate_normalized_stats() is not None:
                 print(f"yolo {gradient_set.id}")
-                aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                aggregated_stats = gradient_set.get_aggregate_normalized_stats().loc[loc]
+
+                
+                plotter = Plotter(aggregated_stats)
+                plotters.append(plotter)
+        multi_plotter = MultiPlotter(plotters)
+        combined_stats_series = multi_plotter.combined_stats()
+        ns = []
+        ns.append(Plotter(combined_stats_series))
+        return MultiPlotter(ns).display_combined_box_plot(title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index: {loc}")
+    
+    def combined_gradient_set_stats_by_task_and_cohort(self, sensor, cohort=None, is_dom=True, loc=False):
+        print("yolo 1")
+        if cohort is None:
+            cohort_id = Cohort.where(name="healthy_controls")[0].id
+        else:
+            cohort_id = cohort.id
+
+        gradient_sets = self.dom_or_nondom_sets(sensor, get_non_dom=is_dom, cohort_id=cohort_id)
+        combined_series = []
+
+        for gradient_set in gradient_sets:
+            aggregated_stats = gradient_set.get_aggregate_normalized_stats()
+            if aggregated_stats is not None:
+                combined_series.append(aggregated_stats)
+        
+        if not combined_series:
+            print("No data to combine")
+            return None
+        
+        # Concatenate all series into a single DataFrame
+        combined_df = pd.concat(combined_series, axis=1)
+        
+        # Calculate the mean of all dataframes
+        mean_df = combined_df.mean(axis=1).to_frame(name='mean')
+        
+        # Add additional statistical metrics if required (optional)
+        # median_df = combined_df.median(axis=1).to_frame(name='median')
+        # sd_df = combined_df.std(axis=1).to_frame(name='sd')
+        # combined_stats_df = pd.concat([mean_df, median_df, sd_df], axis=1)
+        
+        # Optional: If loc is True, include location-specific statistics or processing
+        if loc:
+            # Add location-specific logic here
+            pass
+
+        # Import for debugging if needed
+        
+        return mean_df
+
+    def full_gradient_set_stats_by_task_and_cohort(self, sensor, cohort=None, get_agg_sub_stat=False, loc=False):
+        if cohort is None:
+            cohort_id = Cohort.where(name="healthy_controls")[0].id
+        else:
+            cohort_id = cohort.id
+
+        gradient_sets = self.get_side_stats(sensor, cohort_id=cohort_id)
+        combined_series = []
+
+        for gradient_set in gradient_sets:
+            if get_agg_sub_stat:
+                aggregated_stats = gradient_set.get_aggregated_stats()
+            else:
+                aggregated_stats = gradient_set.get_set_stats_norm().T
+    
+            if aggregated_stats is not None:
+                combined_series.append(aggregated_stats)
+
+        
+        if not combined_series:
+            print("No data to combine")
+            return None
+        
+        # Concatenate all series into a single DataFrame
+        combined_df = pd.concat(combined_series, axis=1)
+        
+        # Calculate the mean of all dataframes
+        mean_df = combined_df.mean(axis=1).to_frame(name='mean')
+        
+        # Add additional statistical metrics if required (optional)
+        # median_df = combined_df.median(axis=1).to_frame(name='median')
+        # sd_df = combined_df.std(axis=1).to_frame(name='sd')
+        # combined_stats_df = pd.concat([mean_df, median_df, sd_df], axis=1)
+        
+        # Optional: If loc is True, include location-specific statistics or processing
+        if loc:
+            # Add location-specific logic here
+            pass
+
+        # Import for debugging if needed
+        
+        return mean_df
+
+        
+    
+
+    def combined_gradient_set_stats_by_task(self, sensor, loc='grad_data__sum_values'):
+        print("yolo 1")
+        gradient_sets = self.get_gradient_sets_for_sensor(sensor)
+        plotters = []
+        for gradient_set in gradient_sets:
+            if gradient_set.get_aggregate_normalized_stats() is not None:
+                print(f"yolo {gradient_set.id}")
+                aggregated_stats = gradient_set.get_aggregate_normalized_stats()
 
                 
                 plotter = Plotter(aggregated_stats)
@@ -225,8 +441,8 @@ class Task(LegacyBaseModel):
 
     def combined_gradient_set_stats_by_patient_trial(self, sensor, loc='grad_data__sum_values'):
         gradient_sets = self.get_gradient_sets_for_sensor(sensor)
-        plotters = [Plotter(gs.get_aggregate_stats().loc[loc]) for gs in gradient_sets 
-                    if gs.aggregated_stats is not None and gs.get_aggregate_stats().loc[loc] is not None]
+        plotters = [Plotter(gs.get_aggregate_normalized_stats().loc[loc]) for gs in gradient_sets 
+                    if gs.aggregated_stats is not None and gs.get_aggregate_normalized_stats().loc[loc] is not None]
         multi_plotter = MultiPlotter(plotters)
         labels = [f"{gs.get_patient().name}" for gs in gradient_sets if gs.aggregated_stats is not None]
         multi_plotter.display_combined_box_plot(labels, title=f"Task {self.id}: {self.description}, Sensor: {sensor.name}, TS index {loc}")
@@ -240,8 +456,8 @@ class Task(LegacyBaseModel):
             gradient_sets = self.get_gradient_sets_for_sensor(sensor)
             plotters = []
             for gradient_set in gradient_sets:
-                if not gradient_set.get_aggregate_stats().empty:
-                    aggregated_stats = gradient_set.get_aggregate_stats().loc[loc]
+                if not gradient_set.get_aggregate_normalized_stats().empty:
+                    aggregated_stats = gradient_set.get_aggregate_normalized_stats().loc[loc]
                     plotter = Plotter(aggregated_stats)
                     plotters.append(plotter)
                 else:

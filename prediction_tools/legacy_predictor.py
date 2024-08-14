@@ -457,17 +457,13 @@ class Predictor(LegacyBaseModel):
         nondom_dataframes = []
 
         for self_pt in self_pts:
-            print("PTPTPT", self_pt.attrs())
             counterpart_pts = self.get_counterpart_pts(other_pts, counterpart_task, self_pt, compare_cohort)
             if not counterpart_pts:
                 continue
 
             curr_patient = Patient.where(id=self_pt.patient_id)[0].name
-            try:
-                self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient)
-
-            except TypeError:
-                print("dfs not found for patient", curr_patient, "sensor", sensor.name)
+            
+            self_temp, counter_temp = self.get_temp_dataframes(self_pt, counterpart_pts[0], sensor, nondom_sensor, curr_patient)
 
             # Skip specific sensors for patient 57
             if self_pt.patient_id == 57:
@@ -475,7 +471,6 @@ class Predictor(LegacyBaseModel):
                 if sensor.name in sensors_to_skip or nondom_sensor.name in sensors_to_skip:
                     print("SKIPPING")
                     continue
-
             # Switch dataframes for left-handed patients
             if self.is_lefty_patient(self_pt.patient_id):
                 print("Switching places for lefty patient...")
@@ -580,8 +575,10 @@ class Predictor(LegacyBaseModel):
 
         print("self...")
         self_temp = self.get_temp_dataframe(self_pt, sensor, False)
+        
         print("counter...")
         counter_temp = self.get_temp_dataframe(counterpart_pt, counterpart_sensor, False)
+        
 
         cohort = Cohort.get(self_pt.cohort_id)
         counter_cohort = Cohort.get(counterpart_pt.cohort_id)
@@ -600,7 +597,6 @@ class Predictor(LegacyBaseModel):
         return self_temp, counter_temp
     
     def get_stats(self, pt, patient_sensor, features_loc):
-    
         kind = self.get_type()
         if kind == "GRAD_SET" or kind == "GRAD_SET_COMBO":
             return pt.combined_gradient_set_stats_list(patient_sensor, abs_val=self.abs_val, non_normed=self.non_norm, loc=features_loc)
@@ -622,8 +618,8 @@ class Predictor(LegacyBaseModel):
         else:
             # Initialize an empty DataFrame with an expected structure if 'mean' is not present
             sen = self.sensor()
-            gs = pt.get_gradient_sets_for_sensor(sen)
             temp_df = pd.DataFrame(columns=['grad_data__placeholder'])
+            print(temp_df)
             print("No 'mean' data available for the given gradient set.")
             return None
 
@@ -1445,30 +1441,43 @@ class Predictor(LegacyBaseModel):
     def _fix_odd_test_set(cls, X_train, y_train, X_test, y_test):
         """Ensure that the test set has an even size."""
         if len(X_test) % 2 != 0:
-
             # Count the occurrence of each patient in the test set
             patient_counts = Counter(X_test['patient'])
             # Find the patient that occurs only once
             single_occurrence_patient = [patient for patient, count in patient_counts.items() if count == 1]
-                        
+
             if single_occurrence_patient:
                 # Find the index of the single occurrence patient in the test set
                 single_patient_index = X_test[X_test['patient'] == single_occurrence_patient[0]].index[0]
 
                 # Move this patient from test set to train set
-                X_train = X_train.append(X_test.loc[single_patient_index])
-                y_train = y_train.append(pd.Series(y_test.loc[single_patient_index]))
-                            
+                X_train = X_train._append(X_test.loc[single_patient_index])
+                y_train = y_train._append(pd.Series(y_test.loc[single_patient_index]))
+
                 # Drop the patient from test set
                 X_test = X_test.drop(single_patient_index)
                 y_test = y_test.drop(single_patient_index)
-                            
+
                 # Reset the index for the updated DataFrames
                 X_train = X_train.reset_index(drop=True)
                 y_train = y_train.reset_index(drop=True)
                 X_test = X_test.reset_index(drop=True)
                 y_test = y_test.reset_index(drop=True)
 
+                # Ensure is_dominant and patient columns are integers
+                X_train['is_dominant'] = X_train['is_dominant'].astype(int)
+                X_train['patient'] = X_train['patient'].astype(int)
+                X_test['is_dominant'] = X_test['is_dominant'].astype(int)
+                X_test['patient'] = X_test['patient'].astype(int)
+
+                # Move the added row to the correct position if is_dominant is 1
+                if X_train.loc[len(X_train) - 1, 'is_dominant'] == 1:
+                    dominant_rows = X_train[X_train['is_dominant'] == 1]
+                    non_dominant_rows = X_train[X_train['is_dominant'] == 0]
+                    y_train_dominant = y_train.loc[dominant_rows.index]
+                    y_train_non_dominant = y_train.loc[non_dominant_rows.index]
+                    X_train = pd.concat([dominant_rows, non_dominant_rows], ignore_index=True)
+                    y_train = pd.concat([y_train_dominant, y_train_non_dominant], ignore_index=True)
         return X_train, y_train, X_test, y_test
 
 
@@ -1820,9 +1829,9 @@ class Predictor(LegacyBaseModel):
             splitter = StratifiedKFold(n_splits=DEFAULT_K_FOLD_SPLITS)
             split = splitter.split(bdf, y, groups)
             round_set_size = True
-        
+
         for train_index, test_index in split:
-            X_train, X_test = bdf.iloc[train_index].drop('is_dominant', axis=1), bdf.iloc[test_index].drop('is_dominant', axis=1)
+            X_train, X_test = bdf.iloc[train_index], bdf.iloc[test_index]
             y_train, y_test = y[train_index], y[test_index]
 
             # Convert y_train and y_test to pandas Series
@@ -1835,14 +1844,19 @@ class Predictor(LegacyBaseModel):
 
             if round_set_size:
                 X_train, y_train, X_test, y_test = cls._fix_odd_test_set(X_train, y_train, X_test, y_test)
-            
+                
             # Remove 'patient' column if it exists in the dataframe
             if 'patient' in X_train.columns:
                 X_train = X_train.drop('patient', axis=1)
                 X_test = X_test.drop('patient', axis=1)
 
-            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, n_jobs=-1, scoring='accuracy')
+            # Remove 'is_dominant' column
+            X_train = X_train.drop('is_dominant', axis=1)
+            X_test = X_test.drop('is_dominant', axis=1)
+
+            grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
             grid_search.fit(X_train, y_train)
+                    # Store best parameters and score
             train_accuracy = grid_search.score(X_train, y_train)
             best_classifier = grid_search.best_estimator_.named_steps['classifier']
             current_best_score = grid_search.best_score_
@@ -1854,32 +1868,22 @@ class Predictor(LegacyBaseModel):
                 "Current best training params:", current_best_params,
                 "Current best training classifier", best_classifier
             )
-            # Predict on test set and calculate metrics
+            # Predict on test set and calculate metric
             y_pred = best_classifier.predict(X_test)
             y_pred_proba = best_classifier.predict_proba(X_test)[:, 1] if hasattr(best_classifier, "predict_proba") else None
-
-            # Define compatible models for SHAP TreeExplainer
-            COMPATIBLE_MODELS = ['GradientBoostingClassifier', 'RandomForestClassifier', 'ExtraTreesClassifier']
-
-            # Function to check if a model is binary classification
-            def is_binary_classification(y):
-                return len(set(y)) == 2
-
-            # Your code
+    
+            # Check if the model is compatible with SHAP TreeExplainer
             # Check if the model is compatible with SHAP TreeExplainer
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
-                if is_binary_classification(y_train):
-                    print("Using SHAP!")
-                    explainer = shap.TreeExplainer(best_classifier)
-                    shap_values = explainer.shap_values(X_test)
-                    if isinstance(shap_values, list):  # If there are multiple classes
-                        # Taking only the SHAP values for class 1 in case of binary classification.
-                        # Adjust for multi-class problems as necessary.
-                        shap_values = shap_values[1]
-                    combined_shap_values.append(shap_values)
-                    all_X.append(X_test)
-                else:
-                    print(f"SHAP not supported for multi-class classification with {best_classifier.__class__.__name__}")
+                print("Using SHAP!")
+                explainer = shap.TreeExplainer(best_classifier)
+                shap_values = explainer.shap_values(X_test)
+                if isinstance(shap_values, list):  # If there are multiple classes
+                    # Taking only the SHAP values for class 1 in case of binary classification.
+                    # Adjust for multi-class problems as necessary.
+                    shap_values = shap_values[1]
+                combined_shap_values.append(shap_values)
+                all_X.append(X_test)
 
 
             if hasattr(classifier, 'feature_importances_'):

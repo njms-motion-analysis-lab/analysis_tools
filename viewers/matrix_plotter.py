@@ -117,7 +117,7 @@ class MatrixPlotter(LegacyBaseModel):
             row = {'Sensor': sensor.replace('_x', '')}
             for model in all_models:
                 row[model] = accuracies.get(model, None)
-            df1 = df1.append(row, ignore_index=True)
+            df1 = df1._append(row, ignore_index=True)
         
         # Order columns by their highest score
         ordered_columns = ['Sensor'] + df1.drop('Sensor', axis=1).mean().sort_values(ascending=False).index.tolist()
@@ -129,7 +129,7 @@ class MatrixPlotter(LegacyBaseModel):
                 row = {'Sensor': sensor.replace('_x', '')}
                 for model in all_models:
                     row[model] = accuracies.get(model, None)
-                df2 = df2.append(row, ignore_index=True)
+                df2 = df2._append(row, ignore_index=True)
             
 
             ordered_columns = ['Sensor'] + df2.drop('Sensor', axis=1).mean().sort_values(ascending=False).index.tolist()

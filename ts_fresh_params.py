@@ -888,6 +888,7 @@ def get_params_for_column(column_name):
 def remove_first_int(s):
     return re.sub(r'(\d+)', '', s, count=1)
 
+
 def categorize_feature(beeswarm_name, axis=False, reverse_pattern=None):
     """
     This function categorizes a feature based on its name using predefined regex patterns.
@@ -895,7 +896,8 @@ def categorize_feature(beeswarm_name, axis=False, reverse_pattern=None):
     :param beeswarm_name: The feature name, typically output of beeswarm_name function.
     :return: The category of the feature.
     """
-    # 
+    # Ensure beeswarm_name is a string
+    beeswarm_name = str(beeswarm_name)
     
     if axis is not None:
         cat_pat = axis
@@ -913,6 +915,7 @@ def categorize_feature(beeswarm_name, axis=False, reverse_pattern=None):
         beeswarm_name = beeswarm_name[len(prefix):]
     # return remove_first_int(beeswarm_name)
     return "other"
+
     
 
 

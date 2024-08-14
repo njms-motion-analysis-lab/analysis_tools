@@ -10,12 +10,12 @@ from migrations.legacy_table import Table
 import pdb
 
 
-RAW_DATA_FOLDER = "raw_data/CP_filteredandtrimmed_2024.07.21/Block"
+RAW_DATA_FOLDER = "raw_data/CP_filteredTrimmedAligned_2024.07.21/Block"
+
 
 if __name__ == '__main__':
     freeze_support()
     exp = {}
-    root_dir = "controls_alignedCoordinateSystem"
     Table.create_tables()
     Table.update_tables()
     # Table.create_and_set_cohort()
@@ -161,8 +161,8 @@ if __name__ == '__main__':
             create_sensor_from_string(s_string)
 
     generate_sensors()
-    fix_cp_cohort_ids()
-    fix_pd_et_cohort_ids()
+    # fix_cp_cohort_ids()
+    # fix_pd_et_cohort_ids()
 
     files = []
     print("yo")
@@ -186,7 +186,8 @@ if __name__ == '__main__':
         if "dynamic" not in file.lower():
             print(file)
             gen = OldGenerator(file, cohort)
-            gen.generate_models()
+            # TODO: have force update true for new aligned coords
+            gen.generate_models(force_update=True)
             
             n += 1
             print(file,"finished", n, "features complete")

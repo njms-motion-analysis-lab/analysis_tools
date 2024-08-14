@@ -404,21 +404,21 @@ class MultiPredictor(LegacyBaseModel):
         top_scores = []
         sensors = []
         predictor_score = model_pred_set[0][0]
-        
+
         if first_model_features is True:
-            top_features = predictor_score[0].get_top_n_features(NUM_TOP)
+            top_features = predictor_score[0].get_top_n_features(num_top)
             first_shap_scores = current_model_pred_set[0].get_shap_values_for_features(top_features)
 
         for current_model_pred_set, acc_score, snr in model_pred_set:
             if current_model_pred_set == []:
                 print("PredictorScore not found!")
                 continue
-            
+
             if first_model_features is True:
                 current_top_features = top_features
                 current_shap_scores = first_shap_scores
             else:
-                current_top_features = current_model_pred_set[0].get_top_n_features(NUM_TOP)
+                current_top_features = current_model_pred_set[0].get_top_n_features(num_top)
                 current_shap_scores = current_model_pred_set[0].get_shap_values_for_features(current_top_features)
 
             if use_cat is True:
@@ -429,12 +429,9 @@ class MultiPredictor(LegacyBaseModel):
                     else:
                         axis = self.curr_axis
                 print(axis)
-                # import pdb;pdb.set_trace()
-
+                print(current_shap_scores, axis)
                 aggregate_shap_values = current_model_pred_set[0].aggregate_shap_values_by_category(current_shap_scores, axis)
                 normalized_shap_values = current_model_pred_set[0].normalize_shap_values(aggregate_shap_values)
-                # normalized_shap_values = aggregate_shap_values
-                
                 current_shap_scores = normalized_shap_values
 
             shap_scores.append(current_shap_scores)
@@ -513,11 +510,12 @@ class MultiPredictor(LegacyBaseModel):
                 predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
                 
                 if predictor.updated_at is not None:
-                    predictor_updated_at = datetime.strptime(predictor.updated_at, '%Y-%m-%dT%H:%M:%S')  # Adjust the format string if necessary
+                    # Adjust the format string to match the actual format
+                    predictor_updated_at = datetime.strptime(predictor.updated_at, '%Y-%m-%d %H:%M:%S.%f')
                 else:
                     predictor_updated_at = None
 
-                if predictor.accuracies is None or force_load is True or predictor_updated_at < time_threshold:
+                if predictor.accuracies is None or force_load is True:
                     predictor = predictor.train_from(force_load=True, add_other=add_other)
                 else:
                     print("Skipping for now because acc or bad id", predictor.accuracies)
@@ -727,9 +725,9 @@ class MultiPredictor(LegacyBaseModel):
         #TODO stephen, change this back
         # title = self.cohort_name() + "/" + title
         if title is not None:
-            title = "CP4" + "/" + title
+            title = "CP5" + "/" + title
         else:
-            title = "CP4" + "/"
+            title = "CP5" + "/"
 
         
         for pred in pr:
@@ -744,7 +742,6 @@ class MultiPredictor(LegacyBaseModel):
                     print(self.model)
                     # if self.model == "norm_non_abs_combo":
                     #     title = (title + "/" + "combination")
-
                     score.view_shap_plot(title=title, abs_val=abs_val, non_norm=non_norm)
                 else:
                     print("yo")
@@ -824,6 +821,7 @@ class MultiPredictor(LegacyBaseModel):
         combo_df = Predictor.trim_bdf_with_boruta(comp_df, y1)
 
         pickled_df = pickle.dumps(combo_df)
+
         new_pred.update(aggregated_stats=pickled_df)
         if len(combo_df.columns) <= 2:
             combo_df = new_pred.trim_bdf(comp_df, custom_limit=48)

@@ -55,59 +55,88 @@ class PredictorScore(LegacyBaseModel):
         shap.dependence_plot('grad_data__kurtosis_x', aggregated_shap_values_retrieved, combined_X_df)
 
     def view_shap_plot(self, title=None, show_plot=False, abs_val=False, non_norm=True):
-        # Fetch the serialized data
+        # Fetch and process data
+        aggregated_shap_values_retrieved, combined_X_df = self.fetch_and_prepare_data()
+
+        # Ensure the shapes of values and data match
+        reshaped_values = self.reshape_shap_values(aggregated_shap_values_retrieved, combined_X_df)
+
+        # Create SHAP explanation object
+        explanation = self.create_shap_explanation(reshaped_values, combined_X_df)
+
+        # Plot the SHAP beeswarm plot
+        self.plot_shap_beeswarm(explanation, show_plot, title, abs_val, non_norm)
+
+    def fetch_and_prepare_data(self):
         aggregated_shap_values_retrieved, combined_X_np, combined_X_np_cols = self.get_matrix("matrix")
-
-        # Convert numpy array back to DataFrame
-        # combined_X_df = pd.DataFrame(combined_X_np, columns=combined_X_np_cols)
-        combo_beeswarm_names = []
-        for col_name in combined_X_np_cols:
-            combo_beeswarm_names.append(beeswarm_name(col_name))
-
+        combo_beeswarm_names = [beeswarm_name(col_name) for col_name in combined_X_np_cols]
         combined_X_df = pd.DataFrame(combined_X_np, columns=combo_beeswarm_names)
-        
+        return aggregated_shap_values_retrieved, combined_X_df
 
+    def reshape_shap_values(self, shap_values, data_df):
+        reshaped_values = shap_values.reshape(data_df.shape[0], -1)
 
-        # Convert the retrieved SHAP values and feature values into an Explanation object
-        explanation = shap.Explanation(values=aggregated_shap_values_retrieved, data=combined_X_df)
+        if reshaped_values.shape[1] == data_df.shape[1] + 1:
+            reshaped_values = reshaped_values[:, :-1]
+        elif reshaped_values.shape[1] > data_df.shape[1]:
+            reshaped_values = reshaped_values[:, :data_df.shape[1]]
+        elif reshaped_values.shape[1] < data_df.shape[1]:
+            raise ValueError("The reshaped SHAP values do not match the shape of the combined data frame.")
 
-        # Create a new figure explicitly
+        print(f"Shape of reshaped_values: {reshaped_values.shape}")
+        print(f"Shape of combined_X_df: {data_df.shape}")
+        return reshaped_values
+
+    def create_shap_explanation(self, shap_values, data_df):
+        try:
+            return shap.Explanation(values=shap_values, data=data_df)
+        except Exception as e:
+            print(f"Error creating SHAP Explanation: {e}")
+            print(f"reshaped_values shape: {shap_values.shape}")
+            print(f"combined_X_df shape: {data_df.shape}")
+            raise
+
+    def plot_shap_beeswarm(self, explanation, show_plot, title, abs_val, non_norm):
         plt.figure()
+        plt.title(self.get_info())
 
-        # Call shap.summary_plot with the Explanation object
-        shap.plots.beeswarm(explanation, show=False)
+        try:
+            shap.plots.beeswarm(explanation, show=False)
+        except Exception as e:
+            print(f"Error plotting beeswarm: {e}")
+            print(f"Explanation values shape: {explanation.values.shape}")
+            print(f"Explanation data shape: {explanation.data.shape}")
+            return
 
         if show_plot:
-            # Display the plot
             plt.show()
         else:
-            directory_path = "generated_pngs/shap_beeswarm/"
-            # Make sure directory exists or create it
-                    # Make sure directory exists or create it
-            if title is not None:
-                directory_path = (directory_path + title + "/")
-            else:
+            self.save_plot(title, abs_val, non_norm)
 
-                if not abs_val:
-                    directory_path = "generated_pngs/shap_beeswarm/"
-                else:
-                    directory_path = "generated_pngs/shap_beeswarm/abs/"
-                
-                if non_norm == False:
-                    directory_path = "generated_pngs/shap_beeswarm/non_norm/"
-            if not os.path.exists(directory_path):
-                os.makedirs(directory_path)
-
-            final = self.get_info() + '.png'
-            filename = os.path.join(directory_path, final)
-
-            # Save the current active figure as PNG
-            print("HIIIIII")
-            print(filename)
-            plt.savefig(filename, bbox_inches='tight')
-        
-        # Optionally, close the plot to free up resources
         plt.close()
+
+    def save_plot(self, title, abs_val, non_norm):
+        directory_path = self.build_directory_path(title, abs_val, non_norm)
+
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+
+        final_filename = self.get_info() + '.png'
+        filepath = os.path.join(directory_path, final_filename)
+
+        plt.savefig(filepath, bbox_inches='tight')
+
+    def build_directory_path(self, title, abs_val, non_norm):
+        base_path = "generated_pngs/shap_beeswarm/"
+        if title:
+            return os.path.join(base_path, title)
+        else:
+            if abs_val:
+                base_path = os.path.join(base_path, "abs")
+            if not non_norm:
+                base_path = os.path.join(base_path, "non_norm")
+        return base_path
+
 
     def get_matrix(self, matrix_name):
         # Assuming this is a method to deserialize the 'matrix' attribute
@@ -161,17 +190,36 @@ class PredictorScore(LegacyBaseModel):
         pr = Predictor.get(self.predictor_id)
         task = Task.get(pr.task_id).description
         name = Sensor.get(pr.sensor_id).name
-        return task + '_' + name + '_' + self.classifier_name
+        try:
+            acc = pr.get_classifier_accuracies()[self.classifier_name]
+            acc_str = str(acc)[:4]  # Get the first two digits of the accuracy score
+        except KeyError:
+            acc_str = 'N/A'
+
+        return task + '_' + name + '_' + self.classifier_name + " Accuracy: " + acc_str
     
+    
+
     def get_standardized_shap_values(self):
         # Retrieve SHAP values and corresponding feature names
         aggregated_shap_values_retrieved, _, feature_names = self.get_matrix("matrix")
         
+        # Check if the retrieved SHAP values array is 2D or 3D
+        if len(aggregated_shap_values_retrieved.shape) == 3:
+            # If 3D, reshape to 2D by combining the last two dimensions
+            reshaped_shap_values = aggregated_shap_values_retrieved.reshape(
+                aggregated_shap_values_retrieved.shape[0], -1)
+            # Flatten the feature names as well to match the reshaped data
+            feature_names = [f"{col}_{i}" for col in feature_names for i in range(reshaped_shap_values.shape[1] // len(feature_names))]
+        else:
+            reshaped_shap_values = aggregated_shap_values_retrieved
+        
         # Standardize the SHAP values; remember to transpose for standardization if necessary
         scaler = StandardScaler()
-        standardized_shap_values = scaler.fit_transform(aggregated_shap_values_retrieved.T)  # Assuming features are columns
+        standardized_shap_values = scaler.fit_transform(reshaped_shap_values.T).T  # Assuming features are columns
         
         return standardized_shap_values, feature_names
+
 
     def find_optimal_clusters(self, standardized_shap_values, quick=True):
         best_score = -1
@@ -316,11 +364,23 @@ class PredictorScore(LegacyBaseModel):
         # Fetch the serialized data
         aggregated_shap_values_retrieved, combined_X_np, combined_X_np_cols = self.get_matrix("matrix")
 
+        print("AGGREGATED_SHAP_VALUES_RERIEVED", aggregated_shap_values_retrieved)
+        print("COMBINED_X_NP", combined_X_np)
+        print("COMBINED_X_NP_COLS", combined_X_np_cols)
+
         # Convert numpy array back to DataFrame
         combined_X_df = pd.DataFrame(combined_X_np, columns=combined_X_np_cols)
 
-        # Convert the retrieved SHAP values into a DataFrame
-        shap_values_df = pd.DataFrame(aggregated_shap_values_retrieved, columns=combined_X_np_cols)
+        # Check if the retrieved SHAP values array is 2D or 3D
+        if len(aggregated_shap_values_retrieved.shape) == 3:
+            # If 3D, reshape to 2D by combining the last two dimensions
+            reshaped_shap_values = aggregated_shap_values_retrieved.reshape(
+                aggregated_shap_values_retrieved.shape[0], -1)
+        else:
+            reshaped_shap_values = aggregated_shap_values_retrieved
+
+        # Convert the reshaped SHAP values into a DataFrame
+        shap_values_df = pd.DataFrame(reshaped_shap_values)
 
         # Calculate the mean absolute SHAP value for each feature
         mean_abs_shap = np.abs(shap_values_df).mean().sort_values(ascending=False)
@@ -351,12 +411,24 @@ class PredictorScore(LegacyBaseModel):
         normalized_shap_values = {category: value / total_shap_value for category, value in category_shap_values.items()}
         return normalized_shap_values
 
+
+
     def get_shap_values_for_features(self, features_list):
         # Fetch the serialized data
         aggregated_shap_values_retrieved, combined_X_np, combined_X_np_cols = self.get_matrix("matrix")
 
-        # Convert the retrieved SHAP values into a DataFrame
-        shap_values_df = pd.DataFrame(aggregated_shap_values_retrieved, columns=combined_X_np_cols)
+        # Check if the retrieved SHAP values array is 2D or 3D
+        if len(aggregated_shap_values_retrieved.shape) == 3:
+            # If 3D, reshape to 2D by combining the last two dimensions
+            reshaped_shap_values = aggregated_shap_values_retrieved.reshape(
+                aggregated_shap_values_retrieved.shape[0], -1)
+            # Flatten the column names as well to match the reshaped data
+            combined_X_np_cols = [f"{col}_{i}" for col in combined_X_np_cols for i in range(reshaped_shap_values.shape[1] // len(combined_X_np_cols))]
+        else:
+            reshaped_shap_values = aggregated_shap_values_retrieved
+
+        # Convert the reshaped SHAP values into a DataFrame
+        shap_values_df = pd.DataFrame(reshaped_shap_values, columns=combined_X_np_cols)
 
         # Initialize a dictionary to store mean absolute SHAP values
         mean_abs_shap_values = {}

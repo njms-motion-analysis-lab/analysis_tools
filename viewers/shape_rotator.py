@@ -151,14 +151,14 @@ class ShapeRotator:
     def plot_by_pt(patient):
         trials = patient.trials()
         try:
-            selected_trial = Trial.select(trials, name="BlockNonDominant01")[0]
+            selected_trial = Trial.select(trials, name="BlockDominant01")[0]
         except IndexError:
             # in case we had a bad trial
-            selected_trial = Trial.select(trials, name="BlockNonDominant02")[0]
+            selected_trial = Trial.select(trials, name="BlockDominant02")[0]
 
         # Fetch sensors for right and left hand coordinates
-        sensor_right = Sensor.where(name="rfhd_x")[0]
-        sensor_left = Sensor.where(name="lfhd_x")[0]
+        sensor_right = Sensor.where(name="rwra_x")[0]
+        sensor_left = Sensor.where(name="lwra_x")[0]
         
         # Fetch position sets for the selected trial and both sensors
         position_set_right = PositionSet.where(trial_id=selected_trial.id, sensor_id=sensor_right.id)[0]
@@ -186,6 +186,33 @@ class ShapeRotator:
         
         # Plot both right and left hand coordinates
         ShapeRotator.plot_3d([position_set_right, position_set_left], title=patient.name)
+
+
+    def compare_by_pt(patient):
+        trials = patient.trials()
+        try:
+            selected_trial = Trial.select(trials, name="BlockDominant01")[0]
+        except IndexError:
+            # in case we had a bad trial
+            selected_trial = Trial.select(trials, name="BlockDominant02")[0]
+
+        # Fetch sensors for right and left hand coordinates
+        sensor_right = Sensor.where(name="rwra_x")[0]
+        sensor_left = Sensor.where(name="lwra_x")[0]
+
+        patient_task = PatientTask.get(selected_trial.patient_task_id)
+
+        import pdb;pdb.set_trace()
+        
+        # Fetch position sets for the selected trial and both sensors
+        gradient_set_right = GradientSet.where(trial_id=selected_trial.id, sensor_id=sensor_right.id)[0]
+        gradient_set_left = GradientSet.where(trial_id=selected_trial.id, sensor_id=sensor_left.id)[0]
+
+        import pdb;pdb.set_trace()
+        
+        # Plot both right and left hand coordinates
+        # ShapeRotator.plot_3d([position_set_right, position_set_left], title=patient.name)
+
 
 
 # num = 1

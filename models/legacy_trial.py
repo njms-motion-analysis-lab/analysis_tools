@@ -1,3 +1,4 @@
+import pickle
 from exp_motion_sample_trial import ExpMotionSampleTrial
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.legacy_patient_task import PatientTask
@@ -27,17 +28,32 @@ class Trial(LegacyBaseModel):
         
         return super().update(**kwargs)
     
-    def generate_sets(self, data, skip_pos=False):
+    def generate_sets(self, data, skip_pos=False, force_update=False):
         from importlib import import_module
         GradientSet = import_module("models.legacy_gradient_set").GradientSet
         PositionSet = import_module("models.legacy_position_set").PositionSet
         Sensor = import_module("models.legacy_sensor").Sensor
         gss = GradientSet.where(trial_id=self.id)
+        
         if len(gss) == MAX_GRADIENT_SET_NUM:
             print("already finished name:", self.name, "id:", self.id, "pt_id", self.patient_task_id)
             return
         
         gradient_data = data['gradients']
+
+        def update_existing_position_set(sensor_id, key, col):
+            print("UPDATING POSITION")
+            try:
+                ps = PositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)[0]
+                if ps.mat().equals(col) == False:
+                    col_serialized = pickle.dumps(col)
+                    ps = ps.update(matrix=col_serialized)
+                else:
+                    print("SAME POSITION SET")
+                return ps
+            except Exception as e:
+                print("COULD NOT UPDATE EXISTING POSITION SET", e)
+                return None
 
         # Remove array slicing to include all sensors
         if not skip_pos:
@@ -51,12 +67,34 @@ class Trial(LegacyBaseModel):
                 if not sensor:
                     print("next...")
                     continue
-                try:
-                    PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-                except ValueError:
-                    print("position set already exists for trial", self.id, self.name)
-                    return
+               
+                existing_position_set = None
 
+                if force_update==False:
+                    try:
+                        PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                    except ValueError:
+                        print("position set already exists for trial", self.id, self.name)
+                        return
+                else:
+                    existing_position_set = update_existing_position_set(sensor, key, col)
+
+    
+        def update_existing_gradient_set(sensor, key, col):
+            print("UPDATING GRADIENT")
+            try:
+                gs = GradientSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)[0]
+                if gs.mat().equals(col) == False:
+                    col_serialized = pickle.dumps(col)
+                    gs.update(matrix=col_serialized)
+                else:
+                    print("SAME GS")
+                    return gs, True
+                
+                return gs, False
+            except:
+                print("COULD NOT UPDATE EXISTING GRADIENT SET")
+                return None, False
     
         # Remove array slicing to include all sensors
         for key in gradient_data.keys():
@@ -68,10 +106,24 @@ class Trial(LegacyBaseModel):
                 print("next...")
                 continue
             else:
-                if len(PositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)) == 0:
+                if not existing_position_set and len(PositionSet.where(sensor_id=sensor.id, name=key, trial_id=self.id)) == 0:
                     PositionSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
-                print(f"Generating data for sensor {sensor.name}!!!")
-                grad_set = GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+
+
+                if force_update==False:
+                    print(f"Generating data for sensor {sensor.name}!!!")
+                    grad_set = GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+                else:
+                    print(f"Updating data for sensor {sensor.name}!!!")
+                    grad_set, same_gs = update_existing_gradient_set(sensor, key, col)
+                    if same_gs is True:
+                        print("SKIPPING Creation due to same GS")
+                        continue
+                    else:
+                        if grad_set is None:
+                            print(f"GRAD SET NOT FOUND! Generating data for sensor {sensor.name}!!!")
+                            grad_set = GradientSet.find_or_create(sensor_id=sensor.id, name=key, trial_id=self.id, matrix=col)
+        
                 grad_set.create_subgradients()
                 grad_set.update(aggregated_stats=grad_set.calc_aggregate_stats())
                 print(f"Done with {sensor.name}!!!")
