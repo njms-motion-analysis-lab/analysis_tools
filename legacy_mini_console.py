@@ -33,6 +33,9 @@ from datetime import datetime, timedelta
 from models.legacy_trial import Trial
 from prediction_tools.legacy_multi_predictor import MultiPredictor
 from prediction_tools.result_compare import SigCheck
+from scipy.stats import pearsonr
+from boruta import BorutaPy
+from sklearn.ensemble import RandomForestRegressor
 
 
 allowed = [
@@ -501,103 +504,150 @@ def make_final_combo(mp):
 
 
 def display_for_paper(mpa=None, cp_mpa=None, hc_combo=None, cp_combo=None, hcgsmp=None, cpgsmp=None, hc_set_list=None, cp_set_list=None):
-    # if mpa and cp_mpa:
-    #     MatrixPlotter.show(mpa.get_acc(), cp_mpa.get_acc(), h_one="Healthy Controls Default (n=25)", h_two="CP Patients Default (n=12)", alt=True)
-    #     MatrixPlotter.show(mpa.get_abs_acc(), cp_mpa.get_abs_acc(), h_one="Healthy Controls Absolute Value (n=25)", h_two="CP Patients Absolute Value(n=12)", alt=True)
-    #     MatrixPlotter.show(mpa.get_norm_acc(), cp_mpa.get_norm_acc(), h_one="Healthy Controls Normalized (n=25)", h_two="CP Patients Normalized (n=12)", alt=True)
+    if mpa and cp_mpa:
+        # mpa.show_abs_scores(axis=True)
+        # cp_mpa.show_abs_scores(axis=True)
 
-    print("DONE W INDIV, next combo")
+        # mpa.show_default_scores(axis=True)
+        # cp_mpa.show_default_scores(axis=True)
+
+        
+        # MatrixPlotter.show(mpa.get_acc(), cp_mpa.get_acc(), h_one="Healthy Controls Default (n=25)", h_two="CP Patients Default (n=12)", alt=True)
+        # MatrixPlotter.show(mpa.get_abs_acc(), cp_mpa.get_abs_acc(), h_one="Healthy Controls Absolute Value (n=25)", h_two="CP Patients Absolute Value (n=12)", alt=True)
+        # MatrixPlotter.show(mpa.get_norm_acc(), cp_mpa.get_norm_acc(), h_one="Healthy Controls Normalized (n=25)", h_two="CP Patients Normalized (n=12)", alt=True)
+
+        # mpa.save_shap_values(preds=mpa.get_preds(), title="hc_default")
+        # mpa.save_shap_values(preds=mpa.get_abs_preds(), title="hc_abs")
+        # mpa.save_shap_values(preds=mpa.get_norm_preds(), title="hc_norm")
+
+        # cp_mpa.save_shap_values(preds=cp_mpa.get_preds(), title="cp_default")
+        # cp_mpa.save_shap_values(preds=cp_mpa.get_abs_preds(), title="cp_abs")
+        # cp_mpa.save_shap_values(preds=cp_mpa.get_norm_preds(), title="cp_norm")
 
 
-    
-    if hc_combo and cp_combo:
-        MatrixPlotter.show(hc_combo.get_all_acc(), cp_combo.get_all_acc(), h_one="Healthy Controls Combination (n=25)", h_two="CP Patients Combination (n=12)", alt=True)
+        print("DONE W INDIV, next combo")
 
-    #     print("Done w matrices, on to shap")
-    #     hc_combo_preds = hc_combo.get_all_preds()
+    # if hc_combo and cp_combo:
+    #     MatrixPlotter.show(hc_combo.get_norm_acc(), cp_combo.get_norm_acc(), h_one="Healthy Controls Combination (n=25)", h_two="CP Patients Combination (n=12)", alt=True)
+    # #     print("Done w matrices, on to shap")
+    #     hc_combo_preds = hc_combo.get_norm_preds()
     #     hc_combo.save_shap_values(preds=hc_combo_preds, title="hc_combo")
 
-    #     cp_combo_preds = cp_combo.get_all_preds()
+    #     cp_combo_preds = cp_combo.get_norm_preds()
     #     cp_combo.save_shap_values(preds=cp_combo_preds, title="cp_combo")
 
-    # print("DONE W COMBO, next gs")
+    print("DONE W COMBO, next gs")
 
     if hcgsmp and cpgsmp:
-        MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
-        MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value(n=12)", alt=True)
-        MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+    #     MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
+    #     MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value(n=12)", alt=True)
+    #     MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+    
         # hcgsmp.save_shap_values(preds=hcgsmp.get_preds(), title="gs_hc_default")
         # hcgsmp.save_shap_values(preds=hcgsmp.get_abs_preds(), title="gs_hc_abs")
         # hcgsmp.save_shap_values(preds=hcgsmp.get_norm_preds(), title="gs_hc_norm")
         # print("DONE W HC BASE")
         # cpgsmp.save_shap_values(preds=cpgsmp.get_preds(), title="gs_cp_default")
         # cpgsmp.save_shap_values(preds=cpgsmp.get_abs_preds(), title="gs_cp_abs")
-        # cpgsmp.save_shap_values(preds=cpgsmp.get_norm_preds(), title="gs_cp_norm")
-        # print("DONE W CP BASE")
+        cpgsmp.save_shap_values(abs_val=False, non_norm=False, preds=cpgsmp.get_norm_preds(), title="gs_cp_norm_2")
+        print("DONE W CP BASE")
         # hc_set_list_preds = hc_set_list.get_all_preds()
         # hc_set_list.save_shap_values(preds=hc_set_list_preds, title="gs_hc_set_list")
         # cp_set_list_preds = cp_set_list.get_all_preds()
         # cp_set_list.save_shap_values(preds=cp_set_list_preds, title="gs_cp_set_list")
-        print("DONE W COMBO")
+    #     print("DONE W COMBO")
+    # hc_set_list_preds = hc_set_list.get_norm_preds()
+    # hc_set_list.save_shap_values(preds=hc_set_list_preds, title="hc_set_list")
+
+    # cp_set_list_preds = cp_set_list.get_norm_preds()
+    # cp_set_list.save_shap_values(preds=cp_set_list_preds, title="cp_set_list")
+
+    MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
+    MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value (n=12)", alt=True)
+    MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
 
 
     print("DONE W GS base cases, on to combo")
 
-    import pdb;pdb.set_trace()
-
-    if hc_set_list and cp_set_list:
-        MatrixPlotter.show(hc_set_list.get_all_acc(), cp_set_list.get_all_acc(), h_one="Healthy Controls GS Combination (n=25)", h_two="CP Patients GS Combination (n=12)", alt=True)
+    # if hc_set_list and cp_set_list:
+    #     MatrixPlotter.show(hc_set_list.get_norm_acc(), cp_set_list.get_norm_acc(), h_one="Healthy Controls GS Combination (n=25)", h_two="CP Patients GS Combination (n=12)", alt=True)
     
-    if hc_combo and hc_set_list:
-        MatrixPlotter.show(hc_combo.get_all_acc(), hc_set_list.get_all_acc(), h_one="Healthy Controls Combination (n=25)", h_two="Healthy Controls GS Combination (n=25)", alt=True)
+    # if hc_combo and hc_set_list:
+    #     MatrixPlotter.show(hc_combo.get_norm_acc(), hc_set_list.get_norm_acc(), h_one="Healthy Controls Combination (n=25)", h_two="Healthy Controls GS Combination (n=25)", alt=True)
     
-    if cp_combo and cp_set_list:
-        MatrixPlotter.show(cp_combo.get_all_acc(), cp_set_list.get_all_acc(), h_one="CP Patients Combination (n=12)", h_two="CP Patients GS Combination (n=12)", alt=True)
+    # if cp_combo and cp_set_list:
+    #     MatrixPlotter.show(cp_combo.get_norm_acc(), cp_set_list.get_norm_acc(), h_one="CP Patients Combination (n=12)", h_two="CP Patients GS Combination (n=12)", alt=True)
 
     print("DONE W Matrices on to shap")
 
-    hc_set_list_preds = hc_set_list.get_all_preds()
-    # hc_set_list.save_shap_values(preds=hc_set_list_preds, title="hc_set_list")
-
-    cp_set_list_preds = cp_set_list.get_all_preds()
-    # cp_set_list.save_shap_values(preds=cp_set_list_preds, title="cp_set_list")
+        
 
     print("DONE W ALL MATRICES AND SHAP")
 
     import pdb;pdb.set_trace()
 
 
-def display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list):
-    hc_combo.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
-    cp_combo.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+# def display_prox_distal_shap_scores(mpa, cp_mpa, hc_combo, cp_combo, hc_set_list, cp_set_list):
+    # mpa.show_default_scores(axis=False, models=["RandomForest"])
+    # mpa.show_default_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
+    # cp_mpa.show_default_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
+
+    
+
+    # hc_combo.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True, use_cat=True)
+    # cp_combo.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True, use_cat=True)
+
+    
+    
 
     print("DONE W RF COMBO")
     import pdb;pdb.set_trace()
 
-    hc_set_list.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
-    cp_set_list.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True)
+    # hc_set_list.show_all_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True, use_cat=True)
+    # cp_set_list.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True, use_cat=True)
 
     print("DONE W ALL RF, on to ExtraTrees")
     import pdb;pdb.set_trace()
 
-    hc_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
-    cp_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    # hc_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    # cp_combo.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
 
-    print("DONE W ET COMBO")
-    import pdb;pdb.set_trace()
+    # print("DONE W ET COMBO")
+    # import pdb;pdb.set_trace()
     
-    hc_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
-    cp_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    # hc_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
+    # cp_set_list.show_norm_scores(axis=True, models=["ExtraTrees"], include_accuracy=True)
 
     print("DONE W ALL ET, finished!!")
     import pdb;pdb.set_trace()
 
 
-import pdb;pdb.set_trace()
+
 # rpa = MultiPredictor.where(cohort_id=1, task_id=2)[0]
 # base case
+import pdb;pdb.set_trace()
+def gen_mpa_scores(hcgsmp, cpgsmp):
+    # hcgsmp.gen_scores_for_mp(force_load=True)
+    print("FINISHED WITH HC")
+    cpgsmp.gen_scores_for_mp(force_load=True)
+    # print("FINISHED WITH CP")
+
+    print("DONE again!")
+
+
+
+# mpa.show_predictor_scores(['XGBoost'], reverse_order=True, non_norm=False, abs_val=True, use_cat=True, include_accuracy=True, axis=True)
+# rpa.show_predictor_scores(['XGBoost'], reverse_order=True, non_norm=False, abs_val=True, use_cat=True, include_accuracy=True, axis=True)
+
 mpa = MultiPredictor.where(cohort_id=1, task_id=3)[0] # 30 preds, 30 acc
 cp_mpa = MultiPredictor.where(cohort_id=2, task_id=3)[0] # 27 preds, 27 acc
+# cp_mpa.save_shap_values(abs_val=False, non_norm=False, preds=cp_mpa.get_norm_preds(), title="cp_norm_2")
+# mpa.save_shap_values(abs_val=False, non_norm=False, preds=mpa.get_norm_preds(), title="hc_norm_2")
+
+# cp_mpa.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
+
+# gen_mpa_scores(cp_mpa)
+
 
 # mpa.gen_scores_for_mp(force_load=True)
 # cp_mpa.gen_scores_for_mp(force_load=True)
@@ -611,6 +661,94 @@ cp_combo = MultiPredictor.get(15) # 9 (norm) preds
 # grad sets base case
 hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0] # 27 preds, 27 acc
 cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0] # 27 preds. 27 acc
+
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0] # 9 preds, 9 acc
+cp_set_list = MultiPredictor.where(model="grad_set_combo", cohort_id=2)[0] # 9 preds, 9 acc
+# display_prox_distal_shap_scores(mpa, cp_mpa, hc_combo, cp_combo, hc_set_list, cp_set_list)
+
+# mpa.save_shap_values(abs_val=False, non_norm=False, preds=mpa.get_norm_preds(), title="hc_norm_3")
+# cp_mpa.save_shap_values(abs_val=False, non_norm=False, preds=cp_mpa.get_norm_preds(), title="cp_norm_3")
+
+# print("Done w/SG")
+# import pdb;pdb.set_trace()
+
+
+# hcgsmp.save_shap_values(abs_val=False, non_norm=False, preds=hcgsmp.get_norm_preds(), title="gs_hc_norm_3")
+# cpgsmp.save_shap_values(abs_val=False, non_norm=False, preds=cpgsmp.get_norm_preds(), title="gs_cp_norm_3")
+
+# print("Done w/GS")
+# import pdb;pdb.set_trace()
+
+
+cp_mpa.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+mpa.show_norm_scores(models=["RandomForest"], include_accuracy=True, use_cat=True, axis=True)
+
+
+print("Done w/SG Cluters")
+import pdb;pdb.set_trace()
+
+
+hcgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+cpgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+
+print("Done w/GS Cluters")
+import pdb;pdb.set_trace()
+
+import pdb;pdb.set_trace()
+
+cp_combo = MultiPredictor.get(15) # 9 (norm) preds
+
+
+
+xgb = [value['XGBoost'] for _, value in mpa.get_norm_acc()]
+rfa = [value['RandomForest'] for _, value in mpa.get_norm_acc()]
+cba = [value['CatBoost'] for _, value in mpa.get_norm_acc()]
+eta = [value['ExtraTrees'] for _, value in mpa.get_norm_acc()]
+
+cp_xgb = [value['XGBoost'] for _, value in cp_mpa.get_norm_acc()]
+cp_rfa = [value['RandomForest'] for _, value in cp_mpa.get_norm_acc()]
+cp_cba = [value['CatBoost'] for _, value in cp_mpa.get_norm_acc()]
+cp_eta = [value['ExtraTrees'] for _, value in cp_mpa.get_norm_acc()]
+
+gs_xgb = [value['XGBoost'] for _, value in hcgsmp.get_norm_acc()]
+gs_rfa = [value['RandomForest'] for _, value in hcgsmp.get_norm_acc()]
+gs_cba = [value['CatBoost'] for _, value in hcgsmp.get_norm_acc()]
+gs_eta = [value['ExtraTrees'] for _, value in hcgsmp.get_norm_acc()]
+
+cp_gs_xgb = [value['XGBoost'] for _, value in cpgsmp.get_norm_acc()]
+cp_gs_rfa = [value['RandomForest'] for _, value in cpgsmp.get_norm_acc()]
+cp_gs_cba = [value['CatBoost'] for _, value in cpgsmp.get_norm_acc()]
+cp_gs_eta = [value['ExtraTrees'] for _, value in cpgsmp.get_norm_acc()]
+
+
+
+print("norm ave acc: XGBoost",np.mean(xgb+cp_xgb+gs_xgb+cp_gs_xgb))
+print("norm ave acc: RandomForest",np.mean(rfa+cp_rfa+gs_rfa+cp_gs_rfa))
+print("norm ave acc: CatBoost",np.mean(cba+cp_cba+gs_cba+cp_gs_cba))
+print("norm ave acc: ExtraTrees",np.mean(eta+cp_eta+gs_eta+cp_gs_eta))
+print()
+print("norm std dev: XGBoost",np.std(xgb+cp_xgb+gs_xgb+cp_gs_xgb))
+print("norm std dev: RandomForest",np.std(rfa+cp_rfa+gs_rfa+cp_gs_rfa))
+print("norm std dev: CatBoost",np.std(cba+cp_cba+gs_cba+cp_gs_cba))
+print("norm std dev: ExtraTrees",np.std(eta+cp_eta+gs_eta+cp_gs_eta))
+print()
+print("norm median accuracy: XGBoost",np.median(xgb+cp_xgb+gs_xgb+cp_gs_xgb))
+print("norm median accuracy: RandomForest",np.median(rfa+cp_rfa+gs_rfa+cp_gs_rfa))
+print("norm median accuracy: CatBoost",np.median(cba+cp_cba+gs_cba+cp_gs_cba))
+print("norm median accuracy: ExtraTrees",np.median(eta+cp_eta+gs_eta+cp_gs_eta))
+
+
+
+
+
+
+# display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hc_combo=hc_combo, cp_combo=cp_combo, hcgsmp=hcgsmp, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
+# cp_combo.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
+
+# gen_mpa_scores(hcgsmp, cpgsmp)
+
+print("REALLY DONE")
+
 
 # cpgsmp.get_norm_preds()[0].get_df()
 # cpgsmp.gen_scores_for_mp(force_load=True)
@@ -630,7 +768,7 @@ print("wow done")
 
 
 # rtt = Task.get(3).full_gradient_set_stats_by_task_and_cohort(Sensor.where(name="rfhd_x")[0])
-# ltt = Task.get(3).full_gradient_set_stats_by_task_and_cohort(Sensor.where(name="rwrb_x")[0])
+# ltt = Task.get(3).full_gradient_set_stats_by_task_and_cohort(Sensor.where(name="rwrb_x")[0])c
 
 # nd_rtt = Task.get(4).full_gradient_set_stats_by_task_and_cohort(Sensor.where(name="lfhd_x")[0])
 # nd_ltt = Task.get(4).full_gradient_set_stats_by_task_and_cohort(Sensor.where(name="lwrb_x")[0])
@@ -660,10 +798,80 @@ SENSOR_CODES = [
 ]
 
 
-arr_rtt = []
-arr_ltt = []
 
-from scipy.stats import pearsonr
+
+def compare_and_correlate_features(df1, df2):
+    """
+    Compare features from two dataframes and show their relative correlation.
+    
+    :param df1: First dataframe
+    :param df2: Second dataframe
+    """
+    # Get common features
+    common_features = list(set(df1.columns) & set(df2.columns))
+    
+    print(f"Number of features in df1: {len(df1.columns)}")
+    print(f"Number of features in df2: {len(df2.columns)}")
+    print(f"Number of common features: {len(common_features)}")
+    
+    # Print unique features
+    print("\nUnique features in df1:")
+    print(list(set(df1.columns) - set(common_features)))
+    print("\nUnique features in df2:")
+    print(list(set(df2.columns) - set(common_features)))
+    
+    # Compute correlation matrix for common features
+    df1_common = df1[common_features]
+    df2_common = df2[common_features]
+    
+    # Combine the common features from both dataframes
+    combined_df = pd.concat([df1_common, df2_common], axis=0)
+    
+    # Compute the correlation matrix
+    correlation_matrix = combined_df.corr()
+    
+    # Plot heatmap of correlation matrix
+    plt.figure(figsize=(12, 10))
+    sns.heatmap(correlation_matrix, annot=False, cmap='coolwarm', vmin=-1, vmax=1, center=0)
+    plt.title("Correlation Heatmap of Common Features")
+    plt.tight_layout()
+    plt.show()
+    
+    # Return correlation matrix for further analysis if needed
+    return correlation_matrix
+
+def boruta_feature_selection(df, target_column=None, n_estimators=100, max_iter=100):
+    """
+    Apply Boruta feature selection to a dataframe.
+    
+    :param df: Input dataframe
+    :param target_column: Name of the target column. If None, use the last column as target.
+    :param n_estimators: Number of estimators for the Random Forest
+    :param max_iter: Maximum number of iterations for Boruta
+    :return: Dataframe with selected features
+    """
+    if target_column is None:
+        X = df.iloc[:, :-1]
+        y = df.iloc[:, -1]
+    else:
+        X = df.drop(columns=[target_column])
+        y = df[target_column]
+    
+    # Initialize Boruta
+    rf = RandomForestRegressor(n_estimators=n_estimators, n_jobs=-1, max_depth=5)
+    boruta = BorutaPy(rf, n_estimators=n_estimators, max_iter=max_iter, verbose=2)
+    
+    # Fit Boruta
+    boruta.fit(X.values, y.values)
+    
+    # Get selected feature names
+    selected_features = X.columns[boruta.support_].tolist()
+    
+    if target_column is not None:
+        selected_features.append(target_column)
+    
+    # Return dataframe with selected features
+    return df[selected_features]
 
 def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, title=None):
     """
@@ -698,7 +906,59 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
     def get_sensor_data(df, sensor):
         return df[[col for col in df.columns if col.startswith(sensor)]]
     
+    from scipy.spatial.distance import euclidean, cosine
+    from scipy import stats
+
+    def comprehensive_dataframe_comparison(df1, df2):
+        """
+        Perform a comprehensive comparison between two dataframes of sensor data.
+        
+        :param df1: First dataframe
+        :param df2: Second dataframe
+        """
+        # Ensure both dataframes have the same features
+        common_features = list(set(df1.index) & set(df2.index))
+        df1 = df1.loc[common_features]
+        df2 = df2.loc[common_features]
+        
+        # 1. Pearson Correlation
+        pearson_corr = stats.pearsonr(df1, df2)[0]
+        
+        # 2. Spearman Rank Correlation
+        spearman_corr = stats.spearmanr(df1, df2)[0]
+        
+        # 3. Kendall's Tau Correlation
+        kendall_tau = stats.kendalltau(df1, df2)[0]
+        
+        # 4. Euclidean Distance
+        euclidean_dist = euclidean(df1, df2)
+        
+        # 5. Cosine Distance
+        cosine_dist = cosine(df1, df2)
+        
+        # 6. Feature-by-feature comparison
+        feature_diff = pd.DataFrame({
+            'df1': df1,
+            'df2': df2,
+            'abs_diff': np.abs(df1 - df2),
+            'percent_diff': np.abs((df1 - df2) / df1) * 100
+        })
+        
+        # 7. Distribution comparison using Kolmogorov-Smirnov test
+        ks_statistic, ks_pvalue = stats.ks_2samp(df1, df2)
+        
+        # Print results
+        print(f"Pearson Correlation: {pearson_corr:.4f}")
+        print(f"Spearman Rank Correlation: {spearman_corr:.4f}")
+        print(f"Kendall's Tau: {kendall_tau:.4f}")
+        print(f"Euclidean Distance: {euclidean_dist:.4f}")
+        print(f"Cosine Distance: {cosine_dist:.4f}")
+        print(f"Kolmogorov-Smirnov Test Statistic: {ks_statistic:.4f}")
+        print(f"Kolmogorov-Smirnov p-value: {ks_pvalue:.4f}")
+    
     def sensor_similarity(sensor1_df, sensor2_df):
+
+        
         axes = ['x', 'y', 'z']
         correlations = []
         for axis in axes:
@@ -706,18 +966,20 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
             s2_col = [col for col in sensor2_df.columns if f'_{axis}_' in col]
             if s1_col and s2_col:
                 try:
-                    corr, _ = pearsonr(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
+                    # comprehensive_dataframe_comparison(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
+                    corr = euclidean(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
                     if np.isfinite(corr):
                         correlations.append(corr)
                 except Exception as e:
                     print(f"Error calculating correlation for {s1_col[0]} and {s2_col[0]}: {e}")
         return np.mean(correlations) if correlations else np.nan
 
+
     sensors1 = get_sensor_names(combined_df1_cleaned)
     sensors2 = get_sensor_names(combined_df2_cleaned)
 
     similarity_matrix = pd.DataFrame(index=sensors1, columns=sensors2)
-
+    import pdb;pdb.set_trace()
     for sensor1 in sensors1:
         sensor1_df = get_sensor_data(combined_df1_cleaned, sensor1)
         for sensor2 in sensors2:
@@ -726,6 +988,7 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
             similarity_matrix.loc[sensor1, sensor2] = similarity
 
     # Replace any remaining NaN values with the minimum similarity for normalization
+
     min_similarity = similarity_matrix.min().min()
     similarity_matrix = similarity_matrix.fillna(min_similarity)
 
@@ -770,6 +1033,17 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
     return similarity_matrix, normalized_matrix
 
 def compare_tsfresh_dataframes(dataframes_list1, dataframes_list2, title=None):
+    def compare_index_suffixes(df1, df2, name1, name2, position):
+        suffixes1 = [col.split('__', 1)[1] if '__' in col else col for col in df1.index]
+        suffixes2 = [col.split('__', 1)[1] if '__' in col else col for col in df2.index]
+        
+        if suffixes1 != suffixes2:
+            mismatched = [f"{s1} != {s2}" for s1, s2 in zip(suffixes1, suffixes2) if s1 != s2]
+            mismatch_msg = ', '.join(mismatched[:5])  # Limit to first 5 mismatches for brevity
+            if len(mismatched) > 5:
+                mismatch_msg += f", and {len(mismatched) - 5} more"
+            return False, f"Dataframes '{name1}' and '{name2}' at position {position} have mismatched features after prefix: {mismatch_msg}"
+        return True, ""
     """
     Compare two lists of tsfresh feature dataframes by calculating the correlation between their features
     and displaying the results as a heatmap.
@@ -793,29 +1067,49 @@ def compare_tsfresh_dataframes(dataframes_list1, dataframes_list2, title=None):
     combined_df1 = pd.DataFrame()
     combined_df2 = pd.DataFrame()
 
+    def remove_index_prefixes(df1, df2):
+        def remove_prefix(text):
+            return text.split('__', 1)[1] if '__' in text else text
+        df1_copy = df1.copy()
+        df2_copy = df2.copy()
+
+        df1_copy.index = df1_copy.index.map(remove_prefix)
+        df2_copy.index = df2_copy.index.map(remove_prefix)
+
+        return df1_copy, df2_copy
+
 
     for i, ((df1, name1), (df2, name2)) in enumerate(zip(filled_list1, filled_list2)):
-        assert (df1.index == df2.index).all(), f"Dataframes at position {i} must have the same features"
+        is_match, error_message = compare_index_suffixes(df1, df2, name1, name2, i)
+        assert is_match, error_message
+
+        df1, df2 = remove_index_prefixes(df1, df2)
+
         
-        for j, col in enumerate(df1.columns):
-            combined_df1[f'{name1}_{col}'] = df1.iloc[:, j]
-            combined_df2[f'{name2}_{col}'] = df2.iloc[:, j]
+        for col in df1.columns:
+            combined_df1[f"{name1}_{col}"] = df1[col]
+            combined_df2[f"{name2}_{col}"] = df2[col]
 
     rows_to_drop = (combined_df1 == 0).all(axis=1) & (combined_df2 == 0).all(axis=1)
 
 
     # Concatenate the combined dataframes along the columns
+
     combined_df = pd.concat([combined_df1, combined_df2], axis=1)
     combined_df1_cleaned = combined_df1[~rows_to_drop]
     combined_df2_cleaned = combined_df2[~rows_to_drop]
 
-    correlation_matrix = new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, title)
+    df1_trimmed = combined_df1_cleaned.T
+    df2_trimmed = combined_df2_cleaned.T
+    # df1_trimmed = boruta_feature_selection(combined_df1_cleaned.T)
+    # df2_trimmed = combined_df2_cleaned.T[df1_trimmed.columns]
+
+
+    correlation_matrix = new_compare_tsfresh_dataframes(df1_trimmed.T, df2_trimmed.T, title)
     print(correlation_matrix)
 
     # Initialize an empty DataFrame to store the correlation scores
     correlation_scores = pd.DataFrame(index=combined_df1_cleaned.columns, columns=combined_df2_cleaned.columns)
-
-
 
 
     # Calculate the correlation for each pair of columns
@@ -892,12 +1186,80 @@ def construct_corr(tsk=None, cohort=None, title=None, use_dom=True, sub_stat=Fal
 
     if title:
         title += ' (opposite side sensor)' if versus_opposite_side else ''
-
     compare_tsfresh_dataframes(arr_rtt, arr_ltt, title=title)
 
 
 hc = Cohort.get(1)
 cp = Cohort.get(2)
+
+
+
+
+
+# rtt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rfhd_x")[0], non_normed=False, loc=False)
+# ltt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rwrb_x")[0], non_normed=False, loc=False)
+
+# cp_rtt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rfhd_x")[0], non_normed=False, loc=False)
+# cp_ltt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rwrb_x")[0], non_normed=False, loc=False)
+
+
+
+# grad set combo
+
+
+
+# cp_mpa.gen_scores_for_mp(force_load=True)
+print("cp new scores")
+# make_final_combo(cp_mpa)
+
+print("Final combo made")
+
+
+
+
+# display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hcgsmp=hcgsmp, hc_combo=hc_combo, cp_combo=cp_combo, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
+
+print("done displaying for paper")
+
+# display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list)
+
+# todo          
+# display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list)
+
+# done 7.24
+# display_for_paper(mpa, cp_mpa, hc_combo, cp_combo, hcgsmp, cpgsmp, hc_set_list, cp_set_list)
+
+
+print("Done w paper display")
+
+
+
+
+
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+sp = MultiPredictor.get(15)
+# MatrixPlotter.show(bc.get_all_acc(), sp.get_all_acc(), h_one="Healthy Controls (n=25)", h_two="CP Patients (n=7)", alt=True)
+
+hc_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+hc_combo = MultiPredictor.get(15)
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
+
+
+cp_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+cp_combo = MultiPredictor.get(15)
+hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
+
+
+bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
+mp = MultiPredictor.where(cohort_id=2)[0]
+
+combo_cp = MultiPredictor.get(15)
+
+hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0]
+cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
+
+import pdb;pdb.set_trace()
+
 
 
 construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=True, title=" SUB STAT Dom Healthy Controls")
@@ -912,91 +1274,17 @@ construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=Tru
 construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom Healthy Controls")
 construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom CP")
 
+construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom Healthy Controls")
+construct_corr(cohort=cp, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom CP")
 
+construct_corr(cohort=hc, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom Healthy Controls")
+construct_corr(cohort=cp, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom CP")
 
+construct_corr(cohort=hc, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom Healthy Controls")
+construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom CP")
 
-import pdb;pdb.set_trace()
-
-
-# rtt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rfhd_x")[0], non_normed=False, loc=False)
-# ltt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rwrb_x")[0], non_normed=False, loc=False)
-
-# cp_rtt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rfhd_x")[0], non_normed=False, loc=False)
-# cp_ltt = PatientTask.where(id=97)[0].combined_sub_gradient_stats_list(Sensor.where(name="rwrb_x")[0], non_normed=False, loc=False)
-
-
-import pdb;pdb.set_trace()
-# grad set combo
-hc_set_list = MultiPredictor.where(model="grad_set_combo")[0] # 9 preds, 9 acc
-cp_set_list = MultiPredictor.where(model="grad_set_combo", cohort_id=2)[0] # 9 preds, 9 acc
-
-import pdb;pdb.set_trace()
-
-norm_pred = cp_mpa.get_norm_predictors()
-cp_mpa.gen_train_combo_mp(use_norm_pred=True, norm_pred=norm_pred)
-
-
-print("done retraining")
-import pdb;pdb.set_trace()
-
-
-# cp_mpa.gen_scores_for_mp(force_load=True)
-print("cp new scores")
-# make_final_combo(cp_mpa)
-
-print("Final combo made")
-
-
-
-# display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hcgsmp=hcgsmp, hc_combo=hc_combo, cp_combo=cp_combo, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
-
-print("done displaying for paper")
-import pdb;pdb.set_trace()
-display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list)
-
-
-# todo          
-# display_prox_distal_shap_scores(hc_combo, cp_combo, hc_set_list, cp_set_list)
-
-# done 7.24
-# display_for_paper(mpa, cp_mpa, hc_combo, cp_combo, hcgsmp, cpgsmp, hc_set_list, cp_set_list)
-
-
-
-
-print("Done w paper display")
-
-import pdb;pdb.set_trace()
-
-
-
-bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
-
-sp = MultiPredictor.get(15)
-# MatrixPlotter.show(bc.get_all_acc(), sp.get_all_acc(), h_one="Healthy Controls (n=25)", h_two="CP Patients (n=7)", alt=True)
-
-
-
-hc_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
-hc_combo = MultiPredictor.get(15)
-hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
-
-
-cp_bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
-cp_combo = MultiPredictor.get(15)
-hc_set_list = MultiPredictor.where(model="grad_set_combo")[0]
-
-
-
-
-bc = MultiPredictor.where(model="norm_non_abs_combo")[0]
-mp = MultiPredictor.where(cohort_id=2)[0]
-
-combo_cp = MultiPredictor.get(15)
-
-
-hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0]
-cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
+construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom Healthy Controls")
+construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom CP")
 
 
 
@@ -1012,16 +1300,14 @@ cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")
 
 import pdb;pdb.set_trace()
 
+# mpa.show_predictor_scores()
+
 cpgsmp.gen_scores_for_mp()
 
-import pdb;pdb.set_trace()
 
-
-
-import pdb;pdb.set_trace()
 
 # started first
-mp.gen_scores_for_mp(force_load=True)
+# mp.gen_scores_for_mp(force_load=True)
 
 # sp = MultiPredictor.get(15)
 
@@ -1029,7 +1315,7 @@ import pdb;pdb.set_trace()
 
 
 
-mp.gen_scores_for_mp(force_load=True)
+# mp.gen_scores_for_mp(force_load=True)
 
 
 # make_final_cp_combo(mp, sp)
@@ -1080,13 +1366,24 @@ rpa = MultiPredictor.where(cohort_id=1, task_id=2)[0]
 pred = rpa.get_preds()[1]
 pred.get_df()
 
+def automate_construct_corr():
+    cohorts = [('hc', 'Healthy Controls'), ('cp', 'CP')]
+    use_dom_options = [(True, 'Dom'), (False, 'Non Dom')]
+    versus_opposite_side_options = [(True, 'versus_opposite_side'), (False, 'Same Arm')]
+    sub_stat_options = [(True, 'SUB STAT'), (False, '')]
+
+    for cohort, cohort_name in cohorts:
+        for use_dom, dom_desc in use_dom_options:
+            for versus_opposite_side, side_desc in versus_opposite_side_options:
+                for sub_stat, sub_stat_desc in sub_stat_options:
+                    title = f"{sub_stat_desc} {dom_desc} {side_desc} {cohort_name}".strip()
+                    construct_corr(cohort=cohort, use_dom=use_dom, versus_opposite_side=versus_opposite_side, sub_stat=sub_stat, title=title)
 
 
 
 cp_cohort = Cohort.where(name=COHORT_NAME)[0]
 block_task = Task.find_by("description", TASK_NAME)
 # mp = MultiPredictor.where(task_id = block_task.id, cohort_id = cp_cohort.id)[0]
-
 
 
 save_sp_shap_vals(sp)
@@ -1101,36 +1398,39 @@ def calculate_statistics(values):
     return mean, variance, std_dev
 
 # First set of predictions
-test_list = []
-for pr in bc.get_all_preds():
-    num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
-    test_list.append(num_features)
-    print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
 
-# Calculate and print statistics for the first set
-mean, variance, std_dev = calculate_statistics(test_list)
-if mean is not None:
-    print("First Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
-
-# Second set of predictions
-test_list = []
-for pr in sp.get_all_preds():
-    ps = pr.get_predictor_scores()
-    if len(ps) != 0:
-        num_features = len(ps[0].get_top_n_features(500))
+def compare_motion():
+    test_list = []
+    for pr in bc.get_all_preds():
+        num_features = len(pr.get_predictor_scores()[0].get_top_n_features(500))
         test_list.append(num_features)
         print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
-    else:
-        print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "SKIPPED")
 
-# Calculate and print statistics for the second set
-mean, variance, std_dev = calculate_statistics(test_list)
-if mean is not None:
-    print("Second Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
+    # Calculate and print statistics for the first set
+    mean, variance, std_dev = calculate_statistics(test_list)
+    if mean is not None:
+        print("First Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
+
+    # Second set of predictions
+    test_list = []
+    for pr in sp.get_all_preds():
+        ps = pr.get_predictor_scores()
+        if len(ps) != 0:
+            num_features = len(ps[0].get_top_n_features(500))
+            test_list.append(num_features)
+            print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "num features:", num_features)
+        else:
+            print(pr.id, pr.updated_at, pr.non_norm, pr.abs_val, Sensor.get(pr.sensor_id).name, "SKIPPED")
+
+    # Calculate and print statistics for the second set
+    mean, variance, std_dev = calculate_statistics(test_list)
+    if mean is not None:
+        print("Second Set - MEAN:", mean, "VARIANCE:", variance, "STD DEV:", std_dev)
 
 
 
-import pdb;pdb.set_trace()
+
+
 bc.show_norm_scores(axis=True, include_accuracy=True)
 import pdb;pdb.set_trace()
 # sp.show_norm_scores(axis=True, include_accuracy=True)
@@ -1172,7 +1472,7 @@ import pdb;pdb.set_trace()
 # fetch_new_tasks()
 
 pr = Predictor.where(multi_predictor_id=6)
-# healthy controls bloc
+# healthy controls block
 mpa = MultiPredictor.where(cohort_id=1, task_id=3)[0]
 
 # cp block
@@ -1232,7 +1532,6 @@ def fix_pd_et_cohort_ids():
         pt.save()
 
 
-
 def fix_cp_cohort_ids():
     g1 = ['S008_cp', 'S002_cp', 'S001_cp', 'S006_cp', 'S003_cp']
     c1 = 'cp_before'
@@ -1247,12 +1546,8 @@ def fix_cp_cohort_ids():
 
 
 
-
-
-
-
 import pdb;pdb.set_trace()
-# SigCheck().compare_obj(rc, bc)
+SigCheck().compare_obj(rc, bc)
 
 # Does the same thing as in your console. See top of page for importing 
 # rc.show_norm_scores(axis=True, include_accuracy=True)
@@ -1263,7 +1558,6 @@ import pdb;pdb.set_trace()
 
 
 # pprint.pp(bc.get_new_axis(abs_val=False, non_norm=False))
-
 
 # MatrixPlotter.show(mpa.get_acc(), rpa.get_acc(), alt=True, h_one="Block", h_two="Ring")
 
@@ -1449,43 +1743,43 @@ import pdb;pdb.set_trace()
 
 
 
-print("done with blocks!")
+# print("done with blocks!")
 
-# for pr in rpa.get_norm_predictors():
+# # for pr in rpa.get_norm_predictors():
 
+# #     pr.train_from(use_shap=True, get_sg_count=True)
+
+# for pr in rpa.get_abs_predictors():
 #     pr.train_from(use_shap=True, get_sg_count=True)
 
-for pr in rpa.get_abs_predictors():
-    pr.train_from(use_shap=True, get_sg_count=True)
+# for pr in rpa.get_predictors():
+#     pr.train_from(use_shap=True, get_sg_count=True)
 
-for pr in rpa.get_predictors():
-    pr.train_from(use_shap=True, get_sg_count=True)
+# rpa.gen_train_combo_mp(use_norm_pred=True, get_sg_count=True)
 
-rpa.gen_train_combo_mp(use_norm_pred=True, get_sg_count=True)
+# print("done with rings!")
+# import pdb;pdb.set_trace()
 
-print("done with rings!")
-import pdb;pdb.set_trace()
-
-print(len(bc.get_all_preds()))
-print(len(rc.get_all_preds()))
-import pdb;pdb.set_trace()
-bc.save_shap_values(abs_val=False, non_norm=False)
+# print(len(bc.get_all_preds()))
+# print(len(rc.get_all_preds()))
+# import pdb;pdb.set_trace()
+# bc.save_shap_values(abs_val=False, non_norm=False)
 
 
-# for rcc in rc.get_all_preds():
-#     rcc.retrain_from(use_shap=True)
+# # for rcc in rc.get_all_preds():
+# #     rcc.retrain_from(use_shap=True)
 
 
-print("Starting Block")
-mpa.gen_train_combo_mp(use_norm_pred=True)
+# print("Starting Block")
+# mpa.gen_train_combo_mp(use_norm_pred=True)
 
-print("Done with Block!!")
+# print("Done with Block!!")
 
-print("Starting Ring!")
-rpa.gen_train_combo_mp(use_norm_pred=True)
+# print("Starting Ring!")
+# rpa.gen_train_combo_mp(use_norm_pred=True)
 
-print("Done with Ring!!")
-import pdb;pdb.set_trace()
+# print("Done with Ring!!")
+# import pdb;pdb.set_trace()
 
 
 
@@ -1514,7 +1808,7 @@ import pdb;pdb.set_trace()
 
 
 print("Done!!")
-import pdb;pdb.set_trace()
+
 
 # for pr in rpb.get_all_preds():
 #     pr.train_from(use_shap=True)
@@ -1524,18 +1818,16 @@ import pdb;pdb.set_trace()
 #     pr.train_from(use_shap=True)
 
 
-mpc.save_shap_values(abs_val=False, non_norm=False)
-rpb.save_shap_values(abs_val=False, non_norm=False)
+# mpc.save_shap_values(abs_val=False, non_norm=False)
+# rpb.save_shap_values(abs_val=False, non_norm=False)
 
 
 
-rpa.gen_train_combo_mp(use_norm_pred=True)
+# rpa.gen_train_combo_mp(use_norm_pred=True)
 
 
 
-rpa.gen_scores_for_sensor(force_load=True)
-rpa.gen_scores_for_sensor(abs_val=True, force_load=True)
-rpa.gen_scores_for_sensor(non_norm=False, force_load=True)
+
 
 
 
@@ -1648,8 +1940,6 @@ mpcp = MultiPredictor.where(task_id=3, cohort_id=2)
 
 cp_preds = mpcp[0]
 MatrixPlotter.view_and_save_results(default_trials.get_acc(), results_two=cp_preds.get_acc(), task="Reg")
-
-
 
 
 mpb.show_predictor_scores(['RandomForest'], reverse_order=True, non_norm=False)

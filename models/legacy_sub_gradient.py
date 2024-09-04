@@ -122,7 +122,7 @@ class SubGradient(LegacyBaseModel):
     def calc_sub_stats(self):
         motion = self.get_normalized()['grad_data']
         #print("MATRIX\n",unpickle_file(self.matrix))
-        motionstats = {"mean": np.mean(motion), "median": np.median(motion)}
+        motionstats = {"mean": np.mean(motion)}
             
             # ################# NEED TO DO ############# also get log absolute displacement
             #print(self.positional)

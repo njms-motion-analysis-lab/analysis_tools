@@ -1,6 +1,11 @@
 # import sqlite3
 
+from collections import defaultdict
 import csv
+import re
+from sklearn.impute import SimpleImputer
+from scipy.spatial.distance import squareform, pdist
+from sklearn.decomposition import PCA
 import json
 import pickle
 import pandas as pd
@@ -14,6 +19,8 @@ from models.legacy_sensor import Sensor
 from models.legacy_task import Task
 from prediction_tools.legacy_predictor import Predictor
 import matplotlib.colors as mcolors
+from matplotlib import colors as mcolors 
+from sklearn.metrics import silhouette_score
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
@@ -27,18 +34,18 @@ import matplotlib.colors as mcolors
 
 SENSOR_CODES = [
     'rfin_x',
-    'rwra_x',
     'rwrb_x',
+    'rwra_x',
     'rfrm_x',
     'relb_x',
     # 'relbm_x',
     'rupa_x',
     'rsho_x',
-    'rbhd_x', # skip these for cp
+    'rbhd_x',
     'rfhd_x',
 ]
 
-TOP_TREE_MODELS = ['RandomForest']
+TOP_TREE_MODELS = ['XGBoost']
 
 
 # TOP_TREE_MODELS = ['XGBoost']
@@ -59,7 +66,8 @@ class MultiPredictor(LegacyBaseModel):
         self.cohort_id = cohort_id
         self.non_norm = True,
         self.abs_val = False,
-        self.curr_axis = None
+        self.curr_axis = None,
+        self.elbow = None,
         
 
     def gen_items_for_sensors(self, sensors=None, ntaf=False):
@@ -109,13 +117,9 @@ class MultiPredictor(LegacyBaseModel):
 
     def get_predictor_model_accuracies(self, model_name, abs_val=False, non_norm=True):
         preds = self.get_predictors(abs_val=abs_val, non_norm=non_norm)
-        print("PRED LEN 1", len(preds))
         combos = []
         for pr in preds:
-            print("score_type", len(pr.get_predictor_scores()))
-            if len(pr.get_predictor_scores()) == 0:
-                continue
-            print(pr.get_accuracies() != {})
+            print("NUM PREDS for", model_name, Sensor.get(pr.sensor_id).name, len(pr.get_predictor_scores(model_name=model_name)))
             if pr.get_accuracies() != {}:
                 combos.append(
                     [
@@ -132,9 +136,9 @@ class MultiPredictor(LegacyBaseModel):
 
     def get_predictor_scores_for_model(self, model_name, abs_val=False, non_norm=True, sort_by_sensor=False, reverse_sensor_order=False):
         preds = self.get_predictor_model_accuracies(model_name=model_name, abs_val=abs_val, non_norm=non_norm)
+
         print("PRED LEN", len(preds))
         preds = [pred for pred in preds if pred[2].name in SENSOR_CODES]
-
         if sort_by_sensor:
             # Create a mapping of sensor names to their order in SENSOR_CODES
             sensor_order = {sensor_name: i for i, sensor_name in enumerate(SENSOR_CODES)}
@@ -166,7 +170,8 @@ class MultiPredictor(LegacyBaseModel):
             include_accuracy=include_accuracy,
         )
 
-    def show_norm_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+    def show_norm_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
+        print("AXIS", axis)
         return self.show_predictor_scores(
             models,
             abs_val=False, 
@@ -179,7 +184,7 @@ class MultiPredictor(LegacyBaseModel):
             include_accuracy=include_accuracy,
         )
 
-    def show_combo_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+    def show_combo_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
         return self.show_predictor_scores(
             models,
             abs_val=False,
@@ -192,7 +197,7 @@ class MultiPredictor(LegacyBaseModel):
             include_accuracy=include_accuracy,
         )
 
-    def show_all_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+    def show_all_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
         return self.show_predictor_scores(
             models,
             abs_val=False, 
@@ -205,7 +210,7 @@ class MultiPredictor(LegacyBaseModel):
             include_accuracy=include_accuracy,
         )
     
-    def show_default_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+    def show_default_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
         return self.show_predictor_scores(
             models,
             abs_val=False, 
@@ -220,49 +225,75 @@ class MultiPredictor(LegacyBaseModel):
     
 
     
-    def linkage_mat(self, sim_matrix=None, view=True, abs_val=False, non_norm=True):
+    def linkage_mat(self, sim_matrix=None, view=True, abs_val=False, non_norm=True, model=None, save=False, file_name="block_dendrogram_clusters.csv"):
         if sim_matrix is None:
-            sim_matrix, unique_features = self.sim_matrix(abs_val=abs_val, non_norm=non_norm)
+            sim_matrix, unique_features = self.sim_matrix(abs_val=abs_val, non_norm=non_norm, model=model)
+        
         # Generate the linkage matrix
         Z = linkage(1 - sim_matrix, 'ward')  # Use 1-similarity as distance
-
+        
         # Find the optimal color threshold based on the largest difference in heights
         heights = Z[:, 2]
         diffs = np.diff(heights)
         color_threshold = heights[np.argmax(diffs)]
-
+        
+        # Create a bigger figure
+        plt.figure(figsize=(24, 12))  # Adjust width and height as needed
+        
         # Create the dendrogram
         dendro = dendrogram(Z, labels=unique_features, color_threshold=color_threshold)
-
-        # Create a legend for the colors. 'dendro['color_list']' holds the cluster colors.
-        # We need to remove duplicates and sort the colors to create a meaningful legend.
+        
+        # Adjust space below the dendrogram
+        plt.subplots_adjust(bottom=0.2)  # Adjust the bottom margin as needed (0.2 adds more space)
+        
+        # Create a legend for the colors
         legend_handles = []
         color_map = {}
         for color in sorted(set(dendro['color_list'])):
-            if color != 'C0':  # Exclude the color if it's the default blue used for the last p merges
-                legend_handles.append(plt.Line2D([0], [0], color=color, lw=4))
-                color_map[color] = mcolors.to_hex(color)
-
+            # if color != 'C0':  # Exclude the color if it's the default blue used for the last p merges
+            legend_handles.append(plt.Line2D([0], [0], color=color, lw=4))
+            color_map[color] = mcolors.to_hex(color)
+        
         plt.legend(legend_handles, [f"Cluster {i + 1}" for i in range(len(legend_handles))], loc='upper right')
-
-        if view is True:
+        
+        plt.title("Dendrogram of Clustered Features")
+        plt.xlabel("Features")
+        plt.ylabel("Distance")
+        
+        if view:
             plt.show()
         else:
-            # Extract the color information
-            leaf_colors = dendro['color_list']
-            leaf_labels = dendro['ivl']
+            if save:
+                # Save the figure with specified filename, DPI, and layout
+                curr_name = file_name.replace('.csv', '.png')
+                cohort_name = self.cohort_name()
+                filename = cohort_name + "_" + curr_name
+                if self.model is not None:
+                    filename = self.model + "_" + filename
+                plt.savefig(filename, dpi=300, bbox_inches='tight')
+                print(f"Saved dendrogram figure as {file_name.replace('.csv', '.png')}")
+        
+        # Extract the color information
+        leaf_colors = dendro['color_list']
+        leaf_labels = dendro['ivl']
+        
+        # Map from labels to colors
+        label_color_map = {label: color for label, color in zip(leaf_labels, leaf_colors)}
+        
+        if save:
+            # Prepare the data for saving
+            df = pd.DataFrame(list(label_color_map.items()), columns=['Feature', 'Cluster Color'])
+            df.to_csv(file_name, index=False)
+            print(f"Saved cluster data to {file_name}")
+        
+        return label_color_map, color_map
 
-            # Map from labels to colors
-            label_color_map = {label: color for label, color in zip(leaf_labels, leaf_colors)}
 
-            return label_color_map, color_map
-
-
-    def sim_matrix(self, feature_cluster_map=None, non_norm=False, abs_val=False):
+    def sim_matrix(self, feature_cluster_map=None, model=None, non_norm=False, abs_val=False):
         print("ABS VAL", abs_val, "non_norm", non_norm)
         if feature_cluster_map is None:
-            feature_cluster_map = self.feature_cluster_map(non_norm=non_norm, abs_val=abs_val)
-        # import pdb;pdb.set_trace
+            feature_cluster_map = self.feature_cluster_map(non_norm=non_norm, abs_val=abs_val, model=model)
+
         unique_features = list(feature_cluster_map.keys())
         num_features = len(unique_features)
 
@@ -289,8 +320,12 @@ class MultiPredictor(LegacyBaseModel):
 
         return similarity_matrix, unique_features
 
-    def feature_cluster_map(self, non_norm=True, abs_val=False):
-        sensor_output = self.aggregate_shap_values(non_norm=non_norm, abs_val=abs_val)
+    def feature_cluster_map(self, non_norm=True, abs_val=False, model=None, new=True):
+        if new:
+            sensor_output = self.aggregate_shap_values_2(non_norm=non_norm, abs_val=abs_val, models=[model])
+        else:
+            sensor_output = self.aggregate_shap_values(non_norm=non_norm, abs_val=abs_val, models=[model])
+
 
         feature_cluster_map = {}
 
@@ -329,15 +364,340 @@ class MultiPredictor(LegacyBaseModel):
                 except UnboundLocalError:
                     import pdb;pdb.set_trace()
         return pred_sensor_kit
+    
+    def prepare_sensor_data(self, models=["RandomForest"], abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+        pred_kit = {}
+        pred_sensor_kit = {}
+        for m in models:
+            pred_kit[m] = self.get_predictor_scores_for_model(m, sort_by_sensor=True, reverse_sensor_order=reverse_order, abs_val=abs_val, non_norm=non_norm)
+            pred_sensor_kit[m] = {}
 
+            # Collect SHAP values and feature names from all sensors for this model
+            all_shap_values = []
+            all_feature_names = []
+            all_sensor_ids = []
+
+            for predictor_score in pred_kit[m]:
+                shap_values, feature_names = predictor_score[0][0].get_standardized_shap_values()
+                sensor = predictor_score[-1]
+                # Extend feature names list
+                all_feature_names.extend([f"{sensor.id}_{name}" for name in feature_names])
+                all_shap_values.append(shap_values)
+                all_sensor_ids.extend([sensor.id] * len(feature_names))
+
+            # Create a DataFrame with all SHAP values
+            import pdb;pdb.set_trace()
+            combined_data = pd.DataFrame(np.concatenate(all_shap_values, axis=1), 
+                                        columns=all_feature_names)
+            
+            # Sort by sensor ID if reverse_order is specified
+            if reverse_order:
+                combined_data = combined_data.sort_index(axis=1, key=lambda x: [-int(col.split('_')[0]) for col in x])
+            
+            # Calculate distance matrix using Euclidean distance
+            distance_matrix = pdist(combined_data.T, metric='euclidean')
+            distance_matrix = squareform(distance_matrix)
+            
+        return combined_data, distance_matrix, all_sensor_ids
+
+
+    def plot_shapley_over_time_updated(self, averaged_shap_scores, feature_cluster_map, color_mapping, averaged_sensors):
         
+        
+        plt.figure(figsize=(15, 10))
+        
+        sensor_names = averaged_sensors
+        clusters = set(feature_cluster_map.values())
+        
+        cluster_shap_scores = {cluster: {sensor: 0 for sensor in sensor_names} for cluster in clusters}
+        
+        # Create a mapping between shortened feature names and full feature names
+        feature_name_mapping = {}
+        for full_feature_name in feature_cluster_map.keys():
+            short_name = re.sub(r'^\d+_grad_data__', '', full_feature_name)
+            feature_name_mapping[short_name] = full_feature_name
+        
+        print("Debug: Processing Shapley scores")
+        for sensor_idx, sensor_score_set in enumerate(averaged_shap_scores):
+            sensor_name = sensor_names[sensor_idx]
+            print(f"  Sensor: {sensor_name}")
+            for feature, shap_value in sensor_score_set.items():
+                if feature != 'ave_accuracy' and shap_value != 0:
+                    if feature in feature_name_mapping:
+                        full_feature_name = feature_name_mapping[feature]
+                        cluster = feature_cluster_map[full_feature_name]
+                        cluster_shap_scores[cluster][sensor_name] += abs(shap_value)
+                        print(f"    Feature: {full_feature_name}, Cluster: {cluster}, Shapley value: {shap_value}")
+                    else:
+                        print(f"    Warning: No cluster found for feature: {feature}")
+        
+        print("\nDebug: Cluster Shapley Scores")
+        for cluster, scores in cluster_shap_scores.items():
+            print(f"Cluster {cluster}:")
+            for sensor, score in scores.items():
+                print(f"  {sensor}: {score}")
+        
+        all_values = [score for scores in cluster_shap_scores.values() for score in scores.values()]
+        min_non_zero = min([v for v in all_values if v > 0]) if any(v > 0 for v in all_values) else 1e-20
+        print(f"\nMin non-zero value: {min_non_zero}")
+        
+        for cluster, scores in cluster_shap_scores.items():
+            sensors_list = list(scores.keys())
+            values_list = list(scores.values())
+            
+            # Use a small constant to avoid log(0), but keep it smaller than the smallest non-zero value
+            values_list = [max(v, min_non_zero / 10) for v in values_list]
+            
+            plt.semilogy(sensors_list, values_list, color=color_mapping[cluster], label=f'Cluster {cluster}', marker='o')
+            print(f"\nPlotting Cluster {cluster}:")
+            print(f"  Sensors: {sensors_list}")
+            print(f"  Values: {values_list}")
+        
+        plt.title('Shapley Values Over Time by Cluster')
+        plt.xlabel('Sensors')
+        plt.ylabel('Cumulative Absolute Shapley Value (log scale)')
+        plt.legend()
+        plt.xticks(rotation=45, ha='right')
+        plt.grid(True, which="both", ls="-", alpha=0.2)
+        
+        # Set y-axis limits to focus on the range of the data
+        plt.ylim(bottom=min_non_zero / 100, top=max(all_values) * 10)
+        
+        plt.tight_layout()
+        plt.show()
+
+
+    def create_dendrogram_with_clusters(self, combined_data, distance_matrix, method='ward'):
+        # Perform hierarchical clustering
+        linked = linkage(distance_matrix, method=method)
+        
+        # Determine number of clusters
+        if self.elbow is not None:
+            n_clusters = self.elbow + 1
+            cluster_assignments = fcluster(linked, n_clusters, criterion='maxclust')
+        else:
+            # If self.elbow is not available, use the distance threshold method
+            max_d = 0.7 * max(linked[:, 2])  # 70% of the maximum distance as a default threshold
+            cluster_assignments = fcluster(linked, max_d, criterion='distance')
+            n_clusters = len(np.unique(cluster_assignments))
+        
+        # Create a color mapping for clusters
+        unique_clusters = np.unique(cluster_assignments)
+        colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_clusters)))
+        color_mapping = {cluster: mcolors.to_hex(color) for cluster, color in zip(unique_clusters, colors)}
+        
+        # Function to get the color for a given link
+        def link_color_func(link):
+            if link > len(cluster_assignments) - 2:
+                return '#808080'  # Gray color for links above the cut
+            left = int(linked[link, 0])
+            right = int(linked[link, 1])
+            if left < len(cluster_assignments):
+                cluster_left = cluster_assignments[left]
+            else:
+                cluster_left = cluster_assignments[left - len(cluster_assignments)]
+            if right < len(cluster_assignments):
+                cluster_right = cluster_assignments[right]
+            else:
+                cluster_right = cluster_assignments[right - len(cluster_assignments)]
+            if cluster_left == cluster_right:
+                return color_mapping[cluster_left]
+            else:
+                return '#808080'  # Gray color for links between different clusters
+        
+        # Create dendrogram
+        plt.figure(figsize=(20, 10))  # Increased figure size for better readability
+        ddata = dendrogram(
+            linked,
+            orientation='top',
+            labels=combined_data.columns,
+            distance_sort='descending',
+            show_leaf_counts=True,
+            link_color_func=link_color_func,
+            leaf_font_size=8,
+            color_threshold=None  # This allows our custom coloring
+        )
+        
+        # Color the leaf labels based on their cluster assignment
+        ax = plt.gca()
+        xlbls = ax.get_xmajorticklabels()
+        for lbl in xlbls:
+            lbl.set_color(color_mapping[cluster_assignments[combined_data.columns.get_loc(lbl.get_text())]])
+        
+        title = f'Hierarchical Clustering Dendrogram ({n_clusters} clusters)'
+        if self.model == "grad_set":
+            title = title + "--Full Motion"
+        title = self.cohort_name() + " " + title
+        plt.title(title)
+        plt.xlabel('Feature')
+        plt.ylabel('Distance')
+        plt.xticks(rotation=90)
+        
+        # Add a horizontal line at the cut threshold if using distance criterion
+        if self.elbow is None:
+            plt.axhline(y=max_d, c='k', lw=1, linestyle='dashed')
+        
+        plt.tight_layout()
+        
+        # Add a legend for cluster colors
+        legend_elements = [plt.Line2D([0], [0], color=color, lw=4, label=f'Cluster {cluster}')
+                        for cluster, color in color_mapping.items()]
+        plt.legend(handles=legend_elements, loc='upper right')
+        
+        plt.show()
+        
+        # Create a dictionary mapping features to their cluster assignments
+        feature_cluster_map = dict(zip(combined_data.columns, cluster_assignments))
+        
+        return feature_cluster_map, color_mapping
+    
+    def aggregate_shap_values_2(self, models=TOP_TREE_MODELS, abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+        pred_kit = {}
+        pred_sensor_kit = {}
+        
+        for m in models:
+            pred_kit[m] = self.get_predictor_scores_for_model(m, sort_by_sensor=True, reverse_sensor_order=reverse_order, abs_val=abs_val, non_norm=non_norm)
+            pred_sensor_kit[m] = {}
+            
+            # Collect SHAP values and feature names from all sensors for this model
+            all_shap_values = []
+            all_feature_names = []
+            all_sensor_ids = []
+            
+            
+            for predictor_score in pred_kit[m]:
+                shap_values, feature_names = predictor_score[0][0].get_standardized_shap_values()
+                sensor = predictor_score[-1]
+                all_shap_values.append(shap_values)
+                all_feature_names.extend([f"{sensor.id}_{name}" for name in feature_names])
+                all_sensor_ids.extend([sensor.id] * len(feature_names))
+            
+            # Create a matrix of SHAP values, with NaN for missing features
+            max_features = max(shap.shape[1] for shap in all_shap_values)
+            combined_shap_values = np.full((sum(shap.shape[0] for shap in all_shap_values), max_features), np.nan)
+            row_idx = 0
+            for shap in all_shap_values:
+                combined_shap_values[row_idx:row_idx+shap.shape[0], :shap.shape[1]] = shap
+                row_idx += shap.shape[0]
+            
+            # Impute missing values
+            imputer = SimpleImputer(strategy='mean')
+            imputed_shap_values = imputer.fit_transform(combined_shap_values)
+            
+            # Apply scaling and PCA
+            scaler = StandardScaler()
+            scaled_shap_values = scaler.fit_transform(imputed_shap_values)
+            pca = PCA()
+            pca.fit(scaled_shap_values)
+            
+            # Calculate the cumulative explained variance ratio
+            cumulative_variance_ratio = np.cumsum(pca.explained_variance_ratio_)
+            threshold = 0.95
+            n_components = np.argmax(cumulative_variance_ratio >= threshold) + 1
+            print(f"Number of components for model {m}: {n_components}")
+            print(f"Cumulative explained variance ratio: {cumulative_variance_ratio[n_components - 1]:.2f}")
+            
+            # Apply PCA with the determined number of components
+            pca = PCA(n_components=n_components)
+            transformed_shap_values = pca.fit_transform(scaled_shap_values)
+            
+            # Find the optimal number of clusters
+            c = self.find_optimal_clusters(transformed_shap_values, quick=True)
+            
+            # Apply clustering
+            kmeans = KMeans(n_clusters=c, init='k-means++', max_iter=5000, n_init=500, random_state=42)
+            clusters = kmeans.fit_predict(transformed_shap_values)
+            
+            # Generate dendrogram
+            scaler = StandardScaler()
+            scaled_shap_values = scaler.fit_transform(transformed_shap_values)
+
+            # Create the linkage matrix using a different linkage method if needed
+            linkage_matrix = linkage(scaled_shap_values, method='ward')
+
+            # Set a manual color threshold based on the desired number of clusters
+            # This uses a heuristic by selecting the threshold just above the last `c-1` merges
+            distances = linkage_matrix[:, 2]
+            color_threshold = distances[-c] if len(distances) > c else max(distances) / 2
+
+            # Plot the dendrogram
+            plt.figure(figsize=(30, 12))
+            dendrogram(
+                linkage_matrix,
+                p=int(c),  # Number of clusters to display
+                color_threshold=color_threshold,  # Set the threshold for coloring clusters
+                show_leaf_counts=True,
+                truncate_mode=None  # Show full dendrogram if possible
+            )
+            plt.title(f'Hierarchical Clustering Dendrogram for Model {m}')
+            plt.xlabel('Sample Index')
+            plt.ylabel('Distance')
+            plt.savefig(f'dendrogram_model_{m}.png')
+            plt.close()
+            
+            print(f"Dendrogram saved as dendrogram_model_{m}_{self.model}_{self.cohort_name()}.png with {c} clusters.")
+        
+            
+            # Pair each feature name with its cluster label and sensor ID
+            feature_cluster_pairs = list(zip(all_feature_names, clusters, all_sensor_ids))
+            
+            # Populate pred_sensor_kit
+            for feature, cluster, sensor_id in feature_cluster_pairs:
+                base_feature_name = feature.split('_', 1)[1]  # Remove sensor ID prefix
+                if base_feature_name not in pred_sensor_kit[m]:
+                    pred_sensor_kit[m][base_feature_name] = []
+                pred_sensor_kit[m][base_feature_name].append((sensor_id, cluster))
+        return pred_sensor_kit
+
+    def find_optimal_clusters(self, data, max_clusters=10, quick=False):
+        """
+        Find the optimal number of clusters using the elbow method with silhouette score.
+        
+        :param data: The data to cluster
+        :param max_clusters: The maximum number of clusters to try
+        :param quick: If True, use a faster but less thorough method
+        :return: The optimal number of clusters
+        """
+        if quick:
+            # Use a quicker method with fewer cluster options
+            cluster_range = range(2, min(max_clusters, 6))
+        else:
+            cluster_range = range(2, max_clusters + 1)
+        
+        silhouette_scores = []
+        
+        for n_clusters in cluster_range:
+            kmeans = KMeans(n_clusters=n_clusters, init='k-means++', max_iter=5000, n_init=50, random_state=42)
+            cluster_labels = kmeans.fit_predict(data)
+            silhouette_avg = silhouette_score(data, cluster_labels)
+            silhouette_scores.append(silhouette_avg)
+            
+            print(f"For n_clusters = {n_clusters}, the average silhouette score is {silhouette_avg}")
+        
+        # Find the elbow point
+        differences = np.diff(silhouette_scores)
+        elbow_point = np.argmax(differences) + 2  # Add 2 because we started with 2 clusters
+        self.elbow = elbow_point
+        # Plot the elbow curve
+        plt.figure(figsize=(20, 12))
+        plt.plot(cluster_range, silhouette_scores, 'bo-')
+        plt.xlabel('Number of Clusters')
+        plt.ylabel('Average Silhouette Score')
+        plt.title('Elbow Method for Optimal k')
+        plt.vlines(x=elbow_point, ymin=min(silhouette_scores), ymax=max(silhouette_scores), 
+                colors='r', linestyles='dashed', label=f'Elbow Point: {elbow_point}')
+        plt.legend()
+        # plt.show()
+        
+        return elbow_point
+
     def show_predictor_scores(self, models, abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
+        print("AXIS", axis)
         pred_kit = {}
         for m in models:
             pred_kit[m] = self.get_predictor_scores_for_model(
                 m, sort_by_sensor=True, reverse_sensor_order=reverse_order, abs_val=abs_val, non_norm=non_norm,
             )
-
         items = {}
         sensor_count = {}
         sensor_accuracy = {}
@@ -352,7 +712,8 @@ class MultiPredictor(LegacyBaseModel):
             for model_pred_set in model_pred_sets:
                 ps, acc_score, sensor_obj = model_pred_set
                 sensor_name = sensor_obj.human_name()
-                shap_scores, top_scores, sensors = self.gen_stats([model_pred_set], abs_val=abs_val, non_norm=non_norm, first_model_features=first_features, num_top=NUM_TOP, use_cat=use_cat, axis=axis)
+                print("AXIS 2", axis)
+                shap_scores, top_scores, sensors = self.gen_stats([model_pred_set], abs_val=abs_val, non_norm=non_norm, first_model_features=first_features, num_top=NUM_TOP, use_cat=use_cat, axis=axis, model=model)
                 for i, sensor in enumerate(sensors):
                     if sensor not in items:
                         items[sensor] = shap_scores[i]
@@ -376,30 +737,270 @@ class MultiPredictor(LegacyBaseModel):
         averaged_top_scores = averaged_shap_scores
         averaged_sensors = list(items.keys())
 
-        
-        if include_accuracy:
 
+        if include_accuracy:
             average_vals = list(items.values())
             i = 0
             while i < len(average_vals):
                 averaged_shap_scores[i]['ave_accuracy'] = average_vals[i]['ave_accuracy']
                 i += 1
+        combined_data, distance_matrix, sensor_ids = self.prepare_sensor_data()
+        feature_cluster_map, color_mapping = self.create_dendrogram_with_clusters(combined_data, distance_matrix)
+        import pdb;pdb.set_trace()
+        # self.plot_shapley_over_time_updated(averaged_shap_scores, feature_cluster_map, color_mapping, averaged_sensors)
+        self.plot_shap_scores_by_sensor_and_cluster(combined_data, feature_cluster_map, color_mapping, sensor_accuracy)
+        self.plot_shap_scores_by_sensor_and_cluster(combined_data, feature_cluster_map, color_mapping, sensor_accuracy, normalize=False)
+        # return self.new_plot(averaged_shap_scores, averaged_sensors, feature_cluster_map=feature_cluster_map)
 
-        return self.plot_shap_changes(averaged_shap_scores, averaged_top_scores, averaged_sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=include_accuracy, axis=axis)
+        # return self.plot_shap_changes(averaged_shap_scores, averaged_top_scores, averaged_sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=include_accuracy, axis=axis)
 
-    def get_new_axis(self, abs_val=False, non_norm=True):
-        cluster_assignments, unique_colors = self.linkage_mat(view=False, abs_val=abs_val, non_norm=non_norm)
+    def plot_shap_scores_by_sensor_and_cluster(self, df, feature_cluster_map, color_mapping, sensor_accuracy, normalize=True):
+        print(sensor_accuracy)
+        # Initialize a dictionary to store mean SHAP values by sensor and cluster
+        sensor_cluster_means = {sensor: {cluster: [] for cluster in color_mapping.keys()} for sensor in sensor_accuracy.keys()}
+        
+        # Iterate through the columns and assign SHAP values to the appropriate sensor and cluster
+        for col in df.columns:
+            sensor_id = int(col.split('_')[0])
+            sensor_name = Sensor.get(sensor_id).human_name()  # Replace with the correct method to get sensor names
+            cluster = feature_cluster_map.get(col)
+            if sensor_name in sensor_cluster_means and cluster is not None:
+                sensor_cluster_means[sensor_name][cluster].append(df[col])
+            else:
+                print("NOT FOUND", sensor_name, cluster)
+        
+        # Correct aggregation: Calculate mean SHAP values per sensor and cluster
+        for sensor in sensor_cluster_means:
+            for cluster in sensor_cluster_means[sensor]:
+                if sensor_cluster_means[sensor][cluster]:
+                    # Aggregate correctly by taking the mean of each feature per cluster
+                    sensor_cluster_means[sensor][cluster] = pd.concat(sensor_cluster_means[sensor][cluster], axis=1).mean(axis=1)
+                else:
+                    # If no data for a cluster, fill with NaN
+                    sensor_cluster_means[sensor][cluster] = pd.Series([np.nan] * df.shape[0])
+        
+        # Optional normalization of SHAP values
+        if normalize:
+            for sensor in sensor_cluster_means:
+                for cluster in sensor_cluster_means[sensor]:
+                    max_val = sensor_cluster_means[sensor][cluster].abs().max()
+                    if max_val != 0:
+                        sensor_cluster_means[sensor][cluster] /= max_val
+        
+        # Plotting
+        fig, ax1 = plt.subplots(figsize=(14, 10))
+
+        # Plot SHAP values
+        first_label_shown = {cluster: False for cluster in color_mapping.keys()}  # Track if cluster label has been shown
+        for sensor in sensor_accuracy.keys():
+            for cluster, color in color_mapping.items():
+                y = sensor_cluster_means[sensor][cluster]
+                x = [sensor] * len(y)  # X-axis values (sensor name repeated)
+                # Filter out NaN values to avoid plotting issues
+                mask = ~y.isna()
+                if mask.sum() == 0:  # Skip plotting if all values are NaN
+                    continue
+                ax1.scatter(
+                    np.array(x)[mask],
+                    y[mask],
+                    color=color,
+                    label=f'Cluster {cluster}' if not first_label_shown[cluster] else "",
+                    alpha=0.6
+                )
+                first_label_shown[cluster] = True  # Mark the label as shown
+
+        # Plot accuracy scores on the same axes
+        ax1_2 = ax1.twinx()  # Create a second y-axis sharing the same x-axis
+        sensor_positions = list(sensor_accuracy.keys())
+        accuracy_scores = list(sensor_accuracy.values())
+
+        ax1_2.plot(sensor_positions, accuracy_scores, 'o-', color='green', label='Accuracy', markersize=10, alpha=0.7)
+        ax1_2.set_ylim(0, 1)  # Assuming accuracy scores are between 0 and 1
+
+        # Adjust labels, titles, and legends
+        if normalize:
+            is_norm = "Normalized"
+        else:
+            is_norm = "Non Normalized"
+        title = f"{self.cohort_name()}, Average {is_norm} SHAP Values per Sensor by Cluster--{self.model}"
+        ax1.set_title(title)
+        ax1.set_xlabel('Sensor Position')
+        ax1.set_ylabel('Average SHAP Value')
+        ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right')
+        ax1.grid(True)
+        ax1.legend(title="Clusters", loc='upper left')
+
+        ax1_2.set_ylabel('Accuracy Score')
+        ax1_2.legend(loc='upper right')
+
+        plt.tight_layout()
+        plt.show()
+        plt.savefig(title, dpi=300, bbox_inches='tight')
+    
+    def plot_dendrogram(self, abs_val=False, non_norm=False):
+        # Prepare data for clustering
+        feature_list = []
+        for cluster, features in self.curr_axis.items():
+            feature_list.extend(features)
+        
+        # Create a distance matrix (this is a placeholder, you'll need to replace this with your actual distance calculation)
+        
+        #TODO: Change this to specified abs val non_norm
+        
+        sim_matrix, unique_features = self.sim_matrix(abs_val=abs_val, non_norm=non_norm, model="RandomForest")
+        # Perform hierarchical clustering
+        print(sim_matrix)
+        linkage_matrix = linkage(sim_matrix, method='ward')
+        
+        # Create color map
+        color_mapping = {}
+        cluster_colors = ['#0000FF', '#008000', '#FFA500', '#FF0000']  # Blue, Green, Orange, Red
+        for cluster, features in self.curr_axis.items():
+            color = cluster_colors[int(cluster[1])]  # Assuming clusters are named C0, C1, C2, C3
+            for feature in features:
+                color_mapping[feature] = color
+        
+        # Create a color list for leaves
+        leaf_colors = [color_mapping[feature] for feature in feature_list]
+        
+        # Plot the dendrogram
+        plt.figure(figsize=(10, 7))
+        print(linkage_matrix)
+        print(feature_list)
+        dendrogram(
+            linkage_matrix,
+            labels=feature_list,
+            leaf_rotation=90,
+            leaf_font_size=8,
+            color_threshold=0,
+        )
+        
+        # Color the labels based on their cluster
+        ax = plt.gca()
+        xlbls = ax.get_xmajorticklabels()
+        for lbl in xlbls:
+            lbl.set_color(color_mapping[lbl.get_text()])
+        
+        plt.title("Dendrogram of Clustered Features")
+        plt.xlabel("Features")
+        plt.ylabel("Distance")
+        
+        # Adjust layout and display
+        plt.tight_layout()
+        plt.show()
+
+    def new_plot(self, shap_scores, sensors, normalize_scores=False, feature_cluster_map=None):
+        def convert_feature_cluster_map_to_curr_axis(feature_cluster_map):
+            # Initialize the curr_axis dictionary
+            curr_axis = {'C1': [], 'C2': [], 'C3': [], 'C4': []}
+            
+            # Iterate through the feature_cluster_map
+            for feature, cluster in feature_cluster_map.items():
+                # Remove the sensor number and 'grad_data__' prefix
+                cleaned_feature = feature.split('_', 1)[1].replace('grad_data__', '')
+                
+                # Add the cleaned feature name to the appropriate cluster list
+                curr_axis[f'C{cluster}'].append(cleaned_feature)
+            
+            # Sort the features in each cluster
+            for cluster in curr_axis:
+                curr_axis[cluster].sort()
+            
+            return curr_axis
+        if feature_cluster_map is not None:
+            curr_axis = convert_feature_cluster_map_to_curr_axis(feature_cluster_map)
+        else:
+            curr_axis = self.curr_axis
+        # Generate color mapping from self.curr_axis
+        color_mapping = {}
+        cluster_colors = ['#0000FF', '#008000', '#FFA500', '#FF0000']  # Blue, Green, Orange, Red
+        for cluster, features in curr_axis.items():
+            color = cluster_colors[int(cluster[1])]  # Assuming clusters are named C0, C1, C2, C3
+            for feature in features:
+                color_mapping[feature] = color
+        
+        # Initialize data structures
+        color_shap_scores = defaultdict(lambda: defaultdict(float))
+        sensor_accuracies = []
+        
+        # Process SHAP scores
+        for i, sensor_score_set in enumerate(shap_scores):
+            sensor = sensors[i]
+            sensor_accuracies.append(sensor_score_set['ave_accuracy'])
+            
+            # Remove keys with 0 SHAP values and 'ave_accuracy'
+            sensor_score_set_non_zero_features = {k: v for k, v in sensor_score_set.items() if v != 0 and k != 'ave_accuracy'}
+            
+            for feature, shap_value in sensor_score_set_non_zero_features.items():
+                feature_color = color_mapping.get(feature)
+                if feature_color:
+                    color_shap_scores[feature_color][sensor] += shap_value
+        
+        # Normalize scores if required
+        if normalize_scores:
+            for color in color_shap_scores:
+                max_score = max(color_shap_scores[color].values(c))
+                for sensor in color_shap_scores[color]:
+                    color_shap_scores[color][sensor] /= max_score if max_score != 0 else 1
+        
+        # Prepare data for plotting
+        colors = list(color_shap_scores.keys())
+        x = np.arange(len(sensors))
+        
+        # Create plot
+        fig, ax1 = plt.subplots(figsize=(20, 10))
+        ax2 = ax1.twinx()
+        
+        # Plot SHAP scores and find max SHAP value
+        max_shap = 0
+        for i, color in enumerate(colors):
+            scores = [color_shap_scores[color][sensor] for sensor in sensors]
+            max_shap = max(max_shap, max(scores))
+            ax1.plot(x, scores, marker='o', linestyle='-', color=color, label=f'Cluster {i+1}')
+        
+        # Plot accuracies
+        ax2.plot(x, sensor_accuracies, 'r--', marker='x', label='ave_accuracy')
+        
+        # Set labels and title
+        ax1.set_xlabel('Sensor Location')
+        ax1.set_ylabel('SHAP Value (Average Accuracy)')
+        ax2.set_ylabel('Average Accuracy')
+        ax1.set_title("Axis Block Categories' SHAP Values Across Sensors (Average Accuracy)")
+        
+        # Set x-axis ticks
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(sensors, rotation=45, ha='right')
+        
+        # Add legends
+        ax1.legend(loc='upper left')
+        ax2.legend(loc='upper right')
+        
+        # Set y-axis limits
+        ax1.set_ylim(0, max_shap * 1.1)  # Add 10% padding to the top
+        min_accuracy = min(sensor_accuracies)
+        max_accuracy = max(sensor_accuracies)
+        ax2.set_ylim(0, 1)  # Add some padding
+        
+        # Add grid
+        ax1.grid(True, linestyle='--', alpha=0.7)
+        
+        plt.tight_layout()
+        plt.show()
+
+
+    def get_new_axis(self, model=None, abs_val=False, non_norm=True):
+        cluster_assignments, unique_colors = self.linkage_mat(view=False, abs_val=abs_val, non_norm=non_norm, model=model, save=True)
+
         self.unique_colors = unique_colors
         
         reversed_assignments = {}
         for feature, cluster in cluster_assignments.items():
-        
             if cluster not in reversed_assignments:
                 reversed_assignments[cluster] = []
             reversed_assignments[cluster].append(feature)
         return reversed_assignments
 
-    def gen_stats(self, model_pred_set, abs_val=False, non_norm=True, first_model_features=None, num_top=NUM_TOP, use_cat=False, axis=False):
+    def gen_stats(self, model_pred_set, abs_val=False, non_norm=True, first_model_features=None, num_top=NUM_TOP, use_cat=False, axis=False, model=None):
         shap_scores = []
         top_scores = []
         sensors = []
@@ -420,61 +1021,116 @@ class MultiPredictor(LegacyBaseModel):
             else:
                 current_top_features = current_model_pred_set[0].get_top_n_features(num_top)
                 current_shap_scores = current_model_pred_set[0].get_shap_values_for_features(current_top_features)
-
+            
+            print("AXIS 3", axis)
             if use_cat is True:
                 if axis is True:
-                    if self.curr_axis is None:
-                        axis = self.get_new_axis(abs_val=abs_val, non_norm=non_norm)
+                    if self.curr_axis is None or self.curr_axis is (None,):
+                        axis = self.get_new_axis(model=model, abs_val=abs_val, non_norm=non_norm)
                         self.curr_axis = axis
                     else:
                         axis = self.curr_axis
+                
                 print(axis)
                 print(current_shap_scores, axis)
                 aggregate_shap_values = current_model_pred_set[0].aggregate_shap_values_by_category(current_shap_scores, axis)
                 normalized_shap_values = current_model_pred_set[0].normalize_shap_values(aggregate_shap_values)
-                current_shap_scores = normalized_shap_values
+                # current_shap_scores = normalized_shap_values
 
             shap_scores.append(current_shap_scores)
             top_scores.append(current_shap_scores)
             sensors.append(snr.human_name())
         return [shap_scores, top_scores, sensors]
-
-
-    def plot_shap_changes(self, shap_scores, top_scores, sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=False, axis=False):
-        plt.figure(figsize=(12, 8))
-
-        for feature, color in self.unique_colors.items():
-            print("FEATURE", feature, "COLOR", color)
-            shap_values = [score.get(feature, 0) for score in shap_scores]
-            if percentage_of_average is True:
-                import pdb;pd
-                averages = [sum(score.values()) / len(score) for score in shap_scores]
-                shap_values = [100 * val / avg if avg != 0 else 0 for val, avg in zip(shap_values, averages)]
-            
-            plt.plot(sensors, shap_values, label=feature, color=color, marker='o', linestyle='-')
-
-        # Optionally plot 'ave_accuracy' if requested
-        if include_accuracy is True:
-            accuracy_values = [score.get("ave_accuracy", 0) for score in shap_scores]
-            plt.plot(sensors, accuracy_values, label='ave_accuracy', color='red', marker='x', linestyle='--', linewidth=2)
-
-        if axis:
-            category = "Axis"
-        else:
-            category = "Feature"
-
-        desc = Task.get(self.task_id).description.split('_')
     
-        task_title = category + " " + desc[0]
-        plt.title(task_title + " Categories' SHAP Values Across Sensors" + (" (Average Accuracy) " if include_accuracy else ""))
-        plt.xlabel("Sensor Location")
-        plt.ylabel("SHAP Value (Average Accurax`cy)" + (" (% of Average)" if percentage_of_average else ""))
-        # plt.xticks(rotation=45)
-        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
-        plt.ylim(0, 1.4)
-        plt.tight_layout()
-        plt.grid(True)
-        plt.show()
+    import numpy as np
+    from scipy.cluster.hierarchy import linkage, fcluster
+    import matplotlib.pyplot as plt
+    from matplotlib import colors as mcolors
+
+    # def generate_color_mapping(self, shap_scores):
+    #     """
+    #     Generate a color mapping for features based on SHAP scores.
+        
+    #     Parameters:
+    #     shap_scores (list of dict): List of dictionaries containing SHAP scores for each feature
+        
+    #     Returns:
+    #     dict: Mapping of features to their assigned colors
+    #     """
+    #     # Extract unique features (excluding 'ave_accuracy')
+    #     unique_features = list(set(key for score in shap_scores for key in score.keys() if key != 'ave_accuracy'))
+        
+    #     # Create a similarity matrix based on SHAP score patterns
+    #     sim_matrix = np.zeros((len(unique_features), len(unique_features)))
+    #     for i, feature1 in enumerate(unique_features):
+    #         for j, feature2 in enumerate(unique_features):
+    #             if i != j:
+    #                 corr = np.corrcoef([score.get(feature1, 0) for score in shap_scores],
+    #                                 [score.get(feature2, 0) for score in shap_scores])[0, 1]
+    #                 sim_matrix[i, j] = sim_matrix[j, i] = abs(corr)  # Use absolute correlation as similarity
+        
+    #     # Generate the linkage matrix
+    #     Z = linkage(1 - sim_matrix, 'ward')  # Use 1-similarity as distance
+        
+    #     # Find the optimal color threshold based on the largest difference in heights
+    #     heights = Z[:, 2]
+    #     diffs = np.diff(heights)
+    #     color_threshold = heights[np.argmax(diffs)]
+        
+    #     # Perform the clustering
+    #     cluster_labels = fcluster(Z, color_threshold, criterion='distance')
+        
+    #     # Generate a color for each unique cluster
+    #     unique_clusters = np.unique(cluster_labels)
+    #     color_palette = plt.cm.rainbow(np.linspace(0, 1, len(unique_clusters)))
+    #     cluster_colors = {cluster: mcolors.to_hex(color) 
+    #                     for cluster, color in zip(unique_clusters, color_palette)}
+        
+    #     # Create the feature to color mapping
+    #     unique_colors = {feature: cluster_colors[cluster] 
+    #                     for feature, cluster in zip(unique_features, cluster_labels)}
+        
+    #     return unique_colors
+
+
+
+    # def plot_shap_changes(self, shap_scores, top_scores, sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=False, axis=False):
+    #     plt.figure(figsize=(12, 8))
+        
+    #     self.unique_colors = self.generate_color_mapping(shap_scores)
+    #     import pdb;pdb.set_trace()
+    #     for feature, color in self.unique_colors.items():
+    #         print("FEATURE", feature, "COLOR", color)
+    #         shap_values = [score.get(feature, 0) for score in shap_scores]
+    #         if percentage_of_average is True:
+    #             averages = [sum(score.values()) / len(score) for score in shap_scores]
+    #             shap_values = [100 * val / avg if avg != 0 else 0 for val, avg in zip(shap_values, averages)]
+            
+    #         plt.plot(sensors, shap_values, label=feature, color=color, marker='o', linestyle='-')
+
+    #     # Optionally plot 'ave_accuracy' if requested
+    #     import pdb;pdb.set_trace()
+    #     if include_accuracy is True:
+    #         accuracy_values = [score.get("ave_accuracy", 0) for score in shap_scores]
+    #         plt.plot(sensors, accuracy_values, label='ave_accuracy', color='red', marker='x', linestyle='--', linewidth=2)
+
+    #     if axis:
+    #         category = "Axis"
+    #     else:
+    #         category = "Feature"
+
+    #     desc = Task.get(self.task_id).description.split('_')
+    
+    #     task_title = category + " " + desc[0]
+    #     plt.title(task_title + " Categories' SHAP Values Across Sensors" + (" (Average Accuracy) " if include_accuracy else ""))
+    #     plt.xlabel("Sensor Location")
+    #     plt.ylabel("SHAP Value (Average Accuracy)" + (" (% of Average)" if percentage_of_average else ""))
+    #     # plt.xticks(rotation=45)
+    #     plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    #     plt.ylim(0, 1.4)
+    #     plt.tight_layout()
+    #     plt.grid(True)
+    #     plt.show()
 
     def get_shap_values_from_scores(self, model_name):
         ps = self.get_predictor_scores_for_model(model_name)
@@ -508,7 +1164,7 @@ class MultiPredictor(LegacyBaseModel):
         for sensor in curr_sensors:
             if sensor.name != "relbm_x":
                 predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-                
+                # TODO: Stephen, remove after finishing this round.
                 if predictor.updated_at is not None:
                     # Adjust the format string to match the actual format
                     predictor_updated_at = datetime.strptime(predictor.updated_at, '%Y-%m-%d %H:%M:%S.%f')
@@ -779,7 +1435,8 @@ class MultiPredictor(LegacyBaseModel):
             print(preds)
             print("Training for sensor:", Sensor.get(combo_sensor_id).name)
             new_pred = Predictor.find_or_create(task_id=self.task_id, sensor_id=combo_sensor_id, multi_predictor_id=new_mp.id, cohort_id=self.cohort_id)
-
+            #TODO Stephen remove this after finishing cp trials
+            
             if norm_predictors:
                 new_mp.combo_train(preds[0], preds[1], new_pred, norm_pred=preds[2], get_sg_count=get_sg_count, force_load=force_load)
             else:

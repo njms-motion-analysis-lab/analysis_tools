@@ -1,7 +1,7 @@
 import csv
 from datetime import datetime
 from importlib import import_module
-import plotly.offline as py
+# import plotly.offline as py
 import os
 from types import NoneType
 from typing import List
@@ -306,6 +306,42 @@ class Task(LegacyBaseModel):
         # Import for debugging if needed
         
         return mean_df
+    
+    def correct_aggregated_stats(self, sensor_name, aggregated_stats):
+        """
+        Ensure that the row names (index) of the aggregated stats Series begin with the correct sensor name.
+
+        Parameters:
+        sensor_name (str): The correct sensor name that should prefix each row name.
+        aggregated_stats (pd.Series): The Series containing aggregated stats with potentially incorrect row names.
+
+        Returns:
+        pd.Series: A Series with corrected row names if needed.
+        """
+        # Check if the Series is empty
+        if aggregated_stats.empty:
+            print("Aggregated stats are empty, no correction needed.")
+            return aggregated_stats
+
+        # Check if correction is needed by inspecting the first row name
+        first_row_name = aggregated_stats.index[0]
+        current_prefix = first_row_name.split('__', 1)[0]
+        
+        if current_prefix == sensor_name:
+            # No correction needed
+            return aggregated_stats
+        
+        # If correction is needed, apply it to all row names
+        corrected_index = []
+        for row_name in aggregated_stats.index:
+            parts = row_name.split('__', 1)
+            suffix = parts[1] if len(parts) > 1 else ""
+            corrected_index.append(f"{sensor_name}__{suffix}")
+        
+        # Update the Series index with the corrected names
+        aggregated_stats.index = corrected_index
+        
+        return aggregated_stats
 
     def full_gradient_set_stats_by_task_and_cohort(self, sensor, cohort=None, get_agg_sub_stat=False, loc=False):
         if cohort is None:
@@ -315,10 +351,11 @@ class Task(LegacyBaseModel):
 
         gradient_sets = self.get_side_stats(sensor, cohort_id=cohort_id)
         combined_series = []
-
+        
         for gradient_set in gradient_sets:
             if get_agg_sub_stat:
-                aggregated_stats = gradient_set.get_aggregated_stats()
+                aggregated_stats = gradient_set.get_aggregate_normalized_stats().T
+                aggregated_stats - self.correct_aggregated_stats(sensor.name, aggregated_stats)
             else:
                 aggregated_stats = gradient_set.get_set_stats_norm().T
     
@@ -468,104 +505,104 @@ class Task(LegacyBaseModel):
             labels.append(sensor.name)
         return MultiPlotter(ns).create_combined_box_plot_py(labels=labels,title=f"Task: {self.description}, TS index: {loc},")
 
-    def plot_and_save_all(self):
-        ignore = [
-            'grad_data__has_duplicate_max',
-            'grad_data__has_duplicate_min',
-            'grad_data__has_duplicate',
-            'grad_data__sum_values',
-        ]
-        statistics_list = [
-            'grad_data__mean',
-            'grad_data__length',
-            'grad_data__abs_energy',
-            'grad_data__mean_abs_change',
-            'grad_data__mean_change',
-            'grad_data__mean_second_derivative_central',
-            'grad_data__median',
-            'grad_data__standard_deviation',
-            'grad_data__variation_coefficient',
-            'grad_data__variance',
-            'grad_data__skewness',
-            'grad_data__kurtosis',
-            'grad_data__root_mean_square',
-            'grad_data__absolute_sum_of_changes',
-            'grad_data__longest_strike_below_mean',
-            'grad_data__longest_strike_above_mean',
-            'grad_data__count_above_mean',
-            'grad_data__count_below_mean',
-            'grad_data__last_location_of_maximum',
-            'grad_data__first_location_of_maximum',
-            'grad_data__last_location_of_minimum',
-            'grad_data__first_location_of_minimum',
-        ]
+    # def plot_and_save_all(self):
+    #     ignore = [
+    #         'grad_data__has_duplicate_max',
+    #         'grad_data__has_duplicate_min',
+    #         'grad_data__has_duplicate',
+    #         'grad_data__sum_values',
+    #     ]
+    #     statistics_list = [
+    #         'grad_data__mean',
+    #         'grad_data__length',
+    #         'grad_data__abs_energy',
+    #         'grad_data__mean_abs_change',
+    #         'grad_data__mean_change',
+    #         'grad_data__mean_second_derivative_central',
+    #         'grad_data__median',
+    #         'grad_data__standard_deviation',
+    #         'grad_data__variation_coefficient',
+    #         'grad_data__variance',
+    #         'grad_data__skewness',
+    #         'grad_data__kurtosis',
+    #         'grad_data__root_mean_square',
+    #         'grad_data__absolute_sum_of_changes',
+    #         'grad_data__longest_strike_below_mean',
+    #         'grad_data__longest_strike_above_mean',
+    #         'grad_data__count_above_mean',
+    #         'grad_data__count_below_mean',
+    #         'grad_data__last_location_of_maximum',
+    #         'grad_data__first_location_of_maximum',
+    #         'grad_data__last_location_of_minimum',
+    #         'grad_data__first_location_of_minimum',
+    #     ]
 
-        # Get the current date and time
-        now = datetime.now()
-        datetime_str = now.strftime("%Y%m%d_%H%M%S")
+    #     # Get the current date and time
+    #     now = datetime.now()
+    #     datetime_str = now.strftime("%Y%m%d_%H%M%S")
 
-        # Define the existing directory name
-        existing_dir = "generated_plots"
+    #     # Define the existing directory name
+    #     existing_dir = "generated_plots"
 
-        # Create a new directory under the existing directory
-        dir_name = f"{self.description}_{datetime_str}_combined_plots"
-        full_dir_path = os.path.join(existing_dir, dir_name)
-        os.makedirs(full_dir_path, exist_ok=True)
+    #     # Create a new directory under the existing directory
+    #     dir_name = f"{self.description}_{datetime_str}_combined_plots"
+    #     full_dir_path = os.path.join(existing_dir, dir_name)
+    #     os.makedirs(full_dir_path, exist_ok=True)
         
-        from importlib import import_module
-        Sensor = import_module("models.legacy_sensor").Sensor
+    #     from importlib import import_module
+    #     Sensor = import_module("models.legacy_sensor").Sensor
 
-        sensors = [
-            "rwra_x",
-            "rwrb_x",
-            "rwra_y",
-            "rwrb_y",
-            "rwra_z",
-            "rwrb_z",
-            "rfrm_x",
-            "rfrm_y",
-            "rfrm_z",
-            "relb_x",
-            "relbm_x",
-            "relb_y",
-            "relbm_y",
-            "relb_z",
-            "relbm_z",
-            "rupa_x",
-            "rupa_y",
-            "rupa_z",
-            "rsho_x",
-            "rsho_y",
-            "rsho_z",
-            "rwra_x",
-            "rwrb_x",
-            "rwra_y",
-            "rwrb_y",
-            "rwra_z",
-            "rwrb_z",
-            'rfhd_x', 
-            'rfhd_y', 
-            'rfhd_z',  
-            'rbhd_x', 
-            'rbhd_y', 
-            'rbhd_z',
-            'rfin_x', 
-            'rfin_y', 
-            'rfin_z',
-        ]
+    #     sensors = [
+    #         "rwra_x",
+    #         "rwrb_x",
+    #         "rwra_y",
+    #         "rwrb_y",
+    #         "rwra_z",
+    #         "rwrb_z",
+    #         "rfrm_x",
+    #         "rfrm_y",
+    #         "rfrm_z",
+    #         "relb_x",
+    #         "relbm_x",
+    #         "relb_y",
+    #         "relbm_y",
+    #         "relb_z",
+    #         "relbm_z",
+    #         "rupa_x",
+    #         "rupa_y",
+    #         "rupa_z",
+    #         "rsho_x",
+    #         "rsho_y",
+    #         "rsho_z",
+    #         "rwra_x",
+    #         "rwrb_x",
+    #         "rwra_y",
+    #         "rwrb_y",
+    #         "rwra_z",
+    #         "rwrb_z",
+    #         'rfhd_x', 
+    #         'rfhd_y', 
+    #         'rfhd_z',  
+    #         'rbhd_x', 
+    #         'rbhd_y', 
+    #         'rbhd_z',
+    #         'rfin_x', 
+    #         'rfin_y', 
+    #         'rfin_z',
+    #     ]
         
-        sensors = Sensor.where(name=names)
+    #     sensors = Sensor.where(name=names)
 
-        for stat in statistics_list:
-            print(f"Processing: {stat}")
-            plot = self.plot_combined_stats(sensors, loc=stat)
+    #     for stat in statistics_list:
+    #         print(f"Processing: {stat}")
+    #         plot = self.plot_combined_stats(sensors, loc=stat)
 
-            # You can change this filename format as you need
-            filename = os.path.join(full_dir_path, f"BoxPlot_{self.description}_{stat}.html")
+    #         # You can change this filename format as you need
+    #         filename = os.path.join(full_dir_path, f"BoxPlot_{self.description}_{stat}.html")
 
-            # Save the plot as an HTML file
-            py.plot(plot, filename=filename, auto_open=False)
-        print("done!")
+    #         # Save the plot as an HTML file
+    #         py.plot(plot, filename=filename, auto_open=False)
+    #     print("done!")
 
     def sensor_translation(self, sensor_name, min=False, axis=False):
         translation_dict = {
@@ -574,7 +611,7 @@ class Task(LegacyBaseModel):
             'wra': 'Wrist Sensor A',
             'wrb': 'Wrist Sensor B',
             'frm': 'Forearm',
-            'bhd': 'Back of Hand',
+            'bhd': 'Back of Head',
             'fin': 'Finger',
             'sho': 'Shoulder',
             'elb': 'Elbow',

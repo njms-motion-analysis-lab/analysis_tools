@@ -245,6 +245,21 @@ class GradientSet(LegacyBaseModel):
             self.update(**stats_to_update)
         
         print("DONE")
+
+    def fix_reg_sub_stats(self, force=False):
+        if self.aggregated_stats is None or force:
+            print("fixing non norm")
+            self.set_aggregate_non_norm_stats()
+        
+        if self.normalized is None or force:
+            print("fixing norm")
+            self.set_aggregate_normalized_stats()
+        
+        if self.abs_val is None or force:
+            print("fixing abs")
+            self.set_aggregate_abs_val_stats()
+
+        print("DONE")
     
     def get_non_norm_set_stats(self):
         obj = pickle.loads(self.set_stats_non_norm)
@@ -389,7 +404,7 @@ class GradientSet(LegacyBaseModel):
 
         return created_sg
 
-    def calc_aggregate_stats(self, abs_val=False, non_normed=False, mv=True, save_attr=False):
+    def calc_aggregate_stats(self, abs_val=False, non_normed=False, mv=True, save_attr=False, set_only=False):
         sub_stats_all = pd.DataFrame()
         subgrads = self.sub_gradients()
         normalized = not non_normed
@@ -401,22 +416,40 @@ class GradientSet(LegacyBaseModel):
         # for each stat type in the submovement stats, calculate aggregate stat for the whole trial
         stats = pd.DataFrame()
         for colname, colvalues in sub_stats_all.items():
-            aggregate = {"mean": np.mean(colvalues), "median": np.median(colvalues)}
+            aggregate = {"mean": np.mean(colvalues)}
             stats = pd.concat([stats, pd.DataFrame([aggregate], index=[colname])])
 
         if save_attr:
-            if normalized:
+            if normalized and not abs_val:
+                print("updating norm...")
                 self.update(normalized=pickle.dumps(stats))
-            elif abs_val is False:
+            elif abs_val is False and not normalized:
+                print("updating non_norm...")
                 self.update(aggregated_stats=pickle.dumps(stats))
-            else:
+            elif abs_val is True:
+                print("updating abs_val...")
                 self.update(abs_val=pickle.dumps(stats))
+            else:
+                print("need to update")
+            if set_only:
+                return
 
         if mv:
             return memoryview(pickle.dumps(stats))
         else:
             return stats
 
+    def set_aggregate_normalized_stats(self):
+        self.calc_aggregate_stats(non_normed=False, abs_val=False, mv=False, save_attr=True, set_only=True)
+        print("set norm for gs", self.id)
+
+    def set_aggregate_abs_val_stats(self):
+        self.calc_aggregate_stats(non_normed=True, abs_val=True, mv=False, save_attr=True, set_only=True)
+        print("set abs val for gs", self.id)
+
+    def set_aggregate_non_norm_stats(self):
+        self.calc_aggregate_stats(non_normed=True, abs_val=False, save_attr=True, set_only=True)
+        print("set non norm for gs", self.id)
 
     def get_aggregate_normalized_stats(self):
         if self.normalized is None:
@@ -436,7 +469,6 @@ class GradientSet(LegacyBaseModel):
 
     def get_aggregate_non_norm_stats(self, abs_val=False, non_normed=True, mv=True):
         ags = self.calc_aggregate_stats(abs_val=abs_val, non_normed=non_normed, mv=mv)
-
 
         return ags
 

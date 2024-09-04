@@ -5,26 +5,26 @@ import re
 # indiv features might be too much detail
 # ave features by sensor
 # Dictionary to hold the regex patterns for each category
-# FEATURE_CATEGORY_PATTERNS = {
-#     'energy_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks'],
-#     'statistical': [
-#         'absolute_maximum', 'count_above_mean', 'count_below_mean', 'mean', 'median', 'quantile', 
-#         'skewness', 'kurtosis', 'standard_deviation', 'variance', 'sum_values', 'symmetry_looking',
-#         'ar_coefficient', 'count_above', 'first_location_of_maximum', 'last_location_of_minimum',
-#         'last_location_of_maximum','first_location_of_minimum','range_count', 'ratio_beyond_r_sigma', 
-#         'sample_entropy', 'variation_coefficient', 'benford_correlation'
-#     ],
-#     'autocorrelation': ['agg_autocorrelation', 'autocorrelation', 'partial_autocorrelation'],
-#     'trend_based': [
-#         'agg_linear_trend', 'linear_trend', 'time_reversal_asymmetry_statistic', 'friedrich_coefficients'
-#     ],
-#     'frequency_based': ['fft_aggregated', 'fft_coefficient', 'freq', 'spkt_welch_density', 'fft'],
-#     'wavelet_based': ['cwt_coefficients', 'wavelet', 'cwt'],
-#     'complexity_measures': ['approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
-#     # 'nonlinearity_measures': ['c3'],
-#     # 'peak_features': ['number_cwt_peaks', 'number_peaks'],
-#     # Add more categories and patterns as needed
-# }
+FEATURE_CATEGORY_PATTERNS = {
+    'energy_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks'],
+    'statistical': [
+        'absolute_maximum', 'count_above_mean', 'count_below_mean', 'mean', 'median', 'quantile', 
+        'skewness', 'kurtosis', 'standard_deviation', 'variance', 'sum_values', 'symmetry_looking',
+        'ar_coefficient', 'count_above', 'first_location_of_maximum', 'last_location_of_minimum',
+        'last_location_of_maximum','first_location_of_minimum','range_count', 'ratio_beyond_r_sigma', 
+        'sample_entropy', 'variation_coefficient', 'benford_correlation'
+    ],
+    'autocorrelation': ['agg_autocorrelation', 'autocorrelation', 'partial_autocorrelation'],
+    'trend_based': [
+        'agg_linear_trend', 'linear_trend', 'time_reversal_asymmetry_statistic', 'friedrich_coefficients'
+    ],
+    'frequency_based': ['fft_aggregated', 'fft_coefficient', 'freq', 'spkt_welch_density', 'fft'],
+    'wavelet_based': ['cwt_coefficients', 'wavelet', 'cwt'],
+    'complexity_measures': ['approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
+    # 'nonlinearity_measures': ['c3'],
+    # 'peak_features': ['number_cwt_peaks', 'number_peaks'],
+    # Add more categories and patterns as needed
+}
 
 FEATURE_CATEGORY_PATTERNS = {
     'energy_and_complexity_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks', 'approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
@@ -889,31 +889,31 @@ def remove_first_int(s):
     return re.sub(r'(\d+)', '', s, count=1)
 
 
-def categorize_feature(beeswarm_name, axis=False, reverse_pattern=None):
+def categorize_feature(beeswarm_name, axis=None, reverse_pattern=None):
     """
-    This function categorizes a feature based on its name using predefined regex patterns.
+    Categorizes a feature based on its name using predefined regex patterns.
     
-    :param beeswarm_name: The feature name, typically output of beeswarm_name function.
+    :param beeswarm_name: The feature name.
+    :param axis: A dictionary of categories with lists of patterns to match against.
     :return: The category of the feature.
     """
     # Ensure beeswarm_name is a string
     beeswarm_name = str(beeswarm_name)
     
-    if axis is not None:
-        cat_pat = axis
-    else:
-        cat_pat = FEATURE_CATEGORY_PATTERNS
-
+    # If axis is provided, use it as the category patterns; otherwise, use default FEATURE_CATEGORY_PATTERNS
+    cat_pat = axis if axis is not None else FEATURE_CATEGORY_PATTERNS
+    # Iterate over each category and its list of patterns
     for category, patterns in cat_pat.items():
-        # Check if the feature name matches any of the patterns for the current category
+        # Iterate through each pattern in the current category
         for pattern in patterns:
-            # We use re.escape to handle any special characters that may be in the feature name
-            if re.search(re.escape(pattern), beeswarm_name, re.IGNORECASE):
+            # Remove trailing underscores followed by digits (_0, _1, etc.) from the pattern
+            normalized_pattern = re.sub(r'_\d+$', '', pattern)
+
+            # Check if the normalized pattern matches the beeswarm name
+            if re.search(re.escape(normalized_pattern), beeswarm_name, re.IGNORECASE):
                 return category
-    prefix = "grad_data__"
-    if beeswarm_name.startswith(prefix):
-        beeswarm_name = beeswarm_name[len(prefix):]
-    # return remove_first_int(beeswarm_name)
+
+    # If no match is found, categorize as "other"
     return "other"
 
     

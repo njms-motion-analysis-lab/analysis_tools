@@ -80,7 +80,16 @@ class Sensor(LegacyBaseModel):
         return self.where(name=new_names)
     
     def human_name(self):
-        return PART_NAME[self.part]
+        pn = PART_NAME[self.part]
+        if pn == "Wrist":
+            if self.name[3] == 'b':
+                return "Lateral Wrist"
+            elif self.name[3] == 'a':
+                return "Medial Wrist"
+            else:
+                return pn
+        else:
+            return pn
 
     @classmethod
     def delete_all(cls):

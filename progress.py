@@ -1,4 +1,5 @@
 from asyncio import Task
+import os
 from models.legacy_gradient_set import GradientSet
 from models.legacy_patient import Patient
 from models.legacy_patient_task import PatientTask
@@ -32,20 +33,41 @@ class Progress:
             if pt_tasks:
                 seen = {}
                 pt_trial_count = len(pt.trials())
-                import pdb;pdb.set_trace()
                 print(pt.name, "num tasks:", len(pt_tasks), ", num trials:", pt_trial_count)
                 trials = PatientTask.sort_by(pt.trials(),'name')
                 for trial in trials:
-
                     gss = GradientSet.where(trial_id=trial.id)
                     if len(gss) != 0:
+                        
                         counts = 0
+                        normalized = 0
+                        abs_val = 0
+                        ss_counts = 0
+                        ss_normalized = 0
+                        ss_abs_val = 0
                         for gs in gss:
+                            # print(gs.updated_at)
+                            # gs.fix_reg_sub_stats(force=True)
                             if gs.aggregated_stats != None:
                                 counts += 1
-                        
+                            if gs.normalized != None:
+                                normalized += 1
+                            if gs.abs_val != None:
+                                abs_val += 1
+                            
+                            if gs.set_stats_non_norm != None:
+                                ss_counts += 1
+                            if gs.set_stats_norm != None:
+                                ss_normalized += 1
+                            if gs.set_stats_abs != None:
+                                ss_abs_val += 1
                         agg_stats = counts
+                        agg_normalized = normalized
+                        agg_abs_val = abs_val
 
+                        agg_ss_stats = ss_counts
+                        agg_ss_normalized = ss_normalized
+                        agg_ss_abs_val = ss_abs_val
                     else:
                         print("ZERO")
                         agg_stats = 0
@@ -60,45 +82,47 @@ class Progress:
 
                     # else:
                     d_agg_stats = 0
+                    issue = ""
                     if trial.name in seen:
+                        issue = issue + " SEEN "
                         st = seen[trial.name]
                         zss = GradientSet.where(trial_id=st.id)
-                        print("                 ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+                        # print(issue, trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats, "num nomalized:", agg_normalized)
                         # st.delete_with_kids()
                         # if len(gss) == 0:
                         #     trial.delete_with_kids()
                         # trial.delete_self_and_children()
-                    extras = []
+                        extras = []
                     if agg_stats != 0:
                         tk = Task.get(PatientTask.where(id=trial.patient_task_id)[0].task_id)
+                        
                         if agg_stats != 60:
-                            print("         ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+                            issue = issue + " STATS NUM "
+                            # print("         ", trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
 
-                        
-            
-
-                        # if trial.task().description[0].lower() != trial.name[0].lower():
-                        #     print("           ", trial.task().description[0].lower(), trial.name[0].lower())
-                        #     print("           ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.updated_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)    
-                        #     trial.delete_self_and_children()
-                        #     new_num = trial.trial_num - 1
-                        #     trial.update(trial_num=new_num)
-                        
-                        elif(abs(len(trial.name) - len(tk.description))) > 1:
-                            pass
+                        if(abs(len(trial.name) - len(tk.description))) > 1:
+                            issue = issue + " MISMATCH "
                             # print("      ", abs(len(trial.name) - len(tk.description)))
-                            # print("         ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+                            # print("         ", trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
                             # trial.delete_self_and_children()
-                        elif int(trial.name[-1]) != trial.trial_num + 1:
-                            pass
+                        if int(trial.name[-1]) != trial.trial_num + 1:
+                            issue = issue + " NUMBER"
                             # print("      ", trial.name[-1].lower(), trial.trial_num)
-                            # print("          ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)    
+                            # print("          ", trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)    
                             # trial.delete_self_and_children()
+                            
+                        if tk.id == 1 or tk.id == 2:
+                            # print(issue, trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num, "num gradients:", len(gss), "num aggregate stats:", agg_stats,"normalized:", agg_normalized, "abs_val", agg_abs_val, "ss_stats", agg_ss_stats,"ss_normalized:", agg_ss_normalized, "ss_abs_val", agg_ss_abs_val)
+                            pass
                         else:
-                            print("      ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+                            print(issue, trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num, "num gradients:", len(gss), "num aggregate stats:", agg_stats,"normalized:", agg_normalized, "abs_val", agg_abs_val, "ss_stats", agg_ss_stats,"ss_normalized:", agg_ss_normalized, "ss_abs_val", agg_ss_abs_val)
+                        
+                        # if (issue == " STATS NUM  NUMBER"):
+                        #     print(issue, trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num, "num gradients:", len(gss), "num aggregate stats:", agg_stats,"normalized:", agg_normalized, "abs_val", agg_abs_val, "ss_stats", agg_ss_stats,"ss_normalized:", agg_ss_normalized, "ss_abs_val", agg_ss_abs_val)
+                        #     # trial.delete_self_and_children()
                     else:
-
-                        print("      ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+                        issue = issue + " zero "
+                        # print(issue, trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num, "num gradients:", len(gss), "num aggregate stats:", agg_stats,"normalized:", agg_normalized, "abs_val", agg_abs_val)
                         # trial.delete_self_and_children()
                         zeros.append(trial)
                     seen[trial.name] = trial
@@ -111,7 +135,7 @@ class Progress:
         print("ZZZZ")
         print(seen)
         for trial in zeros:
-            print("         ", trial.name,"id:", trial.id,   "trial_pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.created_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
+            print("         ", trial.name,"id:", trial.id,   "pt_id:", trial.patient_task_id, "pt_task_name", tk.description,"pt_task_id", tk.id, "trial_name", trial.task().description, "trial_num:", trial.trial_num,  "created_at", trial.updated_at, "num gradients:", len(gss), "num aggregate stats:", agg_stats)
             # trial.delete_self_and_children()
 
         if print_path is True:
