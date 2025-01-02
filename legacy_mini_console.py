@@ -19,6 +19,7 @@ from models.legacy_sensor import Sensor
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from models.legacy_cohort import Cohort
 from sklearn.ensemble import RandomForestClassifier
+from prediction_tools.multi_time_predictor import MultiTimePredictor
 from viewers.shape_rotator import ShapeRotator
 from viewers.matrix_plotter import MatrixPlotter
 from prediction_tools.predictor_score import PredictorScore
@@ -85,6 +86,9 @@ allowed = [
 
 TOP_MODELS = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'XGBoost']  # Your TOP_MODELS list
 classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'XGBoost']  # Your TOP_MODELS list
+
+
+
 
 def replace_axis_labels(directory):
     for filename in os.listdir(directory):
@@ -503,10 +507,45 @@ def make_final_combo(mp):
     print("DONE")
 
 
+def find_or_create_mtp(feature_mp=None, timing_mp=None):
+
+    # create hc sm
+    # hc sub motion 
+    
+    mpt = MultiTimePredictor.find_or_create(multi_predictor_feature_id = feature_mp.id, multi_predictor_id = timing_mp.id)
+
+    # mpt.create_from_multi_predictors(
+    #     feature_mp=feature_mp,
+    #     timing_mp=timing_mp
+    # )
+    # mpt.combine_features_and_time(
+    #     feature_mp=feature_mp,
+    #     timing_mp=timing_mp
+    # )
+    ntp = mpt.get_norm_time_predictors()
+    snr_results = []
+    for tp in ntp:
+        # TODO: Stephen, remove after debugging
+        # if Sensor.get(tp.sensor_id).name in ['rfhd_x', 'rwra_x', 'rwrb_x']:
+            
+        results = tp.train_regression(use_log=False)
+        snr_results.append([Sensor.get(tp.sensor_id).name, results])
+
+
 def display_for_paper(mpa=None, cp_mpa=None, hc_combo=None, cp_combo=None, hcgsmp=None, cpgsmp=None, hc_set_list=None, cp_set_list=None):
+
+    import pdb;pdb.set_trace()
+
+    
+    mpa.save_shap_values(preds=mpa.get_norm_preds(), title="hc_norm_6")
+    cp_mpa.save_shap_values(preds=cp_mpa.get_norm_preds(), title="cp_norm_6")
+    hcgsmp.save_shap_values(preds=hcgsmp.get_norm_preds(), title="gs_hc_norm_6")
+    cpgsmp.save_shap_values(abs_val=False, non_norm=False, preds=cpgsmp.get_norm_preds(), title="gs_cp_norm_6")
+    print("ok shaps")
     if mpa and cp_mpa:
-        # mpa.show_abs_scores(axis=True)
-        # cp_mpa.show_abs_scores(axis=True)
+        MatrixPlotter.show(mpa.get_norm_acc(), cp_mpa.get_norm_acc(), h_one="Healthy Controls Normalized (n=25)", h_two="CP Patients Normalized (n=12)", alt=True)
+        mpa.show_norm_scores(axis=True, include_accuracy=True)
+        cp_mpa.show_norm_scores(axis=True, include_accuracy=True)
 
         # mpa.show_default_scores(axis=True)
         # cp_mpa.show_default_scores(axis=True)
@@ -514,38 +553,34 @@ def display_for_paper(mpa=None, cp_mpa=None, hc_combo=None, cp_combo=None, hcgsm
         
         # MatrixPlotter.show(mpa.get_acc(), cp_mpa.get_acc(), h_one="Healthy Controls Default (n=25)", h_two="CP Patients Default (n=12)", alt=True)
         # MatrixPlotter.show(mpa.get_abs_acc(), cp_mpa.get_abs_acc(), h_one="Healthy Controls Absolute Value (n=25)", h_two="CP Patients Absolute Value (n=12)", alt=True)
-        # MatrixPlotter.show(mpa.get_norm_acc(), cp_mpa.get_norm_acc(), h_one="Healthy Controls Normalized (n=25)", h_two="CP Patients Normalized (n=12)", alt=True)
+        
 
         # mpa.save_shap_values(preds=mpa.get_preds(), title="hc_default")
         # mpa.save_shap_values(preds=mpa.get_abs_preds(), title="hc_abs")
-        # mpa.save_shap_values(preds=mpa.get_norm_preds(), title="hc_norm")
+        mpa.save_shap_values(preds=mpa.get_norm_preds(), title="hc_norm")
 
         # cp_mpa.save_shap_values(preds=cp_mpa.get_preds(), title="cp_default")
         # cp_mpa.save_shap_values(preds=cp_mpa.get_abs_preds(), title="cp_abs")
-        # cp_mpa.save_shap_values(preds=cp_mpa.get_norm_preds(), title="cp_norm")
+        cp_mpa.save_shap_values(preds=cp_mpa.get_norm_preds(), title="cp_norm")
+        
 
 
         print("DONE W INDIV, next combo")
 
-    # if hc_combo and cp_combo:
-    #     MatrixPlotter.show(hc_combo.get_norm_acc(), cp_combo.get_norm_acc(), h_one="Healthy Controls Combination (n=25)", h_two="CP Patients Combination (n=12)", alt=True)
-    # #     print("Done w matrices, on to shap")
-    #     hc_combo_preds = hc_combo.get_norm_preds()
-    #     hc_combo.save_shap_values(preds=hc_combo_preds, title="hc_combo")
 
-    #     cp_combo_preds = cp_combo.get_norm_preds()
-    #     cp_combo.save_shap_values(preds=cp_combo_preds, title="cp_combo")
 
     print("DONE W COMBO, next gs")
 
     if hcgsmp and cpgsmp:
     #     MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
     #     MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value(n=12)", alt=True)
-    #     MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+        MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+        hcgsmp.show_norm_scores(axis=True, include_accuracy=True)
+        cpgsmp.show_norm_scores(axis=True, include_accuracy=True)
     
         # hcgsmp.save_shap_values(preds=hcgsmp.get_preds(), title="gs_hc_default")
         # hcgsmp.save_shap_values(preds=hcgsmp.get_abs_preds(), title="gs_hc_abs")
-        # hcgsmp.save_shap_values(preds=hcgsmp.get_norm_preds(), title="gs_hc_norm")
+        hcgsmp.save_shap_values(preds=hcgsmp.get_norm_preds(), title="gs_hc_norm")
         # print("DONE W HC BASE")
         # cpgsmp.save_shap_values(preds=cpgsmp.get_preds(), title="gs_cp_default")
         # cpgsmp.save_shap_values(preds=cpgsmp.get_abs_preds(), title="gs_cp_abs")
@@ -556,18 +591,29 @@ def display_for_paper(mpa=None, cp_mpa=None, hc_combo=None, cp_combo=None, hcgsm
         # cp_set_list_preds = cp_set_list.get_all_preds()
         # cp_set_list.save_shap_values(preds=cp_set_list_preds, title="gs_cp_set_list")
     #     print("DONE W COMBO")
+
+    # if hc_combo and cp_combo:
+    #     MatrixPlotter.show(hc_combo.get_norm_acc(), cp_combo.get_norm_acc(), h_one="Healthy Controls Combination (n=25)", h_two="CP Patients Combination (n=12)", alt=True)
+    # #     print("Done w matrices, on to shap")
+    #     hc_combo_preds = hc_combo.get_norm_preds()
+    #     hc_combo.save_shap_values(preds=hc_combo_preds, title="hc_combo")
+
+    #     cp_combo_preds = cp_combo.get_norm_preds()
+    #     cp_combo.save_shap_values(preds=cp_combo_preds, title="cp_combo")
     # hc_set_list_preds = hc_set_list.get_norm_preds()
     # hc_set_list.save_shap_values(preds=hc_set_list_preds, title="hc_set_list")
 
     # cp_set_list_preds = cp_set_list.get_norm_preds()
     # cp_set_list.save_shap_values(preds=cp_set_list_preds, title="cp_set_list")
 
-    MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
-    MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value (n=12)", alt=True)
-    MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
+
+    # MatrixPlotter.show(hcgsmp.get_acc(), cpgsmp.get_acc(), h_one="Healthy Controls GS Default (n=25)", h_two="CP Patients GS Default (n=12)", alt=True)
+    # MatrixPlotter.show(hcgsmp.get_abs_acc(), cpgsmp.get_abs_acc(), h_one="Healthy Controls GS Absolute Value (n=25)", h_two="CP Patients GS Absolute Value (n=12)", alt=True)
+    # MatrixPlotter.show(hcgsmp.get_norm_acc(), cpgsmp.get_norm_acc(), h_one="Healthy Controls GS Normalized (n=25)", h_two="CP Patients GS Normalized (n=12)", alt=True)
 
 
     print("DONE W GS base cases, on to combo")
+    import pdb;pdb.set_trace()
 
     # if hc_set_list and cp_set_list:
     #     MatrixPlotter.show(hc_set_list.get_norm_acc(), cp_set_list.get_norm_acc(), h_one="Healthy Controls GS Combination (n=25)", h_two="CP Patients GS Combination (n=12)", alt=True)
@@ -625,7 +671,6 @@ def display_for_paper(mpa=None, cp_mpa=None, hc_combo=None, cp_combo=None, hcgsm
 
 # rpa = MultiPredictor.where(cohort_id=1, task_id=2)[0]
 # base case
-import pdb;pdb.set_trace()
 def gen_mpa_scores(hcgsmp, cpgsmp):
     # hcgsmp.gen_scores_for_mp(force_load=True)
     print("FINISHED WITH HC")
@@ -664,6 +709,7 @@ cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")
 
 hc_set_list = MultiPredictor.where(model="grad_set_combo")[0] # 9 preds, 9 acc
 cp_set_list = MultiPredictor.where(model="grad_set_combo", cohort_id=2)[0] # 9 preds, 9 acc
+
 # display_prox_distal_shap_scores(mpa, cp_mpa, hc_combo, cp_combo, hc_set_list, cp_set_list)
 
 # mpa.save_shap_values(abs_val=False, non_norm=False, preds=mpa.get_norm_preds(), title="hc_norm_3")
@@ -680,21 +726,17 @@ cp_set_list = MultiPredictor.where(model="grad_set_combo", cohort_id=2)[0] # 9 p
 # import pdb;pdb.set_trace()
 
 
-cp_mpa.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
-mpa.show_norm_scores(models=["RandomForest"], include_accuracy=True, use_cat=True, axis=True)
+# cp_mpa.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+# mpa.show_norm_scores(models=["RandomForest"], include_accuracy=True, use_cat=True, axis=True)
 
 
 print("Done w/SG Cluters")
-import pdb;pdb.set_trace()
 
 
-hcgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
-cpgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+# hcgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
+# cpgsmp.show_norm_scores(axis=True, models=["RandomForest"], include_accuracy=True, use_cat=True)
 
 print("Done w/GS Cluters")
-import pdb;pdb.set_trace()
-
-import pdb;pdb.set_trace()
 
 cp_combo = MultiPredictor.get(15) # 9 (norm) preds
 
@@ -739,10 +781,118 @@ print("norm median accuracy: ExtraTrees",np.median(eta+cp_eta+gs_eta+cp_gs_eta))
 
 
 
+mpt = MultiTimePredictor.where(multi_predictor_feature_id=mpa.id, multi_predictor_id=hcgsmp.id)[0]
+cp_mpt = MultiTimePredictor.where(multi_predictor_feature_id=cp_mpa.id, multi_predictor_id=cpgsmp.id)[0]
+sg_mpt = MultiTimePredictor.where(multi_predictor_feature_id=mpa.id, multi_predictor_id=mpa.id)[0]
+cp_sg_mpt = MultiTimePredictor.where(multi_predictor_feature_id=cp_mpa.id, multi_predictor_id=cp_mpa.id)[0]
 
 
 
-# display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hc_combo=hc_combo, cp_combo=cp_combo, hcgsmp=hcgsmp, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
+
+
+def display_for_contiuous_paper(mpt, cp_mpt, sg_mpt, cp_sg_mpt):
+    MatrixPlotter.show(mpt.get_results(), cp_mpt.get_results(), h_one="HC R2", h_two="CP R2", alt=True)
+    MatrixPlotter.show(sg_mpt.get_results(), cp_sg_mpt.get_results(), h_one="SG HC R2", h_two="SG CP R2", alt=True)
+
+    MatrixPlotter.show(mpt.get_mae(), cp_mpt.get_mae(), h_one="HC MAE", h_two="CP MAE")
+    MatrixPlotter.show(sg_mpt.get_mae(), cp_sg_mpt.get_mae(), h_one="SG HC MAE", h_two="SG CP MAE")
+
+
+
+display_for_contiuous_paper(mpt, cp_mpt, sg_mpt, cp_sg_mpt)
+import pdb;pdb.set_trace()
+
+
+
+def cont_csv(mpt, sg_mpt, cp_mpt, cp_sg_mpt):
+    # display_for_contiuous_paper(mpt, cp_mpt, sg_mpt, cp_sg_mpt)
+
+    import csv
+    import json
+
+    # Suppose you have already loaded your four sets of results in these variables:
+    #   healthy_controls_full = mpt.get_all_results()     # Example label
+    #   healthy_controls_sub  = sg_mpt.get_all_results()  # Example label
+    #   cp_full               = cp_mpt.get_all_results()
+    #   cp_sub                = cp_sg_mpt.get_all_results()
+    #
+    # Rename them if you like, or simply plug in the function calls directly.
+
+    healthy_controls_full = mpt.get_all_results()
+    healthy_controls_sub  = sg_mpt.get_all_results()
+    cp_full               = cp_mpt.get_all_results()
+    cp_sub                = cp_sg_mpt.get_all_results()
+
+    # We'll store them all in a list along with a "Dataset" label
+    all_datasets = [
+        ("HC_FullHand", healthy_controls_full),
+        ("HC_SubMotion", healthy_controls_sub),
+        ("CP_FullHand", cp_full),
+        ("CP_SubMotion", cp_sub),
+    ]
+
+    # Create a CSV and write out rows
+    with open("combined_results.csv", mode="w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        
+        # Write header
+        writer.writerow([
+            "Dataset",
+            "Motion",       # e.g. rfin_x, rfrm_x, etc.
+            "Regressor",    # e.g. 'AdaBoostRegressor', 'RandomForestRegressor', ...
+            "best_cv_mse",
+            "best_params",
+            "mae",
+            "mse",
+            "r2"
+        ])
+        
+        # Flatten and write out each record
+        for (dataset_label, result_list) in all_datasets:
+            # Each element of result_list is like:  ( "rfin_x", { "AdaBoostRegressor": {...}, ... } )
+            for (motion_name, model_dict) in result_list:
+                # model_dict has keys like 'AdaBoostRegressor', 'CatBoostRegressor', ...
+                for regressor_name, metrics in model_dict.items():
+                    # metrics is a dict with keys: best_cv_mse, best_params, mae, mse, r2, ...
+                    best_cv_mse = metrics["best_cv_mse"]
+                    best_params = json.dumps(metrics["best_params"])  # or str(metrics["best_params"])
+                    mae         = metrics["mae"]
+                    mse         = metrics["mse"]
+                    r2          = metrics["r2"]
+                    
+                    writer.writerow([
+                        dataset_label,
+                        motion_name,
+                        regressor_name,
+                        best_cv_mse,
+                        best_params,
+                        mae,
+                        mse,
+                        r2
+                    ])
+
+    print("Finished writing combined_results.csv!")
+
+
+import pdb;pdb.set_trace()
+
+
+
+
+find_or_create_mtp(feature_mp=mpa, timing_mp=hcgsmp)
+find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cpgsmp)
+find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cp_mpa)
+
+
+
+find_or_create_mtp(feature_mp=mpa, timing_mp=mpa)
+
+
+
+import pdb;pdb.set_trace()
+
+
+display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hc_combo=hc_combo, cp_combo=cp_combo, hcgsmp=hcgsmp, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
 # cp_combo.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
 
 # gen_mpa_scores(hcgsmp, cpgsmp)
@@ -957,29 +1107,37 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
         print(f"Kolmogorov-Smirnov p-value: {ks_pvalue:.4f}")
     
     def sensor_similarity(sensor1_df, sensor2_df):
-
+        """
+        Computes the average Euclidean distance across x, y, z axes between two sensors.
         
+        Parameters:
+        - sensor1_df (pd.DataFrame): DataFrame containing data for sensor1.
+        - sensor2_df (pd.DataFrame): DataFrame containing data for sensor2.
+        
+        Returns:
+        - float: The average Euclidean distance across the three axes.
+        """
         axes = ['x', 'y', 'z']
-        correlations = []
+        distances = []
         for axis in axes:
-            s1_col = [col for col in sensor1_df.columns if f'_{axis}_' in col]
-            s2_col = [col for col in sensor2_df.columns if f'_{axis}_' in col]
+            # Corrected the matching to look for columns ending with '_x', '_y', '_z'
+            s1_col = [col for col in sensor1_df.columns if col.endswith(f'_{axis}')]
+            s2_col = [col for col in sensor2_df.columns if col.endswith(f'_{axis}')]
             if s1_col and s2_col:
                 try:
-                    # comprehensive_dataframe_comparison(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
-                    corr = euclidean(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
-                    if np.isfinite(corr):
-                        correlations.append(corr)
+                    # Assuming one column per axis per sensor
+                    dist = euclidean(sensor1_df[s1_col[0]], sensor2_df[s2_col[0]])
+                    if np.isfinite(dist):
+                        distances.append(dist)
                 except Exception as e:
-                    print(f"Error calculating correlation for {s1_col[0]} and {s2_col[0]}: {e}")
-        return np.mean(correlations) if correlations else np.nan
+                    print(f"Error calculating Euclidean distance for {s1_col[0]} and {s2_col[0]}: {e}")
+        return np.mean(distances) if distances else np.nan
 
 
     sensors1 = get_sensor_names(combined_df1_cleaned)
     sensors2 = get_sensor_names(combined_df2_cleaned)
 
     similarity_matrix = pd.DataFrame(index=sensors1, columns=sensors2)
-    import pdb;pdb.set_trace()
     for sensor1 in sensors1:
         sensor1_df = get_sensor_data(combined_df1_cleaned, sensor1)
         for sensor2 in sensors2:
@@ -1017,6 +1175,7 @@ def new_compare_tsfresh_dataframes(combined_df1_cleaned, combined_df2_cleaned, t
         plt.show()
         
         # Save original similarity matrix
+        import pdb;pdb.set_trace()
         similarity_path = os.path.join(results_dir, f'{filename_base}_similarity_matrix.csv')
         similarity_matrix.to_csv(similarity_path)
         
@@ -1057,73 +1216,51 @@ def compare_tsfresh_dataframes(dataframes_list1, dataframes_list2, title=None):
     """
     
     # Fill NaN values with 0 or any other appropriate method
-    filled_list1 = [(df.fillna(0), name) for df, name in dataframes_list1]
-    filled_list2 = [(df.fillna(0), name) for df, name in dataframes_list2]
+    def filter_rows(df1, df2):
+        """
+        Removes rows from both DataFrames where all values in the corresponding rows of both DataFrames are either 0 or NaN.
 
-    # Ensure both lists have the same number of dataframes
-    assert len(filled_list1) == len(filled_list2), "Both lists must have the same number of dataframes"
+        Parameters:
+        - df1: First DataFrame.
+        - df2: Second DataFrame.
 
-    # Create combined dataframes for each list
-    combined_df1 = pd.DataFrame()
-    combined_df2 = pd.DataFrame()
+        Returns:
+        - A tuple containing the filtered versions of df1 and df2.
+        """
+        # Check if both DataFrames have the same index
+        if not df1.index.equals(df2.index):
+            raise ValueError("Both DataFrames must have the same index.")
 
-    def remove_index_prefixes(df1, df2):
-        def remove_prefix(text):
-            return text.split('__', 1)[1] if '__' in text else text
-        df1_copy = df1.copy()
-        df2_copy = df2.copy()
+        # Fill NaN values with 0
+        df1_filled = df1.fillna(0)
+        df2_filled = df2.fillna(0)
 
-        df1_copy.index = df1_copy.index.map(remove_prefix)
-        df2_copy.index = df2_copy.index.map(remove_prefix)
+        # Create boolean masks where each element is True if it's 0
+        mask_df1 = df1_filled == 0
+        mask_df2 = df2_filled == 0
 
-        return df1_copy, df2_copy
+        # Identify rows where all values in df1 are 0
+        rows_all_zero_df1 = mask_df1.all(axis=1)
 
+        # Identify rows where all values in df2 are 0
+        rows_all_zero_df2 = mask_df2.all(axis=1)
 
-    for i, ((df1, name1), (df2, name2)) in enumerate(zip(filled_list1, filled_list2)):
-        is_match, error_message = compare_index_suffixes(df1, df2, name1, name2, i)
-        assert is_match, error_message
+        # Rows to drop: Rows where both df1 and df2 have all values as 0
+        rows_to_drop = rows_all_zero_df1 & rows_all_zero_df2
 
-        df1, df2 = remove_index_prefixes(df1, df2)
+        # Filter out these rows from both DataFrames
+        df1_filtered = df1_filled[~rows_to_drop].copy()
+        df2_filtered = df2_filled[~rows_to_drop].copy()
 
-        
-        for col in df1.columns:
-            combined_df1[f"{name1}_{col}"] = df1[col]
-            combined_df2[f"{name2}_{col}"] = df2[col]
+        return df1_filtered, df2_filtered
 
-    rows_to_drop = (combined_df1 == 0).all(axis=1) & (combined_df2 == 0).all(axis=1)
+    # Example Usage:
+    # Assuming dataframes_list1 and dataframes_list2 are your DataFrames
 
-
-    # Concatenate the combined dataframes along the columns
-
-    combined_df = pd.concat([combined_df1, combined_df2], axis=1)
-    combined_df1_cleaned = combined_df1[~rows_to_drop]
-    combined_df2_cleaned = combined_df2[~rows_to_drop]
-
-    df1_trimmed = combined_df1_cleaned.T
-    df2_trimmed = combined_df2_cleaned.T
-    # df1_trimmed = boruta_feature_selection(combined_df1_cleaned.T)
-    # df2_trimmed = combined_df2_cleaned.T[df1_trimmed.columns]
-
-
-    correlation_matrix = new_compare_tsfresh_dataframes(df1_trimmed.T, df2_trimmed.T, title)
+    filtered_df1, filtered_df2 = filter_rows(dataframes_list1, dataframes_list2)
+    correlation_matrix = new_compare_tsfresh_dataframes(filtered_df1, filtered_df2, title)
     print(correlation_matrix)
 
-    # Initialize an empty DataFrame to store the correlation scores
-    correlation_scores = pd.DataFrame(index=combined_df1_cleaned.columns, columns=combined_df2_cleaned.columns)
-
-
-    # Calculate the correlation for each pair of columns
-    for col1 in combined_df1_cleaned.columns:
-        for col2 in combined_df2_cleaned.columns:
-            correlation_scores.loc[col1, col2] = combined_df1_cleaned[col1].corr(combined_df2_cleaned[col2])
-
-    # Convert the correlation scores to float for plotting
-    correlation_scores = correlation_scores.astype(float)
-
-
-
-
-    return correlation_scores
 
 def construct_corr(tsk=None, cohort=None, title=None, use_dom=True, sub_stat=False, versus_opposite_side=False):
     arr_rtt = []
@@ -1162,30 +1299,49 @@ def construct_corr(tsk=None, cohort=None, title=None, use_dom=True, sub_stat=Fal
 
             arr_rtt.append((rtt, sen.name))
             arr_ltt.append((ltt, compare_sen.name))
+        
+    def make_dfs(arr):
+        dfs = [item[0] for item in arr]
+        labels = [item[1] for item in arr]
+        # Concatenate along the rows (axis=0)
+        combined_df = pd.concat(dfs, axis=0, ignore_index=True)
 
-    # Check for rows entirely composed of zeros across all DataFrames
-    indices_to_remove = set()
-    for i in range(783):  # Assuming 783 rows in each DataFrame
-        all_zeros = True
-        for df, _ in arr_rtt:
-            if not (df.iloc[i] == 0).all() or (df.iloc[i] == nan).all():
-                all_zeros = False
-                break
-        if all_zeros:
-            for df, _ in arr_ltt:
-                if not (df.iloc[i] == 0).all() or (df.iloc[i] == nan).all():
-                    all_zeros = False
-                    break
-        if all_zeros:
-            indices_to_remove.add(i)
+        # Assign labels as the index
+        combined_df['label'] = labels
+        combined_df.set_index('label', inplace=True)
+        
+        return combined_df
+    alt_arr_ltt = arr_ltt
+    import pdb;pdb.set_trace()
+    arr_ltt = make_dfs(arr_ltt).T
+    arr_rtt = make_dfs(arr_rtt).T
 
-    for index in sorted(indices_to_remove, reverse=True):
-        for j in range(len(arr_rtt)):
-            arr_rtt[j] = (arr_rtt[j][0].drop(arr_rtt[j][0].index[index]), arr_rtt[j][1])
-            arr_ltt[j] = (arr_ltt[j][0].drop(arr_ltt[j][0].index[index]), arr_ltt[j][1])
+    def filter_dataframes(df_left: pd.DataFrame, df_right: pd.DataFrame) -> (pd.DataFrame, pd.DataFrame):
+        # Ensure both DataFrames have the same index
+        if not df_left.index.equals(df_right.index):
+            import pdb;pdb.set_trace()
 
-    if title:
-        title += ' (opposite side sensor)' if versus_opposite_side else ''
+            raise ValueError("Both DataFrames must have the same index.")
+
+        # Create boolean masks where each element is True if it's 0 or NaN
+        mask_left = df_left.eq(0) | df_left.isna()
+        mask_right = df_right.eq(0) | df_right.isna()
+
+        # For each row, check if all elements satisfy the condition (0 or NaN)
+        rows_all_zero_or_nan_left = mask_left.all(axis=1)
+        rows_all_zero_or_nan_right = mask_right.all(axis=1)
+
+        # Identify rows where both DataFrames have all elements as 0 or NaN
+        rows_to_drop = rows_all_zero_or_nan_left & rows_all_zero_or_nan_right
+
+        # Filter out these rows from both DataFrames
+        filtered_df_left = df_left[~rows_to_drop].copy()
+        filtered_df_right = df_right[~rows_to_drop].copy()
+        return filtered_df_left, filtered_df_right
+    
+
+    arr_ltt, arr_rtt = filter_dataframes(arr_ltt, arr_rtt)
+
     compare_tsfresh_dataframes(arr_rtt, arr_ltt, title=title)
 
 
@@ -1258,33 +1414,264 @@ combo_cp = MultiPredictor.get(15)
 hcgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 1, model="grad_set")[0]
 cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="grad_set")[0]
 
+
+# bc.get_norm_corr()
+# no driving feature, combination more important
+# add to google doc supp, put word in google doc
+# add to methods splitting folds
+# discussion short paragraph summarizing result, dont go into too much detail
+# limitations
+# future directions
+# conclusion
+# put references in a comment
+cp_mpa = MultiPredictor.where(cohort_id=2, task_id=3)[0] # 27 preds, 27 acc
+preds = cp_mpa.get_norm_corr()
 import pdb;pdb.set_trace()
+for pred in preds:
+    pred.train_from(force_load=True)
+
+import pdb;pdb.set_trace()
+for ps in PredictorScore.where(classifier_name="RandomForest", predictor_id=bc.get_norm_preds()[1].id):
+    ps.view_shap_plot(show_plot=True, show_fold_corr=True)
 
 
 
-construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=True, title=" SUB STAT Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=True, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Dom CP")
 
-construct_corr(cohort=hc, use_dom=False, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Non Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=False, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Non Dom CP")
+# try_getting_all_shap(bc)
+data = {
+    'Subject Number': [1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17],
+    'Tightness': [1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0],
+    'Embarrassment or shame': [0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 0, 1, 1],
+    'Temperature': [0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 1, 1, 1, 1],
+    'Communication with healthcare': [1, 0, 1, 0, 0, 0, 1, 1, 0, 1, 1, 1, 1, 1, 1, 1],
+    'Basic Movement Restriction': [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 1, 1],
+    'Comfort': [0, 1, 1, 1, 1, 1, 0, 1, 0, 0, 1, 0, 1, 1, 0, 1],
+    'Sleeping with the brace': [1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 1, 0, 1, 0],
+    'Fear regarding Scoliosis/Bracing': [0, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 1, 1, 1],
+    'Peer reaction': [0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 0, 1, 0, 0, 1, 1],
+    'Pain': [1, 1, 1, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+    'Participation in sports, activities, and exercise': [0, 1, 0, 1, 1, 0, 1, 1, 0, 0, 1, 0, 0, 0, 0, 1],
+    'Non compliance due to Pain/Discomfort': [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1],
+    'Functional Adaptations': [1, 1, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+    'While Sitting': [0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0],
+    'Impact on self-esteem & personal identity': [0, 1, 1, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1, 0],
+    'Skin Dryness/Irritation': [0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 1, 1, 0],
+    'While active': [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0],
+    'Non-compliance due to Functional impediment': [0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1],
+    'Family support': [0, 0, 1, 0, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+    'SRS Function': [5, 3.2, 4, 2.2, 4.8, 4.6, 3.6, 4.8, 4.4, 5, 3.4, 4.2, 4.2, 3.8, 4.8, 4],
+    'SRS Pain': [4.8, 3.4, 5, 3, 5, 4.6, 4.8, 4, 4.2, 5, 3.8, 5, 4.4, 3.4, 5, 4.4],
+    'SRS Self-Image': [4.6, 2.4, 4, 2.8, 2.8, 4, 4.2, 3.8, 3.4, 5, 1.8, 4.2, 2.4, 3.4, 3.6, 3.6],
+    'SRS Mental Health': [5, 2.8, 3.2, 2.4, 3.8, 5, 3.8, 3.2, 4.4, 5, 3.4, 4.8, 3.6, 3.8, 3, 4.4],
+    'SRS Satisfaction with Management': [5, 3.5, 2.5, 2, 1.5, 5, 4.5, 3.5, 4, 5, 4, 3.5, 4, 4, 2, 3.5]
+}
 
-construct_corr(cohort=hc, use_dom=True, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Dom CP")
 
-construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom CP")
+df = pd.DataFrame(data)
 
-construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom CP")
+complaints = [
+    'Tightness',
+    'Embarrassment or shame',
+    'Temperature',
+    'Communication with healthcare',
+    'Basic Movement Restriction',
+    'Comfort',
+    'Sleeping with the brace',
+    'Fear regarding Scoliosis/Bracing',
+    'Peer reaction',
+    'Pain',
+    'Participation in sports, activities, and exercise',
+    'Non compliance due to Pain/Discomfort',
+    'Functional Adaptations',
+    'While Sitting',
+    'Impact on self-esteem & personal identity',
+    'Skin Dryness/Irritation',
+    'While active',
+    'Non-compliance due to Functional impediment',
+    'Family support'
+]
 
-construct_corr(cohort=hc, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom CP")
+srs_scores = [
+    'SRS Function',
+    'SRS Pain',
+    'SRS Self-Image',
+    'SRS Mental Health',
+    'SRS Satisfaction with Management'
+]
 
-construct_corr(cohort=hc, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom CP")
 
-construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom Healthy Controls")
-construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom CP")
+
+# Initialize an empty DataFrame to store correlation coefficients
+corr_matrix = pd.DataFrame(index=complaints, columns=srs_scores)
+
+import shap
+def random_forest_analysis_with_shap(target_variable):
+    X = df[complaints]
+    y = df[target_variable]
+    
+    # Initialize the model
+    rf = RandomForestRegressor(n_estimators=100, random_state=42)
+    
+    # Fit the model
+    rf.fit(X, y)
+    
+    # Cross-validation to estimate performance
+    cv_scores = cross_val_score(rf, X, y, cv=5, scoring='neg_mean_squared_error')
+    rmse_scores = np.sqrt(-cv_scores)
+    print(f'RMSE for {target_variable}: {rmse_scores.mean():.2f} ± {rmse_scores.std():.2f}')
+    
+    # Compute SHAP values
+    explainer = shap.TreeExplainer(rf)
+    shap_values = explainer.shap_values(X)
+    
+    # Plot SHAP summary plot (bar chart)
+    shap.summary_plot(shap_values, X, plot_type="bar", show=False)
+    plt.title(f'SHAP Feature Importances for Predicting {target_variable}')
+    plt.tight_layout()
+    plt.show()
+
+
+# Perform analysis for each SRS score
+for score in srs_scores:
+    print(f'Random Forest Analysis for {score}')
+    random_forest_analysis_with_shap(score)
+
+# Features: SRS scores
+X = df[srs_scores]
+
+# Target variable: 'Temperature' complaint
+y = df['Temperature']
+
+# Check the distribution of the target variable
+print("Distribution of 'Temperature' Complaint:")
+print(y.value_counts())
+
+# Initialize the Random Forest Classifier
+rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+
+# Cross-validation predictions
+y_pred = cross_val_predict(rf_classifier, X, y, cv=5)
+
+# Classification report
+print("Classification Report:")
+print(classification_report(y, y_pred))
+
+# Confusion matrix
+print("Confusion Matrix:")
+print(confusion_matrix(y, y_pred))
+
+# Fit the model on the entire dataset to get feature importances
+rf_classifier.fit(X, y)
+importances = rf_classifier.feature_importances_
+
+# Create a DataFrame for visualization
+importance_df = pd.DataFrame({
+    'SRS Score': X.columns,
+    'Importance': importances
+}).sort_values(by='Importance', ascending=False)
+
+# Plot feature importances
+plt.figure(figsize=(8, 6))
+sns.barplot(x='Importance', y='SRS Score', data=importance_df)
+plt.title("Feature Importances for Predicting 'Temperature' Complaint")
+plt.xlabel('Importance')
+plt.ylabel('SRS Score')
+plt.tight_layout()
+plt.show()
+
+
+# Features: SRS scores
+X = df[['SRS Function', 'SRS Pain', 'SRS Self-Image', 'SRS Mental Health', 'SRS Satisfaction with Management']]
+
+# Target variable: 'Temperature' complaint
+y = df['Temperature']
+
+print("Distribution of 'Temperature' Complaint:")
+print(y.value_counts())
+
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import cross_val_score, cross_val_predict
+from sklearn.metrics import classification_report, confusion_matrix
+
+rf_classifier = RandomForestClassifier(n_estimators=100, random_state=42)
+
+y_pred = cross_val_predict(rf_classifier, X, y, cv=5)
+
+# Classification report
+print("Classification Report:")
+print(classification_report(y, y_pred))
+
+# Confusion matrix
+print("Confusion Matrix:")
+print(confusion_matrix(y, y_pred))
+
+# Fit the model on the entire dataset to get feature importances
+rf_classifier.fit(X, y)
+importances = rf_classifier.feature_importances_
+
+# Create a DataFrame for visualization
+importance_df = pd.DataFrame({
+    'SRS Score': X.columns,
+    'Importance': importances
+}).sort_values(by='Importance', ascending=False)
+
+# Plot feature importances
+plt.figure(figsize=(8, 6))
+sns.barplot(x='Importance', y='SRS Score', data=importance_df)
+plt.title("Feature Importances for Predicting 'Temperature' Complaint")
+plt.xlabel('Importance')
+plt.ylabel('SRS Score')
+plt.tight_layout()
+plt.show()
+
+from scipy import stats
+
+# Calculate the point-biserial correlation for each complaint and SRS score pair
+for complaint in complaints:
+    for score in srs_scores:
+        corr, p_value = stats.pointbiserialr(df[complaint], df[score])
+        corr_matrix.loc[complaint, score] = corr
+
+corr_matrix = corr_matrix.astype(float)
+
+plt.figure(figsize=(12, 10))
+
+# Create a heatmap with annotations
+sns.heatmap(corr_matrix, annot=True, cmap='coolwarm', center=0, fmt=".2f")
+
+# Set the title
+plt.title('Correlation Heatmap between Complaints and SRS Scores')
+
+# Adjust the layout
+plt.tight_layout()
+
+# Display the heatmap
+plt.show()
+
+
+# construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=True, title=" SUB STAT Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=True, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Dom CP")
+
+# construct_corr(cohort=hc, use_dom=False, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Non Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=False, versus_opposite_side=True, sub_stat=True, title=" SUB STAT  Non Dom CP")
+
+# construct_corr(cohort=hc, use_dom=True, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Dom CP")
+
+# construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=True, title=" SUB STAT Same Arm Non Dom CP")
+
+# construct_corr(cohort=hc, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=True, versus_opposite_side=True, sub_stat=False, title="Dom CP")
+
+# construct_corr(cohort=hc, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=False, versus_opposite_side=True, sub_stat=False, title="Non Dom CP")
+
+# construct_corr(cohort=hc, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=True, versus_opposite_side=False, sub_stat=False, title="Same Arm Dom CP")
+
+# construct_corr(cohort=hc, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom Healthy Controls")
+# construct_corr(cohort=cp, use_dom=False, versus_opposite_side=False, sub_stat=False, title="Same Arm Non Dom CP")
 
 
 
@@ -1322,7 +1709,7 @@ import pdb;pdb.set_trace()
 
 
 
-import pdb;pdb.set_trace()
+
 cpd = MultiPredictor.find_or_create(task_id = Task.where(description="Block_dominant")[0].id, cohort_id = 2, model="default")
 cpd.gen_scores_for_mp(force_load=True)
 

@@ -307,6 +307,43 @@ class Task(LegacyBaseModel):
         
         return mean_df
     
+    def correct_index(self, aggregated_stats: pd.DataFrame, sensor_name: str) -> list:
+        """
+        Ensure that the row names (index) of the aggregated stats Series begin with the correct sensor name.
+
+        Parameters:
+        sensor_name (str): The correct sensor name that should prefix each row name.
+        aggregated_stats (pd.Series): The Series containing aggregated stats with potentially incorrect row names.
+
+        Returns:
+        pd.Series: A Series with corrected row names if needed.
+        """
+        # Check if the Series is empty
+        if aggregated_stats.empty:
+            print("Aggregated stats are empty, no correction needed.")
+            return aggregated_stats
+
+        # Check if correction is needed by inspecting the first row name
+        corrected_index = []
+        for row_name in aggregated_stats.index:
+            try:
+                if isinstance(row_name, str):
+                    parts = row_name.split('__', 1)
+                    suffix = parts[1] if len(parts) > 1 else parts[0]
+                else:
+                    suffix = str(row_name)
+                corrected_index.append(f"{sensor_name}__{suffix}")
+            except Exception as e:
+                # Handle unexpected cases
+                print(f"Error processing row_name '{row_name}': {e}")
+                corrected_index.append(f"{sensor_name}__unknown")
+        return corrected_index
+    
+        # Update the Series index with the corrected names
+        aggregated_stats.index = corrected_index
+        
+        return aggregated_stats
+
     def correct_aggregated_stats(self, sensor_name, aggregated_stats):
         """
         Ensure that the row names (index) of the aggregated stats Series begin with the correct sensor name.
@@ -342,7 +379,6 @@ class Task(LegacyBaseModel):
         aggregated_stats.index = corrected_index
         
         return aggregated_stats
-
     def full_gradient_set_stats_by_task_and_cohort(self, sensor, cohort=None, get_agg_sub_stat=False, loc=False):
         if cohort is None:
             cohort_id = Cohort.where(name="healthy_controls")[0].id
@@ -355,10 +391,11 @@ class Task(LegacyBaseModel):
         for gradient_set in gradient_sets:
             if get_agg_sub_stat:
                 aggregated_stats = gradient_set.get_aggregate_normalized_stats().T
-                aggregated_stats - self.correct_aggregated_stats(sensor.name, aggregated_stats)
+                aggregated_stats = self.correct_aggregated_stats(sensor.name, aggregated_stats)
             else:
-                aggregated_stats = gradient_set.get_set_stats_norm().T
-    
+                aggregated_stats = gradient_set.get_set_stats_norm()
+                aggregated_stats.index = self.correct_index(sensor_name=sensor.name, aggregated_stats=aggregated_stats)
+            
             if aggregated_stats is not None:
                 combined_series.append(aggregated_stats)
 
@@ -368,24 +405,17 @@ class Task(LegacyBaseModel):
             return None
         
         # Concatenate all series into a single DataFrame
-        combined_df = pd.concat(combined_series, axis=1)
+        combined_df = pd.concat(combined_series, axis=0)
+        mean_df = combined_df.mean(axis=0).to_frame(name='mean')
         
         # Calculate the mean of all dataframes
-        mean_df = combined_df.mean(axis=1).to_frame(name='mean')
         
-        # Add additional statistical metrics if required (optional)
-        # median_df = combined_df.median(axis=1).to_frame(name='median')
-        # sd_df = combined_df.std(axis=1).to_frame(name='sd')
-        # combined_stats_df = pd.concat([mean_df, median_df, sd_df], axis=1)
-        
-        # Optional: If loc is True, include location-specific statistics or processing
         if loc:
             # Add location-specific logic here
             pass
 
         # Import for debugging if needed
-        
-        return mean_df
+        return mean_df.T
 
         
     

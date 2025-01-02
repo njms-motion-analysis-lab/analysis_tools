@@ -22,14 +22,19 @@ from ts_fresh_params import get_params_for_column, beeswarm_name, categorize_fea
 class PredictorScore(LegacyBaseModel):
     table_name = "predictor_score"
 
-    def __init__(self, id=None, classifier_name=None, score_type=None, matrix=None, classifier_id=None, predictor_id=None, created_at=None, updated_at=None, multi_predictor_id=None):
+    def __init__(self, id=None, classifier_name=None, score_type=None, matrix=None, classifier_id=None, predictor_id=None, created_at=None, updated_at=None, multi_predictor_id=None, time_predictor_id=None, multi_time_predictor_id=None, continuous_results=None):
         self.id = id
         self.classifier_name = classifier_name
         self.score_type = score_type
         self.matrix = matrix
         self.classifier_id = classifier_id
         self.predictor_id = predictor_id
+        created_at = created_at
+        updated_at = updated_at
         self.multi_predictor_id = multi_predictor_id
+        self.time_predictor_id = time_predictor_id
+        self.multi_time_predictor_id = multi_time_predictor_id
+        self.continuous_results = continuous_results
 
 
     def set_shap_matrix(self, aggregated_shap_values, combined_X):
@@ -54,16 +59,49 @@ class PredictorScore(LegacyBaseModel):
         # Call shap.summary_plot
         shap.dependence_plot('grad_data__kurtosis_x', aggregated_shap_values_retrieved, combined_X_df)
 
-    def view_shap_plot(self, title=None, show_plot=False, abs_val=False, non_norm=True):
+    def view_shap_plot(self, title=None, show_plot=False, abs_val=False, non_norm=True, show_fold_corr=False):
+        """
+        Create and display a SHAP beeswarm plot with optional fold correlation information.
+        
+        Args:
+            title (str, optional): Title for the plot
+            show_plot (bool): Whether to display the plot
+            abs_val (bool): Whether to use absolute values
+            non_norm (bool): Whether to use non-normalized values
+            show_fold_corr (bool): Whether to show fold correlations in feature labels
+        """
         # Fetch and process data
         aggregated_shap_values_retrieved, combined_X_df = self.fetch_and_prepare_data()
-
+        
         # Ensure the shapes of values and data match
         reshaped_values = self.reshape_shap_values(aggregated_shap_values_retrieved, combined_X_df)
-
-        # Create SHAP explanation object
-        explanation = self.create_shap_explanation(reshaped_values, combined_X_df)
-
+        
+        # If showing fold correlations, get them and modify feature names
+        if show_fold_corr:
+            # Get correlations for each feature
+            aggregated_shap_values_retrieved, combined_X_np, combined_X_np_cols = self.get_matrix("matrix")
+            combo_beeswarm_names = [beeswarm_name(col_name) for col_name in combined_X_np_cols]
+            combined_X_df = pd.DataFrame(combined_X_np, columns=combined_X_np_cols)
+            fold_correlations = self.compare_fold_shap_values()
+            
+            # Create new feature names with correlation information
+            feature_names = combined_X_df.columns.tolist()
+            modified_feature_names = []
+            for feature in feature_names:
+                mean_corr = fold_correlations[feature]['mean_correlation']
+                modified_name = f"{feature} (fold corr: {mean_corr:.2f})"
+                modified_feature_names.append(modified_name)
+            
+            # Create a new DataFrame with modified column names
+            combined_X_df_modified = combined_X_df.copy()
+            combined_X_df_modified.columns = modified_feature_names
+            
+            # Create SHAP explanation object with modified feature names
+            explanation = self.create_shap_explanation(reshaped_values, combined_X_df_modified)
+        else:
+            # Create SHAP explanation object with original feature names
+            explanation = self.create_shap_explanation(reshaped_values, combined_X_df)
+        
         # Plot the SHAP beeswarm plot
         self.plot_shap_beeswarm(explanation, show_plot, title, abs_val, non_norm)
 
@@ -164,6 +202,7 @@ class PredictorScore(LegacyBaseModel):
         # This should return aggregated_shap_values, combined_X_np, combined_X_np_cols
         return pickle.loads(getattr(self, matrix_name))
 
+
     def perform_factor_analysis(self, n_factors=5, rotation='varimax'):
         # Fetch the serialized data
         _, combined_X_np, combined_X_np_cols = self.get_matrix("matrix")
@@ -209,7 +248,7 @@ class PredictorScore(LegacyBaseModel):
         from importlib import import_module
         Predictor = import_module("prediction_tools.legacy_predictor").Predictor
         pr = Predictor.get(self.predictor_id)
-        task = Task.get(pr.task_id).description
+        # task = Task.get(pr.task_id).description
         name = Sensor.get(pr.sensor_id).name
         try:
             acc = pr.get_classifier_accuracies()[self.classifier_name]
@@ -217,9 +256,98 @@ class PredictorScore(LegacyBaseModel):
         except KeyError:
             acc_str = 'N/A'
 
-        return task + '_' + name + '_' + self.classifier_name + " Accuracy: " + acc_str
+        return 'task' + '_' + name + '_' + self.classifier_name + " Accuracy: " + acc_str
     
-    
+    def compare_fold_shap_values(self, use_all_means=False):
+        """
+        Compares SHAP values across 5 folds for each feature.
+        Each fold contains 10 SHAP values per feature.
+        Handles edge cases like zero variance or NaN values.
+        
+        Returns:
+            dict: Dictionary containing correlation analysis for each feature
+        """
+        # Retrieve SHAP values and corresponding feature names
+        data_matrix, feature_names = self.get_standardized_shap_values()
+        
+        # Initialize dictionary to store results
+        correlations = {}
+        fold_size = 4
+
+        # TODO:
+        # take abs values of shap values, look at mean across ten subjects
+        # compare means across folds, rank features across folds
+        def safe_correlation(x, y):
+            """Calculate correlation safely handling edge cases"""
+            try:
+                # Check if either array has zero variance
+                if np.std(x) == 0 or np.std(y) == 0:
+                    return 0.0
+                corr = np.corrcoef(x, y)[0,1]
+
+                # Handle NaN correlation
+                return 0.0 if np.isnan(corr) else corr
+            except Exception as e:
+                print(f"Error calculating correlation: {e}")
+                return 0.0
+        
+        # For each feature
+        all_means = []
+        for feature_idx, feature_name in enumerate(feature_names):
+            try:
+                # Extract SHAP values for each fold
+                fold_1 = data_matrix[0:fold_size, feature_idx]
+                fold_2 = data_matrix[fold_size:2*fold_size, feature_idx]
+                fold_3 = data_matrix[2*fold_size:3*fold_size, feature_idx]
+                fold_4 = data_matrix[3*fold_size:4*fold_size, feature_idx]
+                fold_5 = data_matrix[4*fold_size:5*fold_size, feature_idx]
+                # Calculate correlations between all pairs of folds using safe correlation
+                individual_correlations = {
+                    'fold1_fold2': safe_correlation(fold_1, fold_2),
+                    'fold1_fold3': safe_correlation(fold_1, fold_3),
+                    'fold1_fold4': safe_correlation(fold_1, fold_4),
+                    'fold1_fold5': safe_correlation(fold_1, fold_5),
+                    'fold2_fold3': safe_correlation(fold_2, fold_3),
+                    'fold2_fold4': safe_correlation(fold_2, fold_4),
+                    'fold2_fold5': safe_correlation(fold_2, fold_5),
+                    'fold3_fold4': safe_correlation(fold_3, fold_4),
+                    'fold3_fold5': safe_correlation(fold_3, fold_5),
+                    'fold4_fold5': safe_correlation(fold_4, fold_5)
+                }
+
+                sums = {
+                    'fold1': np.mean(np.abs(fold_1)),
+                    'fold2': np.mean(np.abs(fold_2)),
+                    'fold3': np.mean(np.abs(fold_3)),
+                    'fold4': np.mean(np.abs(fold_4)),
+                    'fold5': np.mean(np.abs(fold_5)),
+                }
+
+
+                # Calculate mean correlation across all fold pairs
+                correlation_values = list(individual_correlations.values())
+                mean_correlation = np.mean(correlation_values)
+                all_means.append(mean_correlation)
+                # Store results for this feature
+                correlations[feature_name] = {
+                    # 'mean_correlation': mean_correlation,
+                    # 'individual_correlations': individual_correlations,
+                    'sums': sums,
+                }
+                
+            except Exception as e:
+                print(f"Error processing feature {feature_name}: {e}")
+                correlations[feature_name] = {
+                    'mean_correlation': 0.0,
+                    'individual_correlations': {k: 0.0 for k in ['fold1_fold2', 'fold1_fold3', 'fold1_fold4', 
+                                                            'fold1_fold5', 'fold2_fold3', 'fold2_fold4', 
+                                                            'fold2_fold5', 'fold3_fold4', 'fold3_fold5', 
+                                                            'fold4_fold5']}
+                }
+        if use_all_means is True:
+            return np.mean(all_means)
+
+        return correlations
 
     def get_standardized_shap_values(self):
         # Retrieve SHAP values and corresponding feature names

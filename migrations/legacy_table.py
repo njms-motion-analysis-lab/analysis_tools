@@ -311,6 +311,42 @@ class Table:
                 FOREIGN KEY (task_id) REFERENCES task (id)
             )
         """)
+        
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS multi_time_predictor (
+                id INTEGER PRIMARY KEY,
+                task_id INTEGER,
+                codes_score TEXT, 
+                model TEXT,       
+                items TEXT,
+                created_at TEXT,
+                updated_at DATETIME,
+                cohort_id INTEGER, 
+                multi_predictor_id INTEGER,
+                FOREIGN KEY(task_id) REFERENCES task(id),
+                FOREIGN KEY(multi_predictor_id) REFERENCES multi_predictor(id)
+            );
+        """)
+
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS time_predictor (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                sensor_id INTEGER,
+                metrics TEXT,
+                matrix TEXT,
+                created_at TEXT,
+                updated_at DATETIME,
+                cohort_id INTEGER,
+                multi_time_predictor_id INTEGER,
+                aggregated_stats TEXT,
+                aggregated_stats_non_normed TEXT,
+                FOREIGN KEY (task_id) REFERENCES task(id),
+                FOREIGN KEY (sensor_id) REFERENCES sensor(id)
+            );
+        """)
+
+
 
         cls.conn.commit()
         
@@ -368,6 +404,12 @@ class Table:
         cls.add_column_if_not_exists('gradient_set', "normalized", "TEXT")
         cls.add_column_if_not_exists('sub_gradient', "submovement_stats_abs", "TEXT")
         cls.add_column_if_not_exists('gradient_set', "abs_val", "TEXT")
+        cls.add_column_if_not_exists('predictor_score', 'time_predictor_id', 'INTEGER')
+        cls.add_column_if_not_exists('predictor_score', 'multi_time_predictor_id', 'INTEGER')
+        cls.add_column_if_not_exists('time_predictor', 'predictor_id', 'INTEGER')
+        cls.add_column_if_not_exists('time_predictor', 'predictor_feature_id', 'INTEGER')
+        cls.add_column_if_not_exists('multi_time_predictor', 'multi_predictor_feature_id', 'INTEGER')
+        cls.add_column_if_not_exists('predictor_score', 'continuous_results', 'TEXT')
         print("Done!!")
         
 

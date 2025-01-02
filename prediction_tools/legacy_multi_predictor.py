@@ -1,7 +1,9 @@
 # import sqlite3
 
 from collections import defaultdict
+import collections
 import csv
+import os
 import re
 from sklearn.impute import SimpleImputer
 from scipy.spatial.distance import squareform, pdist
@@ -18,6 +20,7 @@ from models.legacy_cohort import Cohort
 from models.legacy_sensor import Sensor
 from models.legacy_task import Task
 from prediction_tools.legacy_predictor import Predictor
+
 import matplotlib.colors as mcolors
 from matplotlib import colors as mcolors 
 from sklearn.metrics import silhouette_score
@@ -26,6 +29,7 @@ from sklearn.preprocessing import StandardScaler
 from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from datetime import datetime, timedelta
 from prediction_tools.predictor_score import PredictorScore
+from ts_fresh_params import fn_get_params_for_column
 from viewers.matrix_plotter import MatrixPlotter
 from viewers.multi_plotter import MultiPlotter
 import matplotlib.colors as mcolors
@@ -96,7 +100,6 @@ class MultiPredictor(LegacyBaseModel):
     def gen_predictors_for_sensor(self, snr):
         Predictor.find_or_create(task_id=self.task_id, sensor_id=snr.id, non_norm=False, abs_val=False, cohort_id=self.cohort_id, multi_predictor_id=self.id)
     
-
     def get_sensors(self):
         return Sensor.where(name=SENSOR_CODES)
 
@@ -171,7 +174,6 @@ class MultiPredictor(LegacyBaseModel):
         )
 
     def show_norm_scores(self, models=TOP_TREE_MODELS, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
-        print("AXIS", axis)
         return self.show_predictor_scores(
             models,
             abs_val=False, 
@@ -365,7 +367,7 @@ class MultiPredictor(LegacyBaseModel):
                     import pdb;pdb.set_trace()
         return pred_sensor_kit
     
-    def prepare_sensor_data(self, models=["RandomForest"], abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
+    def prepare_sensor_data(self, models=["RandomForest"], abs_val=False, non_norm=False, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False, metric=None):
         pred_kit = {}
         pred_sensor_kit = {}
         for m in models:
@@ -386,20 +388,75 @@ class MultiPredictor(LegacyBaseModel):
                 all_sensor_ids.extend([sensor.id] * len(feature_names))
 
             # Create a DataFrame with all SHAP values
-            import pdb;pdb.set_trace()
             combined_data = pd.DataFrame(np.concatenate(all_shap_values, axis=1), 
                                         columns=all_feature_names)
-            
             # Sort by sensor ID if reverse_order is specified
             if reverse_order:
                 combined_data = combined_data.sort_index(axis=1, key=lambda x: [-int(col.split('_')[0]) for col in x])
             
             # Calculate distance matrix using Euclidean distance
-            distance_matrix = pdist(combined_data.T, metric='euclidean')
+            if metric is None:
+                metric = 'euclidean'
+            distance_matrix = pdist(combined_data.T, metric=metric)
             distance_matrix = squareform(distance_matrix)
             
         return combined_data, distance_matrix, all_sensor_ids
 
+    def save_shap_data_to_csv(self, combined_data, filename='shap_data_with_info.csv'):
+        """
+        Save the SHAP data to a CSV file with additional feature information.
+        
+        :param combined_data: pandas DataFrame containing the SHAP values
+        :param filename: str, name of the output CSV file
+        """
+        # Create a list to store feature information
+        feature_info = []
+
+        # Iterate through each feature (column) in the DataFrame
+        for feature in combined_data.columns:
+            params = fn_get_params_for_column(feature)
+            if params:
+                feature_info.append({
+                    'Feature': feature,
+                    'Sensor ID': params['sensor_id'],
+                    'Sensor Code': params['sensor_code'],
+                    'Feature Name': params['feature_name'],
+                    'Feature Index': params['feature_index'],
+                    'Axis': params['axis'],
+                    'Parameters': str(params['params'])  # Convert to string for CSV compatibility
+                })
+            else:
+                feature_info.append({
+                    'Feature': feature,
+                    'Sensor ID': 'N/A',
+                    'Sensor Code': 'N/A',
+                    'Feature Name': 'N/A',
+                    'Feature Index': 'N/A',
+                    'Axis': 'N/A',
+                    'Parameters': 'N/A'
+                })
+
+        # Create a DataFrame with feature information
+        feature_info_df = pd.DataFrame(feature_info)
+
+        # Transpose the original data for better CSV format
+        transposed_data = combined_data.T
+
+        # Merge feature information with transposed data
+        result = pd.merge(feature_info_df, transposed_data, left_on='Feature', right_index=True)
+
+        # Save to CSV
+        filename = self.cohort_name() + filename
+        if self.model is not None:
+            filename = self.model + '_' + filename
+        result.to_csv(filename, index=False)
+        print(f"CSV file '{filename}' has been created successfully.")
+
+    
+    
+
+    def check_time_predictors(self):
+        predictors = self.get_preds()
 
     def plot_shapley_over_time_updated(self, averaged_shap_scores, feature_cluster_map, color_mapping, averaged_sensors):
         
@@ -467,24 +524,21 @@ class MultiPredictor(LegacyBaseModel):
         plt.show()
 
 
-    def create_dendrogram_with_clusters(self, combined_data, distance_matrix, method='ward'):
-        # Perform hierarchical clustering
+    def create_dendrogram_with_clusters(self, combined_data, distance_matrix, method='ward', alt_metric=None):
         linked = linkage(distance_matrix, method=method)
+
         
         # Determine number of clusters
-        if self.elbow is not None:
-            n_clusters = self.elbow + 1
-            cluster_assignments = fcluster(linked, n_clusters, criterion='maxclust')
-        else:
-            # If self.elbow is not available, use the distance threshold method
-            max_d = 0.7 * max(linked[:, 2])  # 70% of the maximum distance as a default threshold
-            cluster_assignments = fcluster(linked, max_d, criterion='distance')
-            n_clusters = len(np.unique(cluster_assignments))
+        # If self.elbow is not available, use the distance threshold method
+        max_d = 0.7 * max(linked[:, 2])  # 70% of the maximum distance as a default threshold
+        cluster_assignments = fcluster(linked, max_d, criterion='distance')
+        n_clusters = len(np.unique(cluster_assignments))
         
         # Create a color mapping for clusters
         unique_clusters = np.unique(cluster_assignments)
         colors = plt.cm.rainbow(np.linspace(0, 1, len(unique_clusters)))
         color_mapping = {cluster: mcolors.to_hex(color) for cluster, color in zip(unique_clusters, colors)}
+
         
         # Function to get the color for a given link
         def link_color_func(link):
@@ -521,13 +575,14 @@ class MultiPredictor(LegacyBaseModel):
         # Color the leaf labels based on their cluster assignment
         ax = plt.gca()
         xlbls = ax.get_xmajorticklabels()
-        for lbl in xlbls:
-            lbl.set_color(color_mapping[cluster_assignments[combined_data.columns.get_loc(lbl.get_text())]])
-        
+        # for lbl in xlbls:
+        #     lbl.set_color(color_mapping[cluster_assignments[combined_data.columns.get_loc(lbl.get_text())]])
         title = f'Hierarchical Clustering Dendrogram ({n_clusters} clusters)'
         if self.model == "grad_set":
             title = title + "--Full Motion"
         title = self.cohort_name() + " " + title
+        if alt_metric is not None:
+            title = title + alt_metric
         plt.title(title)
         plt.xlabel('Feature')
         plt.ylabel('Distance')
@@ -544,11 +599,23 @@ class MultiPredictor(LegacyBaseModel):
                         for cluster, color in color_mapping.items()]
         plt.legend(handles=legend_elements, loc='upper right')
         
-        plt.show()
+        # plt.show()
         
         # Create a dictionary mapping features to their cluster assignments
         feature_cluster_map = dict(zip(combined_data.columns, cluster_assignments))
-        
+        color_mapping = self.set_color_mapping(feature_cluster_map)
+        for lbl in xlbls:
+            lbl.set_color(color_mapping[cluster_assignments[combined_data.columns.get_loc(lbl.get_text())]])
+        # Save the figure
+        save_dir = 'dendrograms'
+        os.makedirs(save_dir, exist_ok=True)
+        filename = f"{title.replace(' ', '_')}.png"
+        filepath = os.path.join(save_dir, filename)
+        plt.savefig(filepath, dpi=300, bbox_inches='tight')
+        plt.close()  # Close the figure to free up memory
+
+        # Create a dictionary mapping features to their cluster assignments
+        feature_cluster_map = dict(zip(combined_data.columns, cluster_assignments))
         return feature_cluster_map, color_mapping
     
     def aggregate_shap_values_2(self, models=TOP_TREE_MODELS, abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=False):
@@ -679,20 +746,19 @@ class MultiPredictor(LegacyBaseModel):
         elbow_point = np.argmax(differences) + 2  # Add 2 because we started with 2 clusters
         self.elbow = elbow_point
         # Plot the elbow curve
-        plt.figure(figsize=(20, 12))
-        plt.plot(cluster_range, silhouette_scores, 'bo-')
-        plt.xlabel('Number of Clusters')
-        plt.ylabel('Average Silhouette Score')
-        plt.title('Elbow Method for Optimal k')
-        plt.vlines(x=elbow_point, ymin=min(silhouette_scores), ymax=max(silhouette_scores), 
-                colors='r', linestyles='dashed', label=f'Elbow Point: {elbow_point}')
-        plt.legend()
+        # plt.figure(figsize=(20, 12))
+        # plt.plot(cluster_range, silhouette_scores, 'bo-')
+        # plt.xlabel('Number of Clusters')
+        # plt.ylabel('Average Silhouette Score')
+        # plt.title('Elbow Method for Optimal k')
+        # plt.vlines(x=elbow_point, ymin=min(silhouette_scores), ymax=max(silhouette_scores), 
+        #         colors='r', linestyles='dashed', label=f'Elbow Point: {elbow_point}')
+        # plt.legend()
         # plt.show()
         
         return elbow_point
 
     def show_predictor_scores(self, models, abs_val=False, non_norm=True, reverse_order=True, first_model_features=None, num_top=NUM_TOP, use_cat=True, axis=False, include_accuracy=True):
-        print("AXIS", axis)
         pred_kit = {}
         for m in models:
             pred_kit[m] = self.get_predictor_scores_for_model(
@@ -744,15 +810,101 @@ class MultiPredictor(LegacyBaseModel):
             while i < len(average_vals):
                 averaged_shap_scores[i]['ave_accuracy'] = average_vals[i]['ave_accuracy']
                 i += 1
-        combined_data, distance_matrix, sensor_ids = self.prepare_sensor_data()
+        metric = 'euclidean'
+        combined_data, distance_matrix, sensor_ids = self.prepare_sensor_data(metric=metric)
         feature_cluster_map, color_mapping = self.create_dendrogram_with_clusters(combined_data, distance_matrix)
-        import pdb;pdb.set_trace()
+        
+        if self.model is None:
+            mod = '_'
+        else:
+            mod = self.model
+        
+        fcm_title = 'fcm_' + self.cohort_name() + '_' + mod + '_' + metric + '.csv'
+        print(fcm_title)
+
+        self.save_feature_cluster_map_to_csv(combined_data, feature_cluster_map, filename=fcm_title)
         # self.plot_shapley_over_time_updated(averaged_shap_scores, feature_cluster_map, color_mapping, averaged_sensors)
-        self.plot_shap_scores_by_sensor_and_cluster(combined_data, feature_cluster_map, color_mapping, sensor_accuracy)
+        # self.plot_shap_scores_by_sensor_and_cluster(combined_data, feature_cluster_map, color_mapping, sensor_accuracy)
         self.plot_shap_scores_by_sensor_and_cluster(combined_data, feature_cluster_map, color_mapping, sensor_accuracy, normalize=False)
         # return self.new_plot(averaged_shap_scores, averaged_sensors, feature_cluster_map=feature_cluster_map)
 
+    def set_color_mapping(self, feature_cluster_map):
+        # Count the number of features in each cluster
+        cluster_sizes = collections.Counter(feature_cluster_map.values())
+        
+        # Sort clusters by size in descending order
+        sorted_clusters = sorted(cluster_sizes.items(), key=lambda x: x[1], reverse=True)
+        
+        # Initialize color mapping
+        color_mapping = {}
+        
+        # Assign colors based on cluster sizes
+        for i, (cluster, _) in enumerate(sorted_clusters):
+            if i == 0:
+                color_mapping[cluster] = '#ff0000'  # Red for the largest cluster
+            elif i == 1:
+                color_mapping[cluster] = '#8000ff'  # Purple for next the largest cluster
+            else:
+                color_mapping[cluster] = '#00ff00'  # Green for any smaller clusters
+        
+        return color_mapping
         # return self.plot_shap_changes(averaged_shap_scores, averaged_top_scores, averaged_sensors, percentage_of_average=False, first_model_features=None, num_top=NUM_TOP, include_accuracy=include_accuracy, axis=axis)
+    def save_feature_cluster_map_to_csv(self, combined_data, feature_cluster_map, filename='shap_data_with_info.csv'):
+        """
+        Save the SHAP data to a CSV file with additional feature information and cluster.
+        
+        :param combined_data: pandas DataFrame containing the SHAP values
+        :param feature_cluster_map: dict mapping features to their cluster
+        :param filename: str, name of the output CSV file
+        """
+        # Create a list to store feature information
+        feature_info = []
+
+        # Iterate through each feature (column) in the DataFrame
+        for feature in combined_data.columns:
+            params = fn_get_params_for_column(feature)
+            cluster = feature_cluster_map.get(feature, 'N/A')
+            
+            if params:
+                feature_info.append({
+                    'Feature': feature,
+                    'Sensor ID': params['sensor_id'],
+                    'Sensor Code': params['sensor_code'],
+                    'Feature Name': params['feature_name'],
+                    'Feature Index': params['feature_index'],
+                    'Axis': params['axis'],
+                    'Parameters': str(params['params']),  # Convert to string for CSV compatibility
+                    'Cluster': cluster
+                })
+            else:
+                feature_info.append({
+                    'Feature': feature,
+                    'Sensor ID': 'N/A',
+                    'Sensor Code': 'N/A',
+                    'Feature Name': 'N/A',
+                    'Feature Index': 'N/A',
+                    'Axis': 'N/A',
+                    'Parameters': 'N/A',
+                    'Cluster': cluster
+                })
+
+        # Create a DataFrame with feature information
+        feature_info_df = pd.DataFrame(feature_info)
+
+        # Transpose the original data for better CSV format
+        transposed_data = combined_data.T
+
+        # Merge feature information with transposed data
+        result = pd.merge(feature_info_df, transposed_data, left_on='Feature', right_index=True)
+        # Prepare filename
+        filename = self.cohort_name() + filename
+        if self.model is not None:
+            filename = self.model + '_' + filename
+
+        # Save to CSV
+        result.to_csv(filename, index=False)
+        print(f"CSV file '{filename}' has been created successfully.")
+
 
     def plot_shap_scores_by_sensor_and_cluster(self, df, feature_cluster_map, color_mapping, sensor_accuracy, normalize=True):
         print(sensor_accuracy)
@@ -805,7 +957,8 @@ class MultiPredictor(LegacyBaseModel):
                     y[mask],
                     color=color,
                     label=f'Cluster {cluster}' if not first_label_shown[cluster] else "",
-                    alpha=0.6
+                    alpha=0.3,  # Increased transparency
+                    edgecolors='none'  # Remove edge colors for better overlap visibility
                 )
                 first_label_shown[cluster] = True  # Mark the label as shown
 
@@ -813,178 +966,45 @@ class MultiPredictor(LegacyBaseModel):
         ax1_2 = ax1.twinx()  # Create a second y-axis sharing the same x-axis
         sensor_positions = list(sensor_accuracy.keys())
         accuracy_scores = list(sensor_accuracy.values())
-
-        ax1_2.plot(sensor_positions, accuracy_scores, 'o-', color='green', label='Accuracy', markersize=10, alpha=0.7)
+        import pdb;pdb.set_trace()
+        ax1_2.plot(sensor_positions, accuracy_scores, 'o-', color='green', label='Accuracy Score', markersize=10, alpha=0.7)
         ax1_2.set_ylim(0, 1)  # Assuming accuracy scores are between 0 and 1
+
 
         # Adjust labels, titles, and legends
         if normalize:
             is_norm = "Normalized"
         else:
-            is_norm = "Non Normalized"
-        title = f"{self.cohort_name()}, Average {is_norm} SHAP Values per Sensor by Cluster--{self.model}"
+            is_norm = ""
+
+        if self.cohort_name() == 'cp_before':
+            cohort = "CP Patient"
+        else:
+            cohort = "Healthy Control"
+
+        if self.model == "default" or self.model == None:
+            mod = "Sub Motion"
+        else:
+            mod = "Full Motion"
+
+        title = f"{is_norm} {cohort} SHAP Value Clusters by Sensor--{mod}"
         ax1.set_title(title)
         ax1.set_xlabel('Sensor Position')
         ax1.set_ylabel('Average SHAP Value')
+
+
         ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right')
         ax1.grid(True)
         ax1.legend(title="Clusters", loc='upper left')
 
         ax1_2.set_ylabel('Accuracy Score')
         ax1_2.legend(loc='upper right')
+        if not normalize:
+            ax1.set_ylim(-.4, .4)
 
-        plt.tight_layout()
-        plt.show()
+        # Adjust layout and save the figure before showing it
+        plt.tight_layout(rect=[0, 0, 1, 0.95])  # Leave space for the title
         plt.savefig(title, dpi=300, bbox_inches='tight')
-    
-    def plot_dendrogram(self, abs_val=False, non_norm=False):
-        # Prepare data for clustering
-        feature_list = []
-        for cluster, features in self.curr_axis.items():
-            feature_list.extend(features)
-        
-        # Create a distance matrix (this is a placeholder, you'll need to replace this with your actual distance calculation)
-        
-        #TODO: Change this to specified abs val non_norm
-        
-        sim_matrix, unique_features = self.sim_matrix(abs_val=abs_val, non_norm=non_norm, model="RandomForest")
-        # Perform hierarchical clustering
-        print(sim_matrix)
-        linkage_matrix = linkage(sim_matrix, method='ward')
-        
-        # Create color map
-        color_mapping = {}
-        cluster_colors = ['#0000FF', '#008000', '#FFA500', '#FF0000']  # Blue, Green, Orange, Red
-        for cluster, features in self.curr_axis.items():
-            color = cluster_colors[int(cluster[1])]  # Assuming clusters are named C0, C1, C2, C3
-            for feature in features:
-                color_mapping[feature] = color
-        
-        # Create a color list for leaves
-        leaf_colors = [color_mapping[feature] for feature in feature_list]
-        
-        # Plot the dendrogram
-        plt.figure(figsize=(10, 7))
-        print(linkage_matrix)
-        print(feature_list)
-        dendrogram(
-            linkage_matrix,
-            labels=feature_list,
-            leaf_rotation=90,
-            leaf_font_size=8,
-            color_threshold=0,
-        )
-        
-        # Color the labels based on their cluster
-        ax = plt.gca()
-        xlbls = ax.get_xmajorticklabels()
-        for lbl in xlbls:
-            lbl.set_color(color_mapping[lbl.get_text()])
-        
-        plt.title("Dendrogram of Clustered Features")
-        plt.xlabel("Features")
-        plt.ylabel("Distance")
-        
-        # Adjust layout and display
-        plt.tight_layout()
-        plt.show()
-
-    def new_plot(self, shap_scores, sensors, normalize_scores=False, feature_cluster_map=None):
-        def convert_feature_cluster_map_to_curr_axis(feature_cluster_map):
-            # Initialize the curr_axis dictionary
-            curr_axis = {'C1': [], 'C2': [], 'C3': [], 'C4': []}
-            
-            # Iterate through the feature_cluster_map
-            for feature, cluster in feature_cluster_map.items():
-                # Remove the sensor number and 'grad_data__' prefix
-                cleaned_feature = feature.split('_', 1)[1].replace('grad_data__', '')
-                
-                # Add the cleaned feature name to the appropriate cluster list
-                curr_axis[f'C{cluster}'].append(cleaned_feature)
-            
-            # Sort the features in each cluster
-            for cluster in curr_axis:
-                curr_axis[cluster].sort()
-            
-            return curr_axis
-        if feature_cluster_map is not None:
-            curr_axis = convert_feature_cluster_map_to_curr_axis(feature_cluster_map)
-        else:
-            curr_axis = self.curr_axis
-        # Generate color mapping from self.curr_axis
-        color_mapping = {}
-        cluster_colors = ['#0000FF', '#008000', '#FFA500', '#FF0000']  # Blue, Green, Orange, Red
-        for cluster, features in curr_axis.items():
-            color = cluster_colors[int(cluster[1])]  # Assuming clusters are named C0, C1, C2, C3
-            for feature in features:
-                color_mapping[feature] = color
-        
-        # Initialize data structures
-        color_shap_scores = defaultdict(lambda: defaultdict(float))
-        sensor_accuracies = []
-        
-        # Process SHAP scores
-        for i, sensor_score_set in enumerate(shap_scores):
-            sensor = sensors[i]
-            sensor_accuracies.append(sensor_score_set['ave_accuracy'])
-            
-            # Remove keys with 0 SHAP values and 'ave_accuracy'
-            sensor_score_set_non_zero_features = {k: v for k, v in sensor_score_set.items() if v != 0 and k != 'ave_accuracy'}
-            
-            for feature, shap_value in sensor_score_set_non_zero_features.items():
-                feature_color = color_mapping.get(feature)
-                if feature_color:
-                    color_shap_scores[feature_color][sensor] += shap_value
-        
-        # Normalize scores if required
-        if normalize_scores:
-            for color in color_shap_scores:
-                max_score = max(color_shap_scores[color].values(c))
-                for sensor in color_shap_scores[color]:
-                    color_shap_scores[color][sensor] /= max_score if max_score != 0 else 1
-        
-        # Prepare data for plotting
-        colors = list(color_shap_scores.keys())
-        x = np.arange(len(sensors))
-        
-        # Create plot
-        fig, ax1 = plt.subplots(figsize=(20, 10))
-        ax2 = ax1.twinx()
-        
-        # Plot SHAP scores and find max SHAP value
-        max_shap = 0
-        for i, color in enumerate(colors):
-            scores = [color_shap_scores[color][sensor] for sensor in sensors]
-            max_shap = max(max_shap, max(scores))
-            ax1.plot(x, scores, marker='o', linestyle='-', color=color, label=f'Cluster {i+1}')
-        
-        # Plot accuracies
-        ax2.plot(x, sensor_accuracies, 'r--', marker='x', label='ave_accuracy')
-        
-        # Set labels and title
-        ax1.set_xlabel('Sensor Location')
-        ax1.set_ylabel('SHAP Value (Average Accuracy)')
-        ax2.set_ylabel('Average Accuracy')
-        ax1.set_title("Axis Block Categories' SHAP Values Across Sensors (Average Accuracy)")
-        
-        # Set x-axis ticks
-        ax1.set_xticks(x)
-        ax1.set_xticklabels(sensors, rotation=45, ha='right')
-        
-        # Add legends
-        ax1.legend(loc='upper left')
-        ax2.legend(loc='upper right')
-        
-        # Set y-axis limits
-        ax1.set_ylim(0, max_shap * 1.1)  # Add 10% padding to the top
-        min_accuracy = min(sensor_accuracies)
-        max_accuracy = max(sensor_accuracies)
-        ax2.set_ylim(0, 1)  # Add some padding
-        
-        # Add grid
-        ax1.grid(True, linestyle='--', alpha=0.7)
-        
-        plt.tight_layout()
         plt.show()
 
 
@@ -1022,20 +1042,19 @@ class MultiPredictor(LegacyBaseModel):
                 current_top_features = current_model_pred_set[0].get_top_n_features(num_top)
                 current_shap_scores = current_model_pred_set[0].get_shap_values_for_features(current_top_features)
             
-            print("AXIS 3", axis)
-            if use_cat is True:
-                if axis is True:
-                    if self.curr_axis is None or self.curr_axis is (None,):
-                        axis = self.get_new_axis(model=model, abs_val=abs_val, non_norm=non_norm)
-                        self.curr_axis = axis
-                    else:
-                        axis = self.curr_axis
+            # if use_cat is True:
+            #     if axis is True:
+            #         if self.curr_axis is None or self.curr_axis is (None,):
+            #             axis = self.get_new_axis(model=model, abs_val=abs_val, non_norm=non_norm)
+            #             self.curr_axis = axis
+            #         else:
+            #             axis = self.curr_axis
                 
-                print(axis)
-                print(current_shap_scores, axis)
-                aggregate_shap_values = current_model_pred_set[0].aggregate_shap_values_by_category(current_shap_scores, axis)
-                normalized_shap_values = current_model_pred_set[0].normalize_shap_values(aggregate_shap_values)
-                # current_shap_scores = normalized_shap_values
+            #     print(axis)
+            #     print(current_shap_scores, axis)
+            #     aggregate_shap_values = current_model_pred_set[0].aggregate_shap_values_by_category(current_shap_scores, axis)
+            #     normalized_shap_values = current_model_pred_set[0].normalize_shap_values(aggregate_shap_values)
+            #     # current_shap_scores = normalized_shap_values
 
             shap_scores.append(current_shap_scores)
             top_scores.append(current_shap_scores)
@@ -1164,13 +1183,6 @@ class MultiPredictor(LegacyBaseModel):
         for sensor in curr_sensors:
             if sensor.name != "relbm_x":
                 predictor = Predictor.find_or_create(task_id=self.task_id, sensor_id=sensor.id, non_norm=non_norm, abs_val=abs_val, multi_predictor_id=self.id, cohort_id=self.cohort_id)
-                # TODO: Stephen, remove after finishing this round.
-                if predictor.updated_at is not None:
-                    # Adjust the format string to match the actual format
-                    predictor_updated_at = datetime.strptime(predictor.updated_at, '%Y-%m-%d %H:%M:%S.%f')
-                else:
-                    predictor_updated_at = None
-
                 if predictor.accuracies is None or force_load is True:
                     predictor = predictor.train_from(force_load=True, add_other=add_other)
                 else:
@@ -1239,15 +1251,15 @@ class MultiPredictor(LegacyBaseModel):
 
         results = []
         # Iterate through the mpss list
-        for mp in predictors:
+        for pr in predictors:
             # Extracting the classifier accuracies
-            if mp.get_accuracies() != {} and mp.get_accuracies() != None:
+            if pr.get_accuracies() != {} and pr.get_accuracies() != None:
                 if alt is None:
-                    accuracies = mp.get_accuracies()['classifier_accuracies']
+                    accuracies = pr.get_accuracies()['classifier_accuracies']
                 else:
-                    accuracies = mp.get_classifier_accuracies(alt=alt)
+                    accuracies = pr.get_classifier_accuracies(alt=alt)
             else:
-                print("Accuracies not found:", mp.attrs())
+                print("Accuracies not found:", pr.attrs())
                 continue
             
             # Sorting by accuracy in descending order and rounding to three decimal places
@@ -1256,10 +1268,18 @@ class MultiPredictor(LegacyBaseModel):
             print(sorted_accuracies)
             
             # Append sensor name and its sorted accuracies to the results list
-            results.append((mp.sensor().name, sorted_accuracies))
+            results.append((pr.sensor().name, sorted_accuracies))
         results.sort(key=lambda x: max(x[1].values()), reverse=True)
 
         return results
+    
+    def get_norm_corr(self, non_norm=True, abs_val=False):
+        predictors = self.get_norm_preds()
+        prs = []
+        for pr in predictors:
+            prs.append((pr.sensor().name, pr.get_fold_corr()))
+        return prs
+
     
     def cohort_name(self):
         return Cohort.get(id=self.cohort_id).name
@@ -1601,3 +1621,8 @@ class MultiPredictor(LegacyBaseModel):
     #     clusters = kmeans.fit_predict(standardized_shap_values.T)  # Again, transpose so features are data points
         
     #     return clusters
+
+    # TODO
+    # 1. update plot colors, verify clusters
+    # 2. add methods
+    # 3. 

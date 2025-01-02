@@ -1,4 +1,6 @@
 import csv
+from datetime import datetime
+import os
 import matplotlib.pyplot as plt
 from models.legacy_sensor import Sensor
 import seaborn as sns
@@ -60,10 +62,12 @@ class MatrixPlotter(LegacyBaseModel):
             'rupa': 'Upper Arm',
             # 'mAccelerometerX': 'Accelerometer',
         }
-        if alt:
-            results = sorted(results, key=lambda x: SENSOR_CODES.index(x[0]))
-            results_two = sorted(results_two, key=lambda x: SENSOR_CODES.index(x[0]))
+        # if alt:
+        #     results = sorted(results, key=lambda x: SENSOR_CODES.index(x[0]))
+        #     results_two = sorted(results_two, key=lambda x: SENSOR_CODES.index(x[0]))
 
+        results = sorted(results, key=lambda x: SENSOR_CODES.index(x[0]))
+        results_two = sorted(results_two, key=lambda x: SENSOR_CODES.index(x[0]))
         # Convert the lists to dictionaries
         results_dict = {sensor: accuracies for sensor, accuracies in results}
         results_two_dict = {sensor: accuracies for sensor, accuracies in results_two} if results_two else {}
@@ -104,11 +108,11 @@ class MatrixPlotter(LegacyBaseModel):
                 all_models.remove(model)
             except ValueError:
                 pass  # Model not in the list, so simply pass
-            
-            for sensor, accuracies in results_dict.items():
-                row = [sensor.replace('_x', '')]
-                for model in all_models:
-                    row.append(accuracies.get(model, 'N/A'))  # Appending model accuracy, if not found write 'N/A'
+                
+        for sensor, accuracies in results_dict.items():
+            row = [sensor.replace('_x', '')]
+            for model in all_models:
+                row.append(accuracies.get(model, 'N/A'))  # Appending model accuracy, if not found write 'N/A'
 
         # Convert the results into a dataframe for easy plotting
         df1 = pd.DataFrame(columns=['Sensor'] + all_models)
@@ -131,14 +135,15 @@ class MatrixPlotter(LegacyBaseModel):
                     row[model] = accuracies.get(model, None)
                 df2 = df2._append(row, ignore_index=True)
             
-
             ordered_columns = ['Sensor'] + df2.drop('Sensor', axis=1).mean().sort_values(ascending=False).index.tolist()
             df2 = df2[ordered_columns]
             
+            # **Updated Section for Square Plots**
             # Create a subplot with 1 row and 2 columns
-            # fig, ax = plt.subplots(1, 2, figsize=(24, 8))
-            
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(24, 8), gridspec_kw={'width_ratios': [1, 1], 'wspace': 0.2})
+            # Adjust figsize to make each subplot square
+            # For two square subplots side by side, figsize should be (width, height) where width = 2 * height
+            # For example, height=8, width=16 makes each subplot 8x8 inches
+            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8), gridspec_kw={'width_ratios': [1, 1], 'wspace': 0.3})
             df1['Sensor'] = df1['Sensor'].map(sensor_names)
             df2['Sensor'] = df2['Sensor'].map(sensor_names)
 
@@ -147,22 +152,74 @@ class MatrixPlotter(LegacyBaseModel):
                 vmin = min(df1.drop('Sensor', axis=1).astype(float).min().min(), df2.drop('Sensor', axis=1).astype(float).min().min())
                 vmax = max(df1.drop('Sensor', axis=1).astype(float).max().max(), df2.drop('Sensor', axis=1).astype(float).max().max())
             else:
-                vmin, vmax = 0.40, 1.00  # Set these values for the heatmap
-            sns.heatmap(df1.set_index('Sensor').astype(float), cmap="YlGnBu", annot=True, yticklabels=1, ax=ax1, vmin=vmin, vmax=vmax, cbar=False)
-            if h_one != None:
+                vmin, vmax = 0 , 1  # Set these values for the heatmap
+
+            # Plot the first heatmap
+            if alt is False:
+                cmap = "YlGnBu_r"
+            else:
+                cmap = "YlGnBu"
+        
+            sns.heatmap(
+                df1.set_index('Sensor').astype(float),
+                cmap=cmap,
+                annot=True,
+                yticklabels=1,
+                ax=ax1,
+                vmin=vmin,
+                vmax=vmax,
+                cbar=False
+            )
+            if h_one is not None:
                 ax1.set_title(h_one)
             ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45)
             ax1.set_yticklabels(ax1.get_yticklabels(), rotation=0)
-            
-            sns.heatmap(df2.set_index('Sensor').astype(float), cmap="YlGnBu", annot=True, yticklabels=1, ax=ax2, vmin=vmin, vmax=vmax, cbar_ax=cax)
-            if h_two != None:
+            ax1.set_aspect('equal')  # Ensure square aspect
+
+            # Plot the second heatmap
+            sns.heatmap(
+                df2.set_index('Sensor').astype(float),
+                cmap=cmap,
+                annot=True,
+                yticklabels=1,
+                ax=ax2,
+                vmin=vmin,
+                vmax=vmax,
+                cbar_ax=cax
+            )
+            if h_two is not None:
                 ax2.set_title(h_two)
             ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45)
             ax2.set_yticklabels(ax2.get_yticklabels(), rotation=0)
+            ax2.set_aspect('equal')  # Ensure square aspect
             
-            # plt.tight_layout(rect=[0, 0, 0.9, 1])
             plt.tight_layout()
-            plt.subplots_adjust(top=0.94, bottom=0.15)  # Adjust the top and bottom margins
+            plt.subplots_adjust(top=0.94, bottom=0.15, right=0.9)  # Adjust the top, bottom, and right margins
+
+            # ---- Saving the Heatmap ----
+            try:
+                # Ensure the 'heatmaps' directory exists
+                os.makedirs('heatmaps', exist_ok=True)
+
+                # Use h_one as the title; if h_one is None, use a default name
+                title = h_one if h_one else "heatmap"
+
+                # Get current date and time
+                timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+
+                # Create a safe filename
+                safe_title = "".join([c if c.isalnum() or c in (' ', '_') else "_" for c in title]).rstrip()
+                filename = f"{safe_title}_{timestamp}.png"
+
+                # Full path for saving
+                filepath = os.path.join('heatmaps', filename)
+
+                # Save the figure with high resolution
+                plt.savefig(filepath, dpi=300, bbox_inches='tight')
+                print(f"Heatmap saved successfully at {filepath}")
+            except Exception as e:
+                print(f"An error occurred while saving the heatmap: {e}")
+            # -----------------------------
 
             plt.show()
 

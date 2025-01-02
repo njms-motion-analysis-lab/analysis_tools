@@ -1,72 +1,4 @@
-import re
-
-from models.legacy_sensor import Sensor
-# TODO
-# try factor analysis packages
-# try looking at groupings
-# indiv features might be too much detail
-# ave features by sensor
-# Dictionary to hold the regex patterns for each category
-FEATURE_CATEGORY_PATTERNS = {
-    'energy_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks'],
-    'statistical': [
-        'absolute_maximum', 'count_above_mean', 'count_below_mean', 'mean', 'median', 'quantile', 
-        'skewness', 'kurtosis', 'standard_deviation', 'variance', 'sum_values', 'symmetry_looking',
-        'ar_coefficient', 'count_above', 'first_location_of_maximum', 'last_location_of_minimum',
-        'last_location_of_maximum','first_location_of_minimum','range_count', 'ratio_beyond_r_sigma', 
-        'sample_entropy', 'variation_coefficient', 'benford_correlation'
-    ],
-    'autocorrelation': ['agg_autocorrelation', 'autocorrelation', 'partial_autocorrelation'],
-    'trend_based': [
-        'agg_linear_trend', 'linear_trend', 'time_reversal_asymmetry_statistic', 'friedrich_coefficients'
-    ],
-    'frequency_based': ['fft_aggregated', 'fft_coefficient', 'freq', 'spkt_welch_density', 'fft'],
-    'wavelet_based': ['cwt_coefficients', 'wavelet', 'cwt'],
-    'complexity_measures': ['approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
-    # 'nonlinearity_measures': ['c3'],
-    # 'peak_features': ['number_cwt_peaks', 'number_peaks'],
-    # Add more categories and patterns as needed
-}
-
-FEATURE_CATEGORY_PATTERNS = {
-    'energy_and_complexity_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks', 'approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
-    'statistical': [
-        'absolute_maximum', 'count_above_mean', 'count_below_mean', 'mean', 'median', 'quantile', 
-        'skewness', 'kurtosis', 'standard_deviation', 'variance', 'sum_values', 'symmetry_looking',
-        'ar_coefficient', 'count_above', 'first_location_of_maximum', 'last_location_of_minimum',
-        'last_location_of_maximum','first_location_of_minimum','range_count', 'ratio_beyond_r_sigma', 
-        'sample_entropy', 'variation_coefficient', 'benford_correlation'
-    ],
-    # 'autocorrelation': ['agg_autocorrelation', 'autocorrelation', 'partial_autocorrelation'],
-    # 'trend_based': [
-    #     'agg_linear_trend', 'linear_trend', 'time_reversal_asymmetry_statistic', 'friedrich_coefficients'
-    # ],
-    'frequency_and_wavelet_based': ['fft_aggregated', 'fft_coefficient', 'freq', 'spkt_welch_density', 'fft','cwt_coefficients', 'wavelet', 'cwt'],
-    # 'nonlinearity_measures': ['c3'],
-    # 'peak_features': ['number_cwt_peaks', 'number_peaks'],
-    # Add more categories and patterns as needed
-}
-# try factor analysis, to justify why features are together
-# 
-FEATURE_CATEGORY_PATTERNS = {
-    'energy_and_complexity_based': ['abs_energy', 'absolute_sum_of_changes', 'energy_ratio_by_chunks', 'approximate_entropy', 'binned_entropy', 'lempel_ziv_complexity', 'permutation_entropy'],
-    'statistical': [
-        'absolute_maximum', 'count_above_mean', 'count_below_mean', 'mean', 'median', 'quantile', 
-        'skewness', 'kurtosis', 'standard_deviation', 'variance', 'sum_values', 'symmetry_looking',
-        'ar_coefficient', 'count_above', 'first_location_of_maximum', 'last_location_of_minimum',
-        'last_location_of_maximum','first_location_of_minimum','range_count', 'ratio_beyond_r_sigma', 
-        'sample_entropy', 'variation_coefficient', 'benford_correlation'
-    ],
-    'frequency_and_wavelet_based': ['fft_aggregated', 'fft_coefficient', 'freq', 'spkt_welch_density', 'fft','cwt_coefficients', 'wavelet', 'cwt'],
-}
-
-AXIS_PATTERNS = {
-    'y-axis': ['_y'],
-    'z-axis': ['_z'],
-    'x-axis': ['_x'],
-}
-
-
+ID_MAP = {1: 'lwra_x', 2: 'lwrb_x', 3: 'lwra_y', 4: 'lwrb_y', 5: 'lwra_z', 6: 'lwrb_z', 7: 'rwra_x', 8: 'rwrb_x', 9: 'rwra_y', 10: 'rwrb_y', 11: 'rwra_z', 12: 'rwrb_z', 13: 'rfrm_x', 14: 'rfrm_y', 15: 'rfrm_z', 16: 'lelb_x', 17: 'lelbm_x', 18: 'lelb_y', 19: 'lelbm_y', 20: 'lelb_z', 21: 'lelbm_z', 22: 'relb_x', 23: 'relbm_x', 24: 'relb_y', 25: 'relbm_y', 26: 'relb_z', 27: 'relbm_z', 28: 'lupa_x', 29: 'lupa_y', 30: 'lupa_z', 31: 'rupa_x', 32: 'rupa_y', 33: 'rupa_z', 34: 'lsho_x', 35: 'lsho_y', 36: 'lsho_z', 37: 'rsho_x', 38: 'rsho_y', 39: 'rsho_z', 40: 'lfrm_x', 41: 'lfrm_y', 42: 'lfrm_z', 43: 'lfhd_x', 44: 'lfhd_y', 45: 'lfhd_z', 46: 'rfhd_x', 47: 'rfhd_y', 48: 'rfhd_z', 49: 'lbhd_x', 50: 'lbhd_y', 51: 'lbhd_z', 52: 'rbhd_x', 53: 'rbhd_y', 54: 'rbhd_z', 55: 'rfin_x', 56: 'rfin_y', 57: 'rfin_z', 58: 'lfin_x', 59: 'lfin_y', 60: 'lfin_z', 61: 'TimeStamp', 62: 'mAccelerometerMagnitude', 63: 'mAccelerometerX', 64: 'mAccelerometerY', 65: 'mAccelerometerZ', 66: 'mGyroscopeMagnitude', 67: 'mGyroscopeX', 68: 'mGyroscopeY', 69: 'mGyroscopeZ'}
 
 PARAMS = {
  'abs_energy': None,
@@ -843,7 +775,12 @@ PARAMS = {
  'variation_coefficient': None
 }
 
-def fn_get_params_for_column(column_name):
+import sys
+
+# ID_MAP and PARAMS are assumed to be defined here (as in your provided code)
+# For brevity, I'm not including their full definitions in this script
+
+def get_params_for_column(column_name):
     # Split the column name to extract the sensor ID
     parts = column_name.split('_', 1)
     if len(parts) < 2:
@@ -886,7 +823,7 @@ def fn_get_params_for_column(column_name):
         return None  # Handle the error gracefully
 
     # Get the sensor object
-    sensor_code = Sensor.get(sensor_id).name
+    sensor_code = ID_MAP.get(sensor_id)
     if not sensor_code:
         return None  # Sensor not found
 
@@ -914,103 +851,23 @@ def fn_get_params_for_column(column_name):
         "params": params
     }
 
+def main():
+    if len(sys.argv) != 2:
+        print("Usage: python column_to_param.py <column_name>")
+        sys.exit(1)
 
-def get_params_for_column(column_name):
-    # Define expected prefix and suffixes
-    prefix = "grad_data__"
-    suffixes = ["_abs", "_default", "_norm"]
+    column_name = sys.argv[1]
+    result = get_params_for_column(column_name)
 
-    # Check and remove prefix
-    if column_name.startswith(prefix):
-        column_name = column_name[len(prefix):]
+    if result:
+        print(f"Sensor ID: {result['sensor_id']}")
+        print(f"Sensor Code: {result['sensor_code']}")
+        print(f"Feature Name: {result['feature_name']}")
+        print(f"Feature Index: {result['feature_index']}")
+        print(f"Axis: {result['axis']}")
+        print(f"Parameters: {result['params']}")
     else:
-        return None  # Column name does not start with the expected prefix
+        print("Could not parse the column name or find the corresponding parameters.")
 
-    # Check and remove suffixes
-    for suffix in suffixes:
-        if column_name.endswith(suffix):
-            column_name = column_name[:-len(suffix)]
-
-    # Split column name into parts
-    parts = column_name.split('_')
-    if len(parts) < 3:
-        return None  # Invalid column name format
-
-    # Extract feature name and feature index
-    try:
-        feature_index = int(parts[-2])  # The second last part is the index
-        feature_name = '_'.join(parts[:-2])  # Join all parts except the last two
-    except ValueError as e:
-        print(f"Error parsing column name: {column_name}. Details: {e}")
-        return None  # Handle the error gracefully
-
-    # Get the parameters for the extracted feature name
-    feature_params = PARAMS.get(feature_name, None)
-    if feature_params is None:
-        return None  # Feature not found or no parameters defined
-
-    # If the parameters are a list, select the set based on the index
-    if isinstance(feature_params, list):
-        if feature_index < len(feature_params):
-            return feature_params[feature_index]
-        else:
-            return None  # Index out of range for the feature parameters
-
-    # For features with a single parameter set or no parameters
-    return feature_params
-
-def remove_first_int(s):
-    return re.sub(r'(\d+)', '', s, count=1)
-
-
-def categorize_feature(beeswarm_name, axis=None, reverse_pattern=None):
-    """
-    Categorizes a feature based on its name using predefined regex patterns.
-    
-    :param beeswarm_name: The feature name.
-    :param axis: A dictionary of categories with lists of patterns to match against.
-    :return: The category of the feature.
-    """
-    # Ensure beeswarm_name is a string
-    beeswarm_name = str(beeswarm_name)
-    
-    # If axis is provided, use it as the category patterns; otherwise, use default FEATURE_CATEGORY_PATTERNS
-    cat_pat = axis if axis is not None else FEATURE_CATEGORY_PATTERNS
-    # Iterate over each category and its list of patterns
-    for category, patterns in cat_pat.items():
-        # Iterate through each pattern in the current category
-        for pattern in patterns:
-            # Remove trailing underscores followed by digits (_0, _1, etc.) from the pattern
-            normalized_pattern = re.sub(r'_\d+$', '', pattern)
-
-            # Check if the normalized pattern matches the beeswarm name
-            if re.search(re.escape(normalized_pattern), beeswarm_name, re.IGNORECASE):
-                return category
-
-    # If no match is found, categorize as "other"
-    return "other"
-
-    
-
-
-def beeswarm_name(column_name):
-    params = get_params_for_column(column_name)
-    prefix = "grad_data__"
-
-    if column_name.startswith(prefix):
-        column_name = column_name[len(prefix):]
-        column_name = remove_first_int(column_name)
-    else:
-        return None  # Column name does not start with the expected prefix
-    
-    if params is not None:
-        return column_name + '_' + str(params)
-    else:
-        return column_name
-
-
-    
-
-
-
-
+if __name__ == "__main__":
+    main()

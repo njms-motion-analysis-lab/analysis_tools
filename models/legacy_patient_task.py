@@ -196,7 +196,6 @@ class PatientTask(LegacyBaseModel):
 
             # Check for non-numeric entries
             non_numeric_check = combined_df.applymap(lambda x: isinstance(x, (int, float))).all().all()
-            print("All entries are numeric:", non_numeric_check)
 
             # Explicitly convert the DataFrame to numeric
             combined_df = combined_df.apply(pd.to_numeric, errors='coerce')
@@ -204,8 +203,6 @@ class PatientTask(LegacyBaseModel):
             # Check for empty DataFrame or all NaNs
             all_nans = combined_df.isnull().all().all()
             empty_df = combined_df.empty
-            print("All values are NaN:", all_nans)
-            print("DataFrame is empty:", empty_df)
 
             # Try aggregation again if the DataFrame is not empty or all NaNs
             if not all_nans and not empty_df:

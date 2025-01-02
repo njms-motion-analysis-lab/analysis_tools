@@ -204,6 +204,8 @@ class Predictor(LegacyBaseModel):
     def task(self):
         return Task.get(self.task_id)
     
+
+    
     def cohort(self):
         return Cohort.get(self.cohort_id)
 
@@ -714,7 +716,7 @@ class Predictor(LegacyBaseModel):
         bdf = self.clean_bdf(bdf)
 
         # Remove any rows where patient ID is -1 and corresponding rows from y
-        valid_indices = bdf['patient'] != -1
+        valid_indices = (bdf['patient'] != -1) & (bdf['patient'].notna())
         bdf = bdf[valid_indices]
         y = y[valid_indices]
 
@@ -981,6 +983,7 @@ class Predictor(LegacyBaseModel):
         bdf['str_patient'] = bdf['patient'].astype(str)
 
         # Convert 'patient' column to patient IDs
+        
         # Ensure 'patient' names are treated as strings for uniform processing
         bdf['patient'] = bdf['patient'].astype(str).apply(get_patient_id)
 
@@ -1242,14 +1245,14 @@ class Predictor(LegacyBaseModel):
 
     def define_classifiers(self, use_shap_compatible=False, feature_count=50):
         classifiers = {
-            'KNN': {
-                'classifier': KNeighborsClassifier(),
-                'param_grid': {
-                    'classifier__n_neighbors': list(range(1, 4)),  # Example range, adjust based on sqrt(n_samples)
-                    'classifier__weights': ['uniform', 'distance'],
-                    'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
-                }
-            },
+            # 'KNN': {
+            #     'classifier': KNeighborsClassifier(),
+            #     'param_grid': {
+            #         'classifier__n_neighbors': list(range(1, 4)),  # Example range, adjust based on sqrt(n_samples)
+            #         'classifier__weights': ['uniform', 'distance'],
+            #         'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+            #     }
+            # },
             'RandomForest': {
                 'classifier': RandomForestClassifier(random_state=42),
                 'param_grid': {
@@ -1260,74 +1263,74 @@ class Predictor(LegacyBaseModel):
                     'classifier__max_features': ['sqrt', 'log2']
                 }
             },
-            'ExtraTrees': {
-                'classifier': ExtraTreesClassifier(random_state=42),
-                'param_grid': {
-                    'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
-                    'classifier__max_depth': [None, 20, 40, 80] if feature_count > 52 else [None, 4, 16, 32],
-                    'classifier__min_samples_split': [2, 4, 6, 10, 15],
-                    'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
-                    'classifier__max_features': ['sqrt', 'log2']
-                }
-            },
-            'GradientBoosting': {
-                'classifier': GradientBoostingClassifier(random_state=42),
-                'param_grid': {
-                    'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
-                    'classifier__n_estimators': [100, 200, 300],
-                    'classifier__max_depth': [3, 5, 7, 9] if feature_count > 52 else [3, 4, 5],
-                }
-            },
-            'DecisionTree': {
-                'classifier': DecisionTreeClassifier(random_state=42),
-                'param_grid': {
-                    'classifier__max_depth': list(range(3, 14, 2)) if feature_count > 52 else list(range(2, 10)),
-                    'classifier__min_samples_split': list(range(2, 11, 2)),
-                    'classifier__min_samples_leaf': list(range(1, 5)),
-                    'classifier__max_features': ['sqrt', 'log2']
-                }
-            },
-            'LogisticRegression': {
-                'classifier': LogisticRegression(max_iter=10000, solver='liblinear', random_state=42),
-                'param_grid': {
-                    'classifier__C': np.logspace(-4, 4, 5).tolist(),
-                    'classifier__penalty': ['l1', 'l2'],
-                    'classifier__solver': ['liblinear']
-                }
-            },
-            'XGBoost': {
-                'classifier': XGBClassifier(random_state=42),
-                'param_grid': {
-                    'classifier__learning_rate': [0.01, 0.1, 0.2],
-                    'classifier__n_estimators': [100, 200, 300],
-                    'classifier__max_depth': [3, 6, 9],
-                    'classifier__subsample': [0.7, 0.9, 1.0],
-                    'classifier__colsample_bytree': [0.7, 0.9, 1.0]
-                }
-            },
-            'CatBoost': {
-                'classifier': CatBoostClassifier(verbose=0, random_state=42),
-                'param_grid': {
-                    'classifier__learning_rate': [0.01, 0.05, 0.1],
-                    'classifier__iterations': [500, 1000],
-                    'classifier__depth': [4, 6, 8]
-                }
-            },
-            'SVM': {
-                'classifier': SVC(probability=True, random_state=42),
-                'param_grid': {
-                    'classifier__C': [0.01, 0.1],
-                    'classifier__gamma': [0.1, 'scale'],
-                    'classifier__kernel': ['linear', 'rbf']
-                }
-            },
-            'AdaBoost': {
-                'classifier': AdaBoostClassifier(random_state=42),
-                'param_grid': {
-                    'classifier__n_estimators': [50, 100, 200],
-                    'classifier__learning_rate': [0.01, 0.1, 1.0]
-                }
-            },
+            # 'ExtraTrees': {
+            #     'classifier': ExtraTreesClassifier(random_state=42),
+            #     'param_grid': {
+            #         'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
+            #         'classifier__max_depth': [None, 20, 40, 80] if feature_count > 52 else [None, 4, 16, 32],
+            #         'classifier__min_samples_split': [2, 4, 6, 10, 15],
+            #         'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
+            #         'classifier__max_features': ['sqrt', 'log2']
+            #     }
+            # },
+            # 'GradientBoosting': {
+            #     'classifier': GradientBoostingClassifier(random_state=42),
+            #     'param_grid': {
+            #         'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
+            #         'classifier__n_estimators': [100, 200, 300],
+            #         'classifier__max_depth': [3, 5, 7, 9] if feature_count > 52 else [3, 4, 5],
+            #     }
+            # },
+            # 'DecisionTree': {
+            #     'classifier': DecisionTreeClassifier(random_state=42),
+            #     'param_grid': {
+            #         'classifier__max_depth': list(range(3, 14, 2)) if feature_count > 52 else list(range(2, 10)),
+            #         'classifier__min_samples_split': list(range(2, 11, 2)),
+            #         'classifier__min_samples_leaf': list(range(1, 5)),
+            #         'classifier__max_features': ['sqrt', 'log2']
+            #     }
+            # },
+            # 'LogisticRegression': {
+            #     'classifier': LogisticRegression(max_iter=10000, solver='liblinear', random_state=42),
+            #     'param_grid': {
+            #         'classifier__C': np.logspace(-4, 4, 5).tolist(),
+            #         'classifier__penalty': ['l1', 'l2'],
+            #         'classifier__solver': ['liblinear']
+            #     }
+            # },
+            # 'XGBoost': {
+            #     'classifier': XGBClassifier(random_state=42),
+            #     'param_grid': {
+            #         'classifier__learning_rate': [0.01, 0.1, 0.2],
+            #         'classifier__n_estimators': [100, 200, 300],
+            #         'classifier__max_depth': [3, 6, 9],
+            #         'classifier__subsample': [0.7, 0.9, 1.0],
+            #         'classifier__colsample_bytree': [0.7, 0.9, 1.0]
+            #     }
+            # },
+            # 'CatBoost': {
+            #     'classifier': CatBoostClassifier(verbose=0, random_state=42),
+            #     'param_grid': {
+            #         'classifier__learning_rate': [0.01, 0.05, 0.1],
+            #         'classifier__iterations': [500, 1000],
+            #         'classifier__depth': [4, 6, 8]
+            #     }
+            # },
+            # 'SVM': {
+            #     'classifier': SVC(probability=True, random_state=42),
+            #     'param_grid': {
+            #         'classifier__C': [0.01, 0.1],
+            #         'classifier__gamma': [0.1, 'scale'],
+            #         'classifier__kernel': ['linear', 'rbf']
+            #     }
+            # },
+            # 'AdaBoost': {
+            #     'classifier': AdaBoostClassifier(random_state=42),
+            #     'param_grid': {
+            #         'classifier__n_estimators': [50, 100, 200],
+            #         'classifier__learning_rate': [0.01, 0.1, 1.0]
+            #     }
+            # },
         }
         
         if use_shap_compatible:
@@ -1341,14 +1344,14 @@ class Predictor(LegacyBaseModel):
             classifiers = cls.MINI_PARAMS
         else:
             classifiers = {
-                'KNN': {
-                    'classifier': KNeighborsClassifier(),
-                    'param_grid': {
-                        'classifier__n_neighbors': list(range(1, 4)),
-                        'classifier__weights': ['uniform', 'distance'],
-                        'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
-                    }
-                },
+                # 'KNN': {
+                #     'classifier': KNeighborsClassifier(),
+                #     'param_grid': {
+                #         'classifier__n_neighbors': list(range(1, 4)),
+                #         'classifier__weights': ['uniform', 'distance'],
+                #         'classifier__metric': ['euclidean', 'manhattan', 'minkowski']
+                #     }
+                # },
                 'RandomForest': {
                     'classifier': RandomForestClassifier(random_state=42),
                     'param_grid': {
@@ -1359,74 +1362,74 @@ class Predictor(LegacyBaseModel):
                         'classifier__max_features': ['sqrt', 'log2']
                     }
                 },
-                'ExtraTrees': {
-                    'classifier': ExtraTreesClassifier(random_state=42),
-                    'param_grid': {
-                        'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
-                        'classifier__max_depth': [None, 20, 40, 80] if feature_count > 52 else [None, 4, 16, 32],
-                        'classifier__min_samples_split': [2, 4, 6, 10, 15],
-                        'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
-                        'classifier__max_features': ['sqrt', 'log2']
-                    }
-                },
-                'GradientBoosting': {
-                    'classifier': GradientBoostingClassifier(random_state=42),
-                    'param_grid': {
-                        'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
-                        'classifier__n_estimators': [100, 200, 300],
-                        'classifier__max_depth': [3, 5, 7, 9] if feature_count > 52 else [3, 4, 5],
-                    }
-                },
-                'DecisionTree': {
-                    'classifier': DecisionTreeClassifier(random_state=42),
-                    'param_grid': {
-                        'classifier__max_depth': list(range(3, 14, 2)) if feature_count > 52 else list(range(2, 10)),
-                        'classifier__min_samples_split': list(range(2, 11, 2)),
-                        'classifier__min_samples_leaf': list(range(1, 5)),
-                        'classifier__max_features': ['sqrt', 'log2', None] if feature_count > 52 else ['log2'],
-                    }
-                },
-                'LogisticRegression': {
-                    'classifier': LogisticRegression(max_iter=10000, solver='liblinear', random_state=42),
-                    'param_grid': {
-                        'classifier__C': np.logspace(-4, 4, 5).tolist(),
-                        'classifier__penalty': ['l1', 'l2'],
-                        'classifier__solver': ['liblinear']
-                    }
-                },
-                'XGBoost': {
-                    'classifier': XGBClassifier(random_state=42),
-                    'param_grid': {
-                        'classifier__learning_rate': [0.01, 0.1, 0.2],
-                        'classifier__n_estimators': [100, 200, 300],
-                        'classifier__max_depth': [3, 6, 9],
-                        'classifier__subsample': [0.7, 0.9, 1.0],
-                        'classifier__colsample_bytree': [0.7, 0.9, 1.0]
-                    }
-                },
-                'CatBoost': {
-                    'classifier': CatBoostClassifier(verbose=0, random_state=42),
-                    'param_grid': {
-                        'classifier__learning_rate': [0.01, 0.05, 0.1],
-                        'classifier__iterations': [500, 1000],
-                        'classifier__depth': [4, 6, 8]
-                    }
-                },
-                'SVM': {
-                    'classifier': SVC(probability=True, random_state=42),
-                    'param_grid': {
-                        'classifier__C': [0.01, 0.1],
-                        'classifier__gamma': [0.1, 'scale'],
-                        'classifier__kernel': ['linear', 'rbf']
-                    }
-                },
-                'AdaBoost': {
-                    'classifier': AdaBoostClassifier(random_state=42),
-                    'param_grid': {
-                        'classifier__n_estimators': [50, 100, 200],
-                        'classifier__learning_rate': [0.01, 0.1, 1.0]
-                    }
-                },
+                # 'ExtraTrees': {
+                #     'classifier': ExtraTreesClassifier(random_state=42),
+                #     'param_grid': {
+                #         'classifier__n_estimators': [6, 12, 24, 50, 100, 200] if feature_count > 52 else [6, 12, 24, 75],
+                #         'classifier__max_depth': [None, 20, 40, 80] if feature_count > 52 else [None, 4, 16, 32],
+                #         'classifier__min_samples_split': [2, 4, 6, 10, 15],
+                #         'classifier__min_samples_leaf': [1, 2, 4, 6, 10],
+                #         'classifier__max_features': ['sqrt', 'log2']
+                #     }
+                # },
+                # 'GradientBoosting': {
+                #     'classifier': GradientBoostingClassifier(random_state=42),
+                #     'param_grid': {
+                #         'classifier__learning_rate': [0.01, 0.05, 0.1, 0.2],
+                #         'classifier__n_estimators': [100, 200, 300],
+                #         'classifier__max_depth': [3, 5, 7, 9] if feature_count > 52 else [3, 4, 5],
+                #     }
+                # },
+                # 'DecisionTree': {
+                #     'classifier': DecisionTreeClassifier(random_state=42),
+                #     'param_grid': {
+                #         'classifier__max_depth': list(range(3, 14, 2)) if feature_count > 52 else list(range(2, 10)),
+                #         'classifier__min_samples_split': list(range(2, 11, 2)),
+                #         'classifier__min_samples_leaf': list(range(1, 5)),
+                #         'classifier__max_features': ['sqrt', 'log2', None] if feature_count > 52 else ['log2'],
+                #     }
+                # },
+                # 'LogisticRegression': {
+                #     'classifier': LogisticRegression(max_iter=10000, solver='liblinear', random_state=42),
+                #     'param_grid': {
+                #         'classifier__C': np.logspace(-4, 4, 5).tolist(),
+                #         'classifier__penalty': ['l1', 'l2'],
+                #         'classifier__solver': ['liblinear']
+                #     }
+                # },
+                # 'XGBoost': {
+                #     'classifier': XGBClassifier(random_state=42),
+                #     'param_grid': {
+                #         'classifier__learning_rate': [0.01, 0.1, 0.2],
+                #         'classifier__n_estimators': [100, 200, 300],
+                #         'classifier__max_depth': [3, 6, 9],
+                #         'classifier__subsample': [0.7, 0.9, 1.0],
+                #         'classifier__colsample_bytree': [0.7, 0.9, 1.0]
+                #     }
+                # },
+                # 'CatBoost': {
+                #     'classifier': CatBoostClassifier(verbose=0, random_state=42),
+                #     'param_grid': {
+                #         'classifier__learning_rate': [0.01, 0.05, 0.1],
+                #         'classifier__iterations': [500, 1000],
+                #         'classifier__depth': [4, 6, 8]
+                #     }
+                # },
+                # 'SVM': {
+                #     'classifier': SVC(probability=True, random_state=42),
+                #     'param_grid': {
+                #         'classifier__C': [0.01, 0.1],
+                #         'classifier__gamma': [0.1, 'scale'],
+                #         'classifier__kernel': ['linear', 'rbf']
+                #     }
+                # },
+                # 'AdaBoost': {
+                #     'classifier': AdaBoostClassifier(random_state=42),
+                #     'param_grid': {
+                #         'classifier__n_estimators': [50, 100, 200],
+                #         'classifier__learning_rate': [0.01, 0.1, 1.0]
+                #     }
+                # },
             }
 
         if use_shap_compatible:
@@ -1774,14 +1777,40 @@ class Predictor(LegacyBaseModel):
         elif score_type is not None:
             scores = PredictorScore.where(predictor_id=self.id, score_type=score_type)
         elif model_name is not None:
-            scores = PredictorScore.where(predictor_id=self.id, classifier_name=model_name)
+            if self.multi_predictor_id is not None:
+                scores = PredictorScore.where(
+                    classifier_name = model_name,
+                    predictor_id=self.id, 
+                    multi_predictor_id=self.multi_predictor_id,
+                )
+                if len(scores) is 0:
+                    scores = PredictorScore.where(predictor_id=self.id, classifier_name = model_name)    
+            else:
+                scores = PredictorScore.where(
+                    classifier_name = model_name,
+                    predictor_id=self.id, 
+                )
         else:
-            scores = PredictorScore.where(predictor_id=self.id)
+            if self.multi_predictor_id is not None:
+                scores = PredictorScore.where(predictor_id=self.id, multi_predictor_id=self.multi_predictor_id)    
+                if len(scores) is 0:
+                    scores = PredictorScore.where(predictor_id=self.id)    
+            else:
+                scores = PredictorScore.where(predictor_id=self.id)
         
         if scores is None or scores is []:
             return [None]
         return scores
+    
+    def get_fold_corr(self, model_name=None):
+        
+        pr_scores = self.get_predictor_scores(model_name="RandomForest")
+        print("PR SCORE", pr_scores)
+        ans = {}
+        for score in pr_scores:
+            ans[score.classifier_name] = score.compare_fold_shap_values(use_all_means=False)
 
+        return ans
 
     def get_predictor_scores_by_classifier_names(self, classifier_names):
         # Query the predictor_score table where predictor_id matches this instance's id
@@ -1877,6 +1906,7 @@ class Predictor(LegacyBaseModel):
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
                 print("Using SHAP!")
                 explainer = shap.TreeExplainer(best_classifier)
+                # TODO: rerun this w/RF for other classifiers in the fold
                 shap_values = explainer.shap_values(X_test)
                 if isinstance(shap_values, list):  # If there are multiple classes
                     # Taking only the SHAP values for class 1 in case of binary classification.
@@ -1888,6 +1918,7 @@ class Predictor(LegacyBaseModel):
 
             if hasattr(classifier, 'feature_importances_'):
                 feature_importances = grid_search.best_estimator_.named_steps['classifier'].feature_importances_
+                # consider saving all of the feature importances
                 importance_df = pd.DataFrame({
                     'Feature': X_train.columns,
                     'Importance': feature_importances
@@ -1914,6 +1945,7 @@ class Predictor(LegacyBaseModel):
 
 
         if use_shap is True and (classifier_name in SHAP_CLASSIFIERS) and len(combined_shap_values) != 0:
+            import pdb;pdb.set_trace()
             try:
                 aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
             except:

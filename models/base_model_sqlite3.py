@@ -160,6 +160,7 @@ class BaseModel:
         values = tuple(kwargs.values())
         # Find the record with the given attribute(s)
         conditions = " AND ".join(f"{key}=?" for key in keys)
+        
         cls._cursor.execute(f"SELECT * FROM {cls.table_name} WHERE {conditions}", values)
         row = cls._cursor.fetchone()
 
