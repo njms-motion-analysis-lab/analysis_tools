@@ -87,9 +87,9 @@ allowed = [
 TOP_MODELS = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'XGBoost']  # Your TOP_MODELS list
 classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'XGBoost']  # Your TOP_MODELS list
 
+Table.create_tables()
 
-
-
+import pdb;pdb.set_trace()
 def replace_axis_labels(directory):
     for filename in os.listdir(directory):
         if filename.endswith(".png"):

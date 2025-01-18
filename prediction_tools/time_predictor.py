@@ -9,15 +9,11 @@ import shap
 from datetime import datetime
 from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
 from sklearn.model_selection import GridSearchCV, KFold, train_test_split
-from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestRegressor
-
 from models.base_model_sqlite3 import BaseModel as LegacyBaseModel
 from models.legacy_patient import Patient
 from prediction_tools.predictor_score import PredictorScore
 from prediction_tools.legacy_predictor import Predictor
-from models.legacy_sensor import Sensor
-from models.legacy_task import Task
 from transitions import Machine
 from xgboost import XGBRegressor
 from catboost import CatBoostRegressor
@@ -64,61 +60,61 @@ REGRESSION_MODELS = {
             "regressor__learning_rate": [0.01, 0.1]
         }
     },
-    # ---- NEW MODELS BELOW ----
-    "LGBMRegressor": {
-        "regressor": LGBMRegressor(random_state=42),
-        "param_grid": {
-            "regressor__n_estimators": [50, 100],
-            "regressor__max_depth": [3, 6, 10],
-            "regressor__learning_rate": [0.1, 0.3],
-            "regressor__num_leaves": [10, 31] 
-        }
-    },
-    "ExtraTreesRegressor": {
-        "regressor": ExtraTreesRegressor(random_state=42),
-        "param_grid": {
-            "regressor__n_estimators": [50, 100],
-            "regressor__max_depth": [None, 10],
-            "regressor__min_samples_split": [2],
-            "regressor__min_samples_leaf": [1, 2],
-            "regressor__max_features": ["sqrt", "log2"]
-        }
-    },
-    "AdaBoostRegressor": {
-        "regressor": AdaBoostRegressor(random_state=42),
-        "param_grid": {
-            "regressor__n_estimators": [50, 100],
-            "regressor__learning_rate": [0.01, 0.1, 1.0],
-            # If needed, you can also set 'base_estimator' to a small DecisionTreeRegressor
-        }
-    },
-    "GradientBoostingRegressor": {
-        "regressor": GradientBoostingRegressor(random_state=42),
-        "param_grid": {
-            "regressor__n_estimators": [50, 100],
-            "regressor__learning_rate": [0.01, 0.1],
-            "regressor__max_depth": [3, 6],
-            "regressor__subsample": [0.8, 1.0],
-            "regressor__max_features": ["sqrt", "log2"]
-        }
-    },
-    "SVR": {
-        "regressor": SVR(),
-        "param_grid": {
-            "regressor__kernel": ["rbf", "linear"],
-            "regressor__C": [0.1, 1, 10],
-            "regressor__gamma": ["scale", 0.01, 0.1]
-        }
-    },
-    "MLPRegressor": {
-        "regressor": MLPRegressor(random_state=42, max_iter=1000),
-        "param_grid": {
-            "regressor__hidden_layer_sizes": [(50,), (100,)],
-            "regressor__activation": ["relu", "tanh"],
-            "regressor__alpha": [1e-4, 1e-2],  # L2 penalty
-            "regressor__learning_rate_init": [0.001, 0.01]
-        }
-    },
+    # # ---- NEW MODELS BELOW ----
+    # "LGBMRegressor": {
+    #     "regressor": LGBMRegressor(random_state=42),
+    #     "param_grid": {
+    #         "regressor__n_estimators": [50, 100],
+    #         "regressor__max_depth": [3, 6, 10],
+    #         "regressor__learning_rate": [0.1, 0.3],
+    #         "regressor__num_leaves": [10, 31] 
+    #     }
+    # },
+    # "ExtraTreesRegressor": {
+    #     "regressor": ExtraTreesRegressor(random_state=42),
+    #     "param_grid": {
+    #         "regressor__n_estimators": [50, 100],
+    #         "regressor__max_depth": [None, 10],
+    #         "regressor__min_samples_split": [2],
+    #         "regressor__min_samples_leaf": [1, 2],
+    #         "regressor__max_features": ["sqrt", "log2"]
+    #     }
+    # },
+    # "AdaBoostRegressor": {
+    #     "regressor": AdaBoostRegressor(random_state=42),
+    #     "param_grid": {
+    #         "regressor__n_estimators": [50, 100],
+    #         "regressor__learning_rate": [0.01, 0.1, 1.0],
+    #         # If needed, you can also set 'base_estimator' to a small DecisionTreeRegressor
+    #     }
+    # },
+    # "GradientBoostingRegressor": {
+    #     "regressor": GradientBoostingRegressor(random_state=42),
+    #     "param_grid": {
+    #         "regressor__n_estimators": [50, 100],
+    #         "regressor__learning_rate": [0.01, 0.1],
+    #         "regressor__max_depth": [3, 6],
+    #         "regressor__subsample": [0.8, 1.0],
+    #         "regressor__max_features": ["sqrt", "log2"]
+    #     }
+    # },
+    # "SVR": {
+    #     "regressor": SVR(),
+    #     "param_grid": {
+    #         "regressor__kernel": ["rbf", "linear"],
+    #         "regressor__C": [0.1, 1, 10],
+    #         "regressor__gamma": ["scale", 0.01, 0.1]
+    #     }
+    # },
+    # "MLPRegressor": {
+    #     "regressor": MLPRegressor(random_state=42, max_iter=1000),
+    #     "param_grid": {
+    #         "regressor__hidden_layer_sizes": [(50,), (100,)],
+    #         "regressor__activation": ["relu", "tanh"],
+    #         "regressor__alpha": [1e-4, 1e-2],  # L2 penalty
+    #         "regressor__learning_rate_init": [0.001, 0.01]
+    #     }
+    # },
 }
 
 

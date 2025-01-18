@@ -346,7 +346,20 @@ class Table:
             );
         """)
 
-
+        cls.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS scoliosis_time_predictor (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_id INTEGER,
+                metrics TEXT,
+                matrix TEXT,
+                csv_path TEXT,
+                created_at TEXT,
+                updated_at DATETIME,
+                cohort_id INTEGER,
+                aggregated_stats TEXT,
+                aggregated_stats_non_normed TEXT
+            );
+        """)
 
         cls.conn.commit()
         
