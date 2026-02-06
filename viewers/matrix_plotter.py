@@ -172,7 +172,9 @@ class MatrixPlotter(LegacyBaseModel):
             )
             if h_one is not None:
                 ax1.set_title(h_one)
-            ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45)
+            # ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45)
+            ax1.set_xticklabels(ax1.get_xticklabels(), rotation=45, ha='right')
+
             ax1.set_yticklabels(ax1.get_yticklabels(), rotation=0)
             ax1.set_aspect('equal')  # Ensure square aspect
 
@@ -189,12 +191,13 @@ class MatrixPlotter(LegacyBaseModel):
             )
             if h_two is not None:
                 ax2.set_title(h_two)
-            ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45)
+            # ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45)
+            ax2.set_xticklabels(ax2.get_xticklabels(), rotation=45, ha='right')
             ax2.set_yticklabels(ax2.get_yticklabels(), rotation=0)
             ax2.set_aspect('equal')  # Ensure square aspect
             
             plt.tight_layout()
-            plt.subplots_adjust(top=0.94, bottom=0.15, right=0.9)  # Adjust the top, bottom, and right margins
+            plt.subplots_adjust(top=0.94, bottom=0.25, right=0.9)  # Increased from 0.15 to 0.25  # Adjust the top, bottom, and right margins
 
             # ---- Saving the Heatmap ----
             try:
@@ -220,7 +223,8 @@ class MatrixPlotter(LegacyBaseModel):
             except Exception as e:
                 print(f"An error occurred while saving the heatmap: {e}")
             # -----------------------------
-
+            plt.xticks(rotation=90)
+            plt.figure(figsize=(12, 8))
             plt.show()
 
         else:
@@ -231,6 +235,8 @@ class MatrixPlotter(LegacyBaseModel):
                 plt.title(f"Model Accuracies Across Sensors for {task} Task")
             else:
                 plt.title(f"Model Accuracies Across Sensors")
-            plt.xticks(rotation=45)
+            # plt.xticks(rotation=45)
             plt.yticks(rotation=0)
+            plt.xticks(rotation=90)
+            
             plt.show()

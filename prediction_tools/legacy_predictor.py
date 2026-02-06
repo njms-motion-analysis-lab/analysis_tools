@@ -53,7 +53,7 @@ from sklearn.metrics import silhouette_score
 
 SHAP_CLASSIFIERS = [
     'XGBoost', 'RandomForest', 'DecisionTree', 'ExtraTrees', 'CatBoost', 
-    'GradientBoosting'
+    'GradientBoosting', 'AdaBoostClassifier'
 ]
 
 DEFAULT_K_FOLD_SPLITS = 5
@@ -65,7 +65,8 @@ COMPATIBLE_MODELS = [
     "GradientBoostingClassifier",
     "XGBClassifier",
     "LGBMClassifier",
-    "CatBoostClassifier"
+    "CatBoostClassifier",
+    "AdaBoostClassifier"
 ]
 
 DEFAULT_FEATURES = ['grad_data__sum_values','grad_data__abs_energy','grad_data__mean_abs_change', 'grad_data__mean_change', 'grad_data__mean_second_derivative_central', 'grad_data__variation_coefficient','grad_data__standard_deviation','grad_data__skewness','grad_data__kurtosis','grad_data__variance','grad_data__root_mean_square','grad_data__mean', 'grad_data__length']
@@ -166,7 +167,7 @@ MINI_PARAMS = {
 class Predictor(LegacyBaseModel):
     table_name = "predictor"
 
-    def __init__(self, id=None, task_id=None, sensor_id=None, non_norm=False, abs_val=False, accuracies={}, matrix=None, created_at=None, updated_at=None, multi_predictor_id=None, aggregated_stats=None, aggregated_stats_non_normed=None, cohort_id=None):
+    def __init__(self, id=None, task_id=None, sensor_id=None, non_norm=False, abs_val=False, accuracies={}, matrix=None, created_at=None, updated_at=None, multi_predictor_id=None, aggregated_stats=None, aggregated_stats_non_normed=None, cohort_id=None, target_column="is_dominant"):
         self.id = id
         self.task_id = task_id
         self.sensor_id = sensor_id
@@ -182,6 +183,7 @@ class Predictor(LegacyBaseModel):
         self.cohort_id = cohort_id
         self.skip_boruta = False
         self.last_two_columns = None
+        self.target_column = target_column    # NEW: Store the user-specified target column
     
 
     def get_type(self):
@@ -244,8 +246,61 @@ class Predictor(LegacyBaseModel):
         return [features_dom, features_non_dom]
 
     def get_aggregated_stats_non_normed(self):
-        return pickle.loads(self.aggregated_stats_non_normed)
-    
+        """
+        Get aggregated stats (non-normalized version) by creating the missing module.
+        """
+        try:
+            # Try the normal approach first
+            return pickle.loads(self.aggregated_stats_non_normed)
+        except Exception as e:
+            import pandas as pd
+            import warnings
+            import sys
+            import types
+
+            # Specifically handle missing 'pandas.core.indexes.numeric' module
+            if "No module named 'pandas.core.indexes.numeric'" in str(e):
+                warnings.warn("Creating missing pandas.core.indexes.numeric module...")
+                
+                # Create the missing module
+                numeric_module = types.ModuleType('pandas.core.indexes.numeric')
+                
+                # Add Int64Index class to the module - inheriting from pd.Index
+                class Int64Index(pd.Index):
+                    """Legacy compatibility class for Int64Index"""
+                    def __new__(cls, data=None, dtype=None, copy=False, name=None, **kwargs):
+                        return pd.Index(data, dtype='int64', copy=copy, name=name, **kwargs)
+                
+                # Add other index types that might be needed
+                class Float64Index(pd.Index):
+                    """Legacy compatibility class for Float64Index"""
+                    def __new__(cls, data=None, dtype=None, copy=False, name=None, **kwargs):
+                        return pd.Index(data, dtype='float64', copy=copy, name=name, **kwargs)
+                
+                class UInt64Index(pd.Index):
+                    """Legacy compatibility class for UInt64Index"""
+                    def __new__(cls, data=None, dtype=None, copy=False, name=None, **kwargs):
+                        return pd.Index(data, dtype='uint64', copy=copy, name=name, **kwargs)
+                
+                # Add classes to the module
+                numeric_module.Int64Index = Int64Index
+                numeric_module.Float64Index = Float64Index
+                numeric_module.UInt64Index = UInt64Index
+                
+                # Register the module in sys.modules
+                sys.modules['pandas.core.indexes.numeric'] = numeric_module
+                
+                # Try again with our synthetic module in place
+                try:
+                    return pickle.loads(self.aggregated_stats_non_normed)
+                except Exception as retry_error:
+                    warnings.warn(f"Module creation did not resolve issue: {retry_error}")
+            
+            # If we get here, our fix didn't work or it was a different error
+            warnings.warn(f"Unable to unpickle aggregated_stats_non_normed: {e}")
+            
+            # Return a properly formatted empty DataFrame as fallback
+            return pd.DataFrame()
     def get_aggregated_stats(self):
         return pickle.loads(self.aggregated_stats)
 
@@ -384,8 +439,8 @@ class Predictor(LegacyBaseModel):
             counter_temp = self_temp
 
         is_dominant = curr_patient != 'S017'
-        self_temp['is_dominant'] = is_dominant
-        counter_temp['is_dominant'] = not is_dominant
+        self_temp[self.target_column] = is_dominant
+        counter_temp[self.target_column] = not is_dominant
 
         for temp in [self_temp, counter_temp]:
             temp['patient'] = curr_patient
@@ -425,7 +480,7 @@ class Predictor(LegacyBaseModel):
             self_temp = self.get_temp_dataframe(self_pt, sensor, False)
             if self_temp is None:
                 return None
-            self_temp['is_dominant'] = is_dominant
+            self_temp[self.target_column] = is_dominant
             self_temp['cohort'] = cohort.name
             self_temp['patient'] = curr_patient
 
@@ -450,14 +505,14 @@ class Predictor(LegacyBaseModel):
         return dom_dataframes, nondom_dataframes
 
 
-    def process_patient_tasks(self, self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor, force_old=False):
+    def process_patient_tasks(self, self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor):
         # Process alternate tasks if applicable
-        # if self.cohort().is_alt_compare() and not force_old:
+
+        # if self.cohort().is_alt_compare():
         #     return self.process_alt_tasks(self_pts, other_pts, sensor, nondom_sensor)
         
         dom_dataframes = []
         nondom_dataframes = []
-
         for self_pt in self_pts:
             counterpart_pts = self.get_counterpart_pts(other_pts, counterpart_task, self_pt, compare_cohort)
             if not counterpart_pts:
@@ -533,7 +588,7 @@ class Predictor(LegacyBaseModel):
         compare_cohort, nondom_sensor = self.get_cohorts_and_sensors(sensor)
         
         other_pts = PatientTask.where(task_id=dom_task.id, cohort_id=compare_cohort.id) if self.cohort().is_alt_compare() else []
-        dom_dataframes, nondom_dataframes = self.process_patient_tasks(self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor, force_old=True)
+        dom_dataframes, nondom_dataframes = self.process_patient_tasks(self_pts, other_pts, dom_task, counterpart_task, compare_cohort, sensor, nondom_sensor)
 
         if not dom_dataframes or not any(df is not None and not df.empty for df in dom_dataframes):
             return None
@@ -588,12 +643,12 @@ class Predictor(LegacyBaseModel):
         
         if counter_temp is not None:
             counter_temp['cohort'] = counter_cohort.name
-            counter_temp['is_dominant'] = lefty
+            counter_temp[self.target_column] = lefty
             counter_temp['patient'] = Patient.get(counterpart_pt.patient_id)
     
         if self_temp is not None:
             self_temp['cohort'] = cohort.name
-            self_temp['is_dominant'] = not lefty
+            self_temp[self.target_column] = not lefty
             self_temp['patient'] = curr_patient
 
         return self_temp, counter_temp
@@ -609,14 +664,12 @@ class Predictor(LegacyBaseModel):
     def get_temp_dataframe(self, pt, patient_sensor, features_loc):
         stats_method = abs if self.abs_val == 1 else lambda x: x
         gradient_stats = self.get_stats(pt, patient_sensor, features_loc)
-
+        print(gradient_stats)
         if gradient_stats is None:
             return None
         # Check if 'mean' is in the gradient stats and process accordingly
         if 'mean' in gradient_stats:
-            temp_df = pd.DataFrame(
-                stats_method(gradient_stats['mean'])
-            ).T
+            temp_df = pd.DataFrame(stats_method(gradient_stats['mean'])).T
         else:
             # Initialize an empty DataFrame with an expected structure if 'mean' is not present
             sen = self.sensor()
@@ -657,35 +710,40 @@ class Predictor(LegacyBaseModel):
 
         # To ensure the order of columns in holdout_data matches bdf
         if 'is_dominant' in self.holdout_data:
-            y_holdout = self.holdout_data['is_dominant']
+            y_holdout = self.holdout_data[self.target_column]
             self.holdout_data = self.holdout_data[bdf.columns]
-            self.holdout_data['is_dominant'] = y_holdout
+            self.holdout_data[self.target_column] = y_holdout
         else:
             self.holdout_data = self.holdout_data[bdf.columns]
     
-    def train_from(self, obj=None, use_shap=True, force_load=False, get_sg_count=False, add_other=False):
+    def train_from(self, obj=None, use_shap=True, force_load=False, get_sg_count=False, add_other=False, target_column="cohort"):
+        # If a target_column is specified here, update the model’s target_column attribute.
+        if target_column is not None:
+            self.target_column = target_column
+
         if obj is None:
             obj = self
-
         result = self.get_final_bdf(untrimmed=True, force_load=force_load, get_sg_count=get_sg_count, add_other=add_other)
 
         if result is None or (isinstance(result[0], pd.DataFrame) and result[0].empty):
             print("EMPTY DF SKIPPING")
             return None
 
-        bdf, y = result 
+        bdf, y = result
+        #TODO: Stephen remove after rerunning pdet
         bdf = Predictor.trim_bdf_with_boruta(bdf, y)
         if len(bdf.columns) <= 2:
             print("Skipping boruta!")
             self.skip_boruta == len(bdf.columns)
+            
             bdf, y = self.get_final_bdf(force_load=False, get_sg_count=get_sg_count, add_other=add_other)
-        
+
         if bdf is None:
             print("NO DF found...skipping")
             return
         self.fit_multi_models(bdf, y, use_shap)
         print("Done training!")
-    
+        
     def retrain_from(self, use_shap=False, force_load=False, get_sg_count=False):
         # only use if best dataframe saved on predictor
         bdf = self.get_final_bdf()
@@ -709,8 +767,8 @@ class Predictor(LegacyBaseModel):
             columns_to_drop = [col for col in bdf.columns if col.endswith('_x')]
             bdf.drop(columns=columns_to_drop, inplace=True)
 
-        bdf['is_dominant'] = y
-        is_dominant = bdf['is_dominant'].copy()
+        bdf[self.target_column] = y
+        is_dominant = bdf[self.target_column].copy()
 
         bdf = self.rename_columns_with_orientation(bdf)
         bdf = self.clean_bdf(bdf)
@@ -727,15 +785,16 @@ class Predictor(LegacyBaseModel):
 
         bdf_t = self.trim_bdf(bdf, custom_limit=50)
 
-        bdf_t['is_dominant'] = is_dominant
+        bdf_t[self.target_column] = is_dominant
 
         return [bdf_t, y]
 
     @classmethod
-    def trim_bdf_with_boruta(cls, bdf, y, n_estimators=500, max_depth=5, random_state=42):
-        # Assuming 'bdf' is your dataframe without the target variable 'is_dominant'
-        # Columns to retain regardless of feature selection
-        columns_to_retain = ['is_dominant', 'patient', 'cohort', 'str_patient']
+    def trim_bdf_with_boruta(cls, bdf, y, n_estimators=200, max_depth=5, random_state=42):
+        # Create a dummy instance so we can access the target_column attribute
+        dummy = cls()
+        # Columns to retain regardless of feature selection – use dummy.target_column instead of the literal
+        columns_to_retain = [dummy.target_column, 'patient', 'cohort', 'str_patient']
         columns_to_retain = [col for col in columns_to_retain if col in bdf.columns]
 
         # Separate features and target
@@ -798,7 +857,7 @@ class Predictor(LegacyBaseModel):
 
 
 
-    def optimal_silhouetteb_scores(self, bdf, max_features=500, p_range=False):
+    def optimal_silhouetteb_scores(self, bdf, max_features=200, p_range=False):
         optimal_num_features = Predictor.evaluate_feature_scores(bdf, max_features)
 
         # If p_range is True, plot the silhouette scores up to the optimal number of features
@@ -825,7 +884,7 @@ class Predictor(LegacyBaseModel):
             print("YOOOO")
             print(x)
             
-            is_dom = x['is_dominant']
+            is_dom = x[self.target_column]
             pt =x['patient']
 
             x.columns = [str(col) + '_x' for col in x.columns]
@@ -850,7 +909,7 @@ class Predictor(LegacyBaseModel):
                 pt = bdf['patient_z']
                 cohort = bdf['cohort_z']
 
-                bdf['is_dominant'] = is_dom
+                bdf[self.target_column] = is_dom
                 bdf['patient'] = pt
                 bdf['cohort'] = cohort
                 bdf = bdf.drop(columns=columns_to_drop)
@@ -872,7 +931,7 @@ class Predictor(LegacyBaseModel):
             pt = None
 
             if x is not None:
-                is_dom = x['is_dominant']
+                is_dom = x[self.target_column]
                 pt = x['patient']
                 x.columns = [str(col) + '_x' for col in x.columns]
                 valid_dfs.append(x)
@@ -891,31 +950,34 @@ class Predictor(LegacyBaseModel):
 
             # Drop the specified columns if they exist in the DataFrame
             columns_to_drop = [col for col in ['is_dominant_x', 'is_dominant_y', 'is_dominant_z', 'patient_x', 'patient_y', 'patient_z', 'cohort_x', 'cohort_y', 'cohort_z'] if col in bdf.columns]
+            cohort = bdf['cohort_z']
             bdf = bdf.drop(columns=columns_to_drop, errors='ignore')
 
             # Add is_dominant and patient columns if they were extracted from x
             if is_dom is not None and pt is not None:
-                bdf['is_dominant'] = is_dom
+                bdf['cohort'] = cohort
+                bdf[self.target_column] = is_dom
                 bdf['patient'] = pt
 
             return bdf
 
         if self.non_norm == 1:
+            return gen_old_df()
             if self.aggregated_stats_non_normed is None or force_load:
                 print("generating non normed agg df...")
                 stats = memoryview(pickle.dumps(gen_old_df()))
-                self.update(aggregated_stats_non_normed = stats)
-                if force_load:
-                    self.save()
+                # self.update(aggregated_stats_non_normed = stats)
+                # if force_load:
+                #     self.save()
             
             return pickle.loads(self.aggregated_stats_non_normed)
 
         if self.aggregated_stats is None or force_load or compare_across_cohort == False:
             print("generating agg df...")
             stats = memoryview(pickle.dumps(gen_old_df()))
-            self.update(aggregated_stats = stats)
-            if force_load:
-                self.save()
+            # self.update(aggregated_stats = stats)
+            # if force_load:
+            #     self.save()
 
         return pickle.loads(self.aggregated_stats)
 
@@ -938,7 +1000,7 @@ class Predictor(LegacyBaseModel):
         if bdf is None:
             print("EMPTY BDF")
             return None
-        return LabelEncoder().fit_transform(bdf['is_dominant'])
+        return LabelEncoder().fit_transform(bdf[self.target_column])
     
     def extract_last_two_columns(self, bdf, compare_across_cohort = False):
         # Define a mapping from cohort names to floats
@@ -1016,13 +1078,13 @@ class Predictor(LegacyBaseModel):
     # It stops once the silhouette score falls below the threshold, given that it has already found a suitable number of features above the threshold.
     # If it doesn't find any feature set above the threshold, it defaults to the minimum number of features.
     @classmethod
-    def evaluate_feature_scores(cls, bdf, max_features=500, min_features=50, min_avg_silhouette_score=0.5):
+    def evaluate_feature_scores(cls, bdf, max_features=200, min_features=50, min_avg_silhouette_score=0.5):
         columns_to_retain = ['is_dominant', 'patient', 'str_patient', 'cohort']
 
         # Remove constant features
         non_constant_features = bdf.loc[:, bdf.nunique() > 1]
         features = non_constant_features.drop(columns=columns_to_retain)
-        target = bdf['is_dominant']
+        target = bdf[self.target_column]
 
         best_num_features = None
         recent_scores = []
@@ -1068,7 +1130,7 @@ class Predictor(LegacyBaseModel):
 
         # Separate features and target
         features = bdf.drop(columns=columns_to_retain)
-        target = bdf['is_dominant']
+        target = bdf[self.target_column]
 
         # Apply SelectKBest to select the optimal number of features
         print("Selecting K Best:", optimal_num_features)
@@ -1104,7 +1166,7 @@ class Predictor(LegacyBaseModel):
         # Assuming bdf is already imputed
         columns_to_retain = ['is_dominant', 'patient', 'cohort', 'str_patient']
         features = bdf.drop(columns=columns_to_retain)
-        target = bdf['is_dominant']
+        target = bdf[self.target_column]
 
         feature_scores = {}
 
@@ -1468,15 +1530,15 @@ class Predictor(LegacyBaseModel):
                 y_test = y_test.reset_index(drop=True)
 
                 # Ensure is_dominant and patient columns are integers
-                X_train['is_dominant'] = X_train['is_dominant'].astype(int)
+                X_train[self.target_column] = X_train[self.target_column].astype(int)
                 X_train['patient'] = X_train['patient'].astype(int)
-                X_test['is_dominant'] = X_test['is_dominant'].astype(int)
+                X_test[self.target_column] = X_test[self.target_column].astype(int)
                 X_test['patient'] = X_test['patient'].astype(int)
 
                 # Move the added row to the correct position if is_dominant is 1
                 if X_train.loc[len(X_train) - 1, 'is_dominant'] == 1:
-                    dominant_rows = X_train[X_train['is_dominant'] == 1]
-                    non_dominant_rows = X_train[X_train['is_dominant'] == 0]
+                    dominant_rows = X_train[X_train[self.target_column] == 1]
+                    non_dominant_rows = X_train[X_train[self.target_column] == 0]
                     y_train_dominant = y_train.loc[dominant_rows.index]
                     y_train_non_dominant = y_train.loc[non_dominant_rows.index]
                     X_train = pd.concat([dominant_rows, non_dominant_rows], ignore_index=True)
@@ -1525,8 +1587,8 @@ class Predictor(LegacyBaseModel):
                 X_test = X_test.drop('patient', axis=1)
 
             # Remove 'is_dominant' column
-            X_train = X_train.drop('is_dominant', axis=1)
-            X_test = X_test.drop('is_dominant', axis=1)
+            X_train = X_train.drop(self.target_column, axis=1)
+            X_test = X_test.drop(self.target_column, axis=1)
 
             grid_search = GridSearchCV(pipe, param_grid_classifier, cv=splitter, scoring='accuracy')
             grid_search.fit(X_train, y_train)
@@ -1546,16 +1608,28 @@ class Predictor(LegacyBaseModel):
             y_pred = best_classifier.predict(X_test)
 
             y_pred_proba = best_classifier.predict_proba(X_test)[:, 1] if hasattr(best_classifier, "predict_proba") else None
-    
-            # Check if the model is compatible with SHAP TreeExplainer
             if use_shap is True and best_classifier.__class__.__name__ in COMPATIBLE_MODELS:
                 print("Using SHAP!")
-                explainer = shap.TreeExplainer(best_classifier)
-                shap_values = explainer.shap_values(X_test)
-                if isinstance(shap_values, list):  # If there are multiple classes
-                    # Taking only the SHAP values for class 1 in case of binary classification.
-                    # Adjust for multi-class problems as necessary.
-                    shap_values = shap_values[1]
+                if best_classifier.__class__.__name__ == "AdaBoostClassifier":
+                    # Compute SHAP values for each weak learner in the AdaBoost ensemble using an explicit loop.
+                    shap_values_sum = None
+                    total_weight = 0.0
+                    for weight, estimator in zip(best_classifier.estimator_weights_, best_classifier.estimators_):
+                        explainer = shap.TreeExplainer(estimator)
+                        _shap_values = explainer.shap_values(X_test)
+                        if isinstance(_shap_values, list):
+                            _shap_values = _shap_values[1]
+                        if shap_values_sum is None:
+                            shap_values_sum = weight * _shap_values
+                        else:
+                            shap_values_sum += weight * _shap_values
+                        total_weight += weight
+                    shap_values = shap_values_sum / total_weight
+                else:
+                    explainer = shap.TreeExplainer(best_classifier)
+                    shap_values = explainer.shap_values(X_test)
+                    if isinstance(shap_values, list):  # If there are multiple classes
+                        shap_values = shap_values[1]
                 combined_shap_values.append(shap_values)
                 all_X.append(X_test)
 
@@ -1945,7 +2019,6 @@ class Predictor(LegacyBaseModel):
 
 
         if use_shap is True and (classifier_name in SHAP_CLASSIFIERS) and len(combined_shap_values) != 0:
-            import pdb;pdb.set_trace()
             try:
                 aggregated_shap_values = np.concatenate(combined_shap_values, axis=0)
             except:

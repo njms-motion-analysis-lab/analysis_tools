@@ -154,6 +154,7 @@ class PredictorScore(LegacyBaseModel):
         if show_plot:
             plt.show()
         else:
+            print("SAVING PLOT", title, abs_val, non_norm)
             self.save_plot(title, abs_val, non_norm)
             self.save_csv(explanation, title, abs_val, non_norm)
         plt.close()
@@ -164,6 +165,7 @@ class PredictorScore(LegacyBaseModel):
             os.makedirs(directory_path)
         final_filename = self.get_info() + '.png'
         filepath = os.path.join(directory_path, final_filename)
+        print("OK saving...really", filepath)
         plt.savefig(filepath, bbox_inches='tight')
 
     def save_csv(self, explanation, title, abs_val, non_norm):

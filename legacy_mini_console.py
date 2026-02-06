@@ -90,6 +90,8 @@ classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'X
 Table.create_tables()
 
 import pdb;pdb.set_trace()
+
+
 def replace_axis_labels(directory):
     for filename in os.listdir(directory):
         if filename.endswith(".png"):
@@ -341,9 +343,9 @@ def fetch_new_tasks():
     balance_tasks = [feet_together_task, tandem_task]
 
     exp_cohorts = [
-        et_cohort,
         pd_cohort,
-        hc_cohort,
+        # et_cohort,
+        # hc_cohort,
     ]
 
     mpc = []
@@ -357,30 +359,31 @@ def fetch_new_tasks():
         print("done")
 
 
-    
-    for balance_task in balance_tasks:
-        # print("Creating/Finding MP for:", balance_task.description, cohort.name)
-        mp = MultiPredictor.find_or_create(task_id = balance_task.id, cohort_id = hc_cohort.id)
-        import pdb;pdb.set_trace()
-        mp.sensors = sensors
-        # mp.gen_scores_for_sensor(skip_default_sensors=True, force_load=True, add_other=True)
-        mpc.append(
-            mp
-        )
-    
-    for mp in mpc:
-        mp.save_shap()
-        mp.save_abs_shap()
-        mp.save_norm_shap()
-    import pdb;pdb.set_trace()
-    
-    # print(len(mpc), "MP to gen found")
-    for mp in reversed(mpc):
-        desc = Task.get(mp.task_id).description
-        sensors = mp.sensors
-        print("Generating Scores for: ", desc, "Sensor: ", sensors, "PRED LEN", len(mp.get_all_preds()))
+    for curr_cohort in exp_cohorts:
+        for balance_task in balance_tasks:
+            # print("Creating/Finding MP for:", balance_task.description, hc_cohort.name)
+            mp = MultiPredictor.find_or_create(task_id = balance_task.id, cohort_id = curr_cohort.id)
+            # print("ok im here")
+            # mp.sensors = sensors
+            # mp.gen_scores_for_sensor(skip_default_sensors=True, force_load=True, add_other=True)
+            mpc.append(
+                mp
+            )
         
-    pdb.set_trace()
+        
+        for mp in mpc:
+            mp.save_norm_shap()
+            # mp.save_shap()
+            # mp.save_abs_shap()
+            
+        
+        print(len(mpc), "MP to gen found")
+        for mp in reversed(mpc):
+            desc = Task.get(mp.task_id).description
+            sensors = mp.sensors
+            print("Generating Scores for: ", desc, "Sensor: ", sensors, "PRED LEN", len(mp.get_all_preds()))
+    
+    print("hopefully done")
     print("done")
 
 
@@ -791,8 +794,8 @@ cp_sg_mpt = MultiTimePredictor.where(multi_predictor_feature_id=cp_mpa.id, multi
 
 
 def display_for_contiuous_paper(mpt, cp_mpt, sg_mpt, cp_sg_mpt):
-    MatrixPlotter.show(mpt.get_results(), cp_mpt.get_results(), h_one="HC R2", h_two="CP R2", alt=True)
-    MatrixPlotter.show(sg_mpt.get_results(), cp_sg_mpt.get_results(), h_one="SG HC R2", h_two="SG CP R2", alt=True)
+    MatrixPlotter.show(mpt.get_results(), cp_mpt.get_results(), h_one="Healthy Controls R2", h_two="CP R2", alt=True)
+    MatrixPlotter.show(sg_mpt.get_results(), cp_sg_mpt.get_results(), h_one="Healthy Controls R2", h_two="CP R2", alt=True)
 
     MatrixPlotter.show(mpt.get_mae(), cp_mpt.get_mae(), h_one="HC MAE", h_two="CP MAE")
     MatrixPlotter.show(sg_mpt.get_mae(), cp_sg_mpt.get_mae(), h_one="SG HC MAE", h_two="SG CP MAE")
@@ -879,20 +882,20 @@ import pdb;pdb.set_trace()
 
 
 
-find_or_create_mtp(feature_mp=mpa, timing_mp=hcgsmp)
-find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cpgsmp)
-find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cp_mpa)
+# find_or_create_mtp(feature_mp=mpa, timing_mp=hcgsmp)
+# find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cpgsmp)
+# find_or_create_mtp(feature_mp=cp_mpa, timing_mp=cp_mpa)
 
 
 
-find_or_create_mtp(feature_mp=mpa, timing_mp=mpa)
+# find_or_create_mtp(feature_mp=mpa, timing_mp=mpa)
 
 
 
 import pdb;pdb.set_trace()
 
 
-display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hc_combo=hc_combo, cp_combo=cp_combo, hcgsmp=hcgsmp, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
+# display_for_paper(mpa=mpa, cp_mpa=cp_mpa, hc_combo=hc_combo, cp_combo=cp_combo, hcgsmp=hcgsmp, cpgsmp=cpgsmp, hc_set_list=hc_set_list, cp_set_list=cp_set_list)
 # cp_combo.show_norm_scores(axis=True, models=["RandomForest", "XGBoost", "ExtraTrees", "CatBoost"], include_accuracy=True)
 
 # gen_mpa_scores(hcgsmp, cpgsmp)
@@ -1424,15 +1427,15 @@ cpgsmp = MultiPredictor.where(task_id = Task.where(description="Block_dominant")
 # future directions
 # conclusion
 # put references in a comment
-cp_mpa = MultiPredictor.where(cohort_id=2, task_id=3)[0] # 27 preds, 27 acc
-preds = cp_mpa.get_norm_corr()
-import pdb;pdb.set_trace()
-for pred in preds:
-    pred.train_from(force_load=True)
+# cp_mpa = MultiPredictor.where(cohort_id=2, task_id=3)[0] # 27 preds, 27 acc
+# preds = cp_mpa.get_norm_corr()
+# import pdb;pdb.set_trace()
+# for pred in preds:
+#     pred.train_from(force_load=True)
 
-import pdb;pdb.set_trace()
-for ps in PredictorScore.where(classifier_name="RandomForest", predictor_id=bc.get_norm_preds()[1].id):
-    ps.view_shap_plot(show_plot=True, show_fold_corr=True)
+# import pdb;pdb.set_trace()
+# for ps in PredictorScore.where(classifier_name="RandomForest", predictor_id=bc.get_norm_preds()[1].id):
+#     ps.view_shap_plot(show_plot=True, show_fold_corr=True)
 
 
 
@@ -1505,6 +1508,7 @@ srs_scores = [
 corr_matrix = pd.DataFrame(index=complaints, columns=srs_scores)
 
 import shap
+fetch_new_tasks()
 def random_forest_analysis_with_shap(target_variable):
     X = df[complaints]
     y = df[target_variable]
@@ -1532,9 +1536,9 @@ def random_forest_analysis_with_shap(target_variable):
 
 
 # Perform analysis for each SRS score
-for score in srs_scores:
-    print(f'Random Forest Analysis for {score}')
-    random_forest_analysis_with_shap(score)
+# for score in srs_scores:
+#     print(f'Random Forest Analysis for {score}')
+#     random_forest_analysis_with_shap(score)
 
 # Features: SRS scores
 X = df[srs_scores]
@@ -1846,7 +1850,7 @@ for ps in pss:
 
 
 import pdb;pdb.set_trace()
-MatrixPlotter.show(bc.get_norm_acc(), mp.get_norm_acc(), h_one="Block Combo (n = 24)", h_two="CP Block Combo (n=6)")
+# MatrixPlotter.show(bc.get_norm_acc(), mp.get_norm_acc(), h_one="Block Combo (n = 24)", h_two="CP Block Combo (n=6)")
 
 
 # mp.show_
@@ -1856,7 +1860,7 @@ import pdb;pdb.set_trace()
 
 
 
-# fetch_new_tasks()
+
 
 pr = Predictor.where(multi_predictor_id=6)
 # healthy controls block

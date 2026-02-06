@@ -36,6 +36,7 @@ import matplotlib.colors as mcolors
 
 
 
+# Keep these as global constants for backward compatibility
 SENSOR_CODES = [
     'rfin_x',
     'rwrb_x',
@@ -49,34 +50,49 @@ SENSOR_CODES = [
     'rfhd_x',
 ]
 
+ALT_SENSOR_CODES = [
+    'mAccelerometerX',
+]
+
 TOP_TREE_MODELS = ['XGBoost']
-
-
 # TOP_TREE_MODELS = ['XGBoost']
-
 NUM_TOP = 1000
+
 class MultiPredictor(LegacyBaseModel):
     table_name = "multi_predictor"
-
-    def __init__(self, id=None, task_id=None, sensors=Sensor.where(name=SENSOR_CODES), model="default", items = None, created_at=None, updated_at=None, cohort_id=None):
+    
+    def get_sensor_codes(self):
+        """Return the appropriate sensor codes based on cohort type"""
+        if hasattr(self, 'is_alt_cohort') and self.is_alt_cohort():
+            return ALT_SENSOR_CODES
+        return SENSOR_CODES
+    
+    def __init__(self, id=None, task_id=None, sensors=None, model="default", items=None, 
+                 created_at=None, updated_at=None, cohort_id=None):
         super().__init__()
         self.id = id
         self.task_id = task_id
-        self.sensors = sensors
         self.model = model
-        self.items = {}
+        self.items = {} if items is None else items
         self.created_at = created_at
         self.updated_at = updated_at
         self.cohort_id = cohort_id
-        self.non_norm = True,
-        self.abs_val = False,
-        self.curr_axis = None,
-        self.elbow = None,
+        self.non_norm = True
+        self.abs_val = False
+        self.curr_axis = None
+        self.elbow = None
+        
+        # Initialize sensors with explicit method call
+        if sensors is None:
+            sensor_codes = self.get_sensor_codes()  # Get codes as a regular list
+            self.sensors = Sensor.where(name=sensor_codes)
+        else:
+            self.sensors = sensors
         
 
     def gen_items_for_sensors(self, sensors=None, ntaf=False):
         if sensors is None:
-            sensors = self.get_sensors()
+            sensors = self.get_sensor_codes()
         # for sen in sensors:
         #     self.gen_items_for_sensor(sen, ntaf)
 
@@ -101,7 +117,14 @@ class MultiPredictor(LegacyBaseModel):
         Predictor.find_or_create(task_id=self.task_id, sensor_id=snr.id, non_norm=False, abs_val=False, cohort_id=self.cohort_id, multi_predictor_id=self.id)
     
     def get_sensors(self):
-        return Sensor.where(name=SENSOR_CODES)
+        return self.get_sensor_codes()
+ 
+    
+    def get_cohort(self):
+        return Cohort.where(id=self.cohort_id)[0]
+
+    def is_alt_cohot(self):
+        return self.get_cohort().is_alt_compare()
 
     def get_predictors(self, abs_val=False, non_norm=True):
         return Predictor.where(multi_predictor_id=self.id, abs_val=abs_val, non_norm=non_norm)
@@ -141,15 +164,15 @@ class MultiPredictor(LegacyBaseModel):
         preds = self.get_predictor_model_accuracies(model_name=model_name, abs_val=abs_val, non_norm=non_norm)
 
         print("PRED LEN", len(preds))
-        preds = [pred for pred in preds if pred[2].name in SENSOR_CODES]
+        preds = [pred for pred in preds if pred[2].name in self.sensors]
         if sort_by_sensor:
             # Create a mapping of sensor names to their order in SENSOR_CODES
-            sensor_order = {sensor_name: i for i, sensor_name in enumerate(SENSOR_CODES)}
+            sensor_order = {sensor_name: i for i, sensor_name in enumerate(self.sensors)}
             print(sensor_order)
             if reverse_sensor_order:
                 # Reverse the sensor order
                 max_index = len(SENSOR_CODES) - 1
-                sensor_order = {sensor_name: max_index - i for i, sensor_name in enumerate(SENSOR_CODES)}
+                sensor_order = {sensor_name: max_index - i for i, sensor_name in enumerate(self.sensors)}
 
             # Sort by the order of sensors as per SENSOR_CODES, then by accuracy score
             preds.sort(key=lambda x: (sensor_order.get(x[2].name, float('inf')), -x[1]))
@@ -1176,7 +1199,7 @@ class MultiPredictor(LegacyBaseModel):
         if skip_default_sensors is True:
             curr_sensors = self.sensors
         else:
-            curr_sensors = self.get_sensors()
+            curr_sensors = self.get_sensor_codes()
 
         time_threshold = datetime.now() - timedelta(hours=36)
 
@@ -1403,11 +1426,13 @@ class MultiPredictor(LegacyBaseModel):
         if title is not None:
             title = "CP5" + "/" + title
         else:
-            title = "CP5" + "/"
+            title = "CP7" + "/"
 
         
         for pred in pr:
             scores = pred.get_predictor_scores()
+            print("SAVINGSSSSS")
+            import pdb;pdb.set_trace()
             for score in scores:
                 if self.cohort_name() != "healthy_controls":
                     print("yoolo")
