@@ -68,6 +68,8 @@ pip install -r requirements.txt
 
 ### 2. Place raw data
 
+> **Note:** The `raw_data/` directory is gitignored and is not included in the repository. You must download and place it manually.
+
 There are two raw data sources, each with its own importer:
 
 **`me_importer.py`** — ingests the `analysis_me` dataset (non-motion-analysis cohorts). Place at:
@@ -85,13 +87,22 @@ raw_data/analysis_me/Group 1/S008/Gait/Task 1_Trial 2.csv
 
 The path encodes everything: cohort (Group N), patient (SXXX), task type (Balance/Gait), and trial number. The importer reads all of this automatically from the path.
 
-**`legacy_importer.py`** — ingests motion analysis data (CP patients and healthy controls). There are three folders it can target — set `RAW_DATA_FOLDER` at the top of the file to point to the one you want:
+**`legacy_importer.py`** — ingests motion analysis data (CP patients and healthy controls). Download the shared Google Drive folder [**`raw_data_hc_cp`**](https://drive.google.com/drive/u/0/folders/1nPRV5Jo23Wg9VlJhe8SN7KlXWilMDgOb) and place its three subdirectories directly under `raw_data/`:
+
+```
+raw_data/
+├── controls_filteredandtrimmed/     ← from Google Drive
+├── CP_filteredandtrimmed_2024.07.04/  ← from Google Drive
+└── CP_filteredandtrimmed_2024.07.21/  ← from Google Drive
+```
+
+Each folder contains `.npy` files. Set `RAW_DATA_FOLDER` at the top of `legacy_importer.py` to point to whichever folder you want to ingest:
 
 | Folder | Cohort | Notes |
 |--------|--------|-------|
-| `raw_data/controls_filteredandtrimmed/block/` | `heathy_controls` | Healthy controls; `.npy` + `.csv`; default/original dataset |
+| `raw_data/controls_filteredandtrimmed/block/` | `heathy_controls` | Healthy controls; default/original dataset |
 | `raw_data/CP_filteredandtrimmed_2024.07.04/Block/` | `cp_before` | CP patients, 07.04 version |
-| `raw_data/CP_filteredTrimmedAligned_2024.07.21/Block/` | `cp_before` | CP patients, 07.21 aligned-coords version |
+| `raw_data/CP_filteredandtrimmed_2024.07.21/Block/` | `cp_before` | CP patients, 07.21 aligned-coords version |
 
 All files use the naming pattern `*_SXXX_Block_dominant/nondominant.npy` — the subject number is encoded in the filename as `SXXX` (e.g. `S008`). The importer assigns the cohort based on whether `cp` appears in the filename (`cp_before`) or not (`heathy_controls`).
 
