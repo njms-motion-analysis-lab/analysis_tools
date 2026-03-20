@@ -18,7 +18,7 @@ if __name__ == '__main__':
     exp = {}
     Table.create_tables()
     Table.update_tables()
-    # Table.create_and_set_cohort()
+    Table.create_and_set_cohort()
 
     def fix_pd_et_cohort_ids():
         g1 = ['amg__S008','amg__S009','amg__S011','amg__S015','amg__S016','amg__S019','amg__S022','amg__S027','amg__S028','amg__S029','amg__S030','amg__S031',]

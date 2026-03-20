@@ -89,7 +89,10 @@ classifier_names = ['RandomForest', 'ExtraTrees', 'DecisionTree', 'CatBoost', 'X
 
 Table.create_tables()
 
-import pdb;pdb.set_trace()
+# Run this file in interactive mode to explore models and run training:
+#   python3 -i legacy_mini_console.py
+# This will initialize the DB and drop you into a Python shell with all
+# models and prediction tools already imported and ready to call.
 
 
 def replace_axis_labels(directory):
